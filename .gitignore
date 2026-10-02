@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.local
+*.log
+.browser-check/
+supabase/.temp/
+supabase/.branches/
+
+.codex/

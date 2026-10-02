@@ -1,0 +1,73 @@
+# Local-only disposable PostgreSQL. Never uses project credentials or hosted URLs.
+$ErrorActionPreference = 'Stop'
+$testRoot = $PSScriptRoot
+$supabaseRoot = Split-Path $testRoot -Parent
+$containerName = 'lume-foundation-sql-check'
+$created = $false
+function Read-Sql([string]$path) { Get-Content -LiteralPath $path -Raw -Encoding UTF8 }
+function Run-Sql([string]$label, [string]$sql) {
+  Write-Output "CHECK: $label"
+  $sql | docker exec -i $containerName psql -U postgres -v ON_ERROR_STOP=1 -At
+  if ($LASTEXITCODE -ne 0) { throw "SQL check failed: $label" }
+}
+try {
+  docker run --detach --rm --network none --name $containerName -e POSTGRES_HOST_AUTH_METHOD=trust postgres:14.1-alpine
+  if ($LASTEXITCODE -ne 0) { throw 'Could not create isolated test container' }
+  $created = $true
+  $ready = $false
+  for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    docker exec $containerName pg_isready -U postgres *> $null
+    if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+    Start-Sleep -Milliseconds 200
+  }
+  if (-not $ready) { throw 'Local PostgreSQL did not become ready' }
+  Run-Sql 'isolated Auth/role bootstrap' (Read-Sql (Join-Path $testRoot 'bootstrap.sql'))
+  Run-Sql 'unchanged original migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261002000100_commerce_foundation.sql'))
+  $forward = Read-Sql (Join-Path $supabaseRoot 'migrations/20261002000200_lume_house_foundation.sql')
+  # Exercise the exact forward body inside rollback-only fixture transactions.
+  $body = $forward -replace '(?m)^begin;\s*$', '' -replace '(?m)^commit;\s*$', ''
+  $guard = @'
+do $guard$
+begin
+  begin
+    execute $migration$
+'@ + $body + @'
+$migration$;
+  exception when raise_exception then
+    if sqlerrm <> 'Existing orders require a reviewed data migration before Lume House reconciliation' then raise; end if;
+    return;
+  end;
+  raise exception 'Expected populated-order guard to reject migration';
+end;
+$guard$;
+'@
+  Run-Sql 'populated-order refusal and rollback' ((Read-Sql (Join-Path $testRoot 'migration-guard-before.sql')) + $guard + (Read-Sql (Join-Path $testRoot 'migration-guard-after.sql')))
+  Run-Sql 'legacy UUID/cart preservation and rollback' ((Read-Sql (Join-Path $testRoot 'reconciliation-before.sql')) + $body + (Read-Sql (Join-Path $testRoot 'reconciliation-after.sql')))
+  Run-Sql 'forward migration' $forward
+  $zones = Read-Sql (Join-Path $supabaseRoot 'migrations/20261002000300_delivery_zone_snapshots.sql')
+  $zoneBody = $zones -replace '(?m)^begin;\s*$', '' -replace '(?m)^commit;\s*$', ''
+  Run-Sql 'zone migration preserves legacy orders and security' ((Read-Sql (Join-Path $testRoot 'zones-before.sql')) + $zoneBody + (Read-Sql (Join-Path $testRoot 'zones-after.sql')))
+  Run-Sql 'zone snapshot migration' $zones
+  $seed = Read-Sql (Join-Path $supabaseRoot 'seed.sql')
+  Run-Sql 'NLE seed first run' $seed
+  Run-Sql 'NLE seed repeated' $seed
+  Run-Sql 'ownership, constraints, historical snapshots' (Read-Sql (Join-Path $testRoot 'commerce.sql'))
+  Run-Sql 'fixture rollback leaves no identities/private data' @'
+do $$
+begin
+  if exists(select 1 from auth.users) or exists(select 1 from public.profiles)
+    or exists(select 1 from public.carts) or exists(select 1 from public.orders)
+    or exists(select 1 from public.order_confirmation_jobs)
+    or (select count(*) from public.products where active and currency='NLE') <> 20 then
+    raise exception 'Unexpected fixture persistence or seed mutation';
+  end if;
+end;
+$$;
+select 'PASS: rollback fixtures gone; twenty active NLE products remain';
+'@
+} finally {
+  if ($created) {
+    docker stop $containerName
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to remove isolated test container' }
+  }
+}
