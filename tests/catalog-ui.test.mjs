@@ -84,7 +84,7 @@ test("ready catalog feeds cards, cart prices and disabled checkout", () => {
   assert.match(cart, /NLe 36/);
   assert.match(cart, /Choose at checkout/);
   const checkout = render(CheckoutPage, state);
-  assert.match(checkout, /disabled=""[^>]*>Place order/);
+  assert.match(checkout, /disabled=""[^>]*>Sign in to place order/);
   assert.match(checkout, /Use my contact phone number/);
   assert.match(
     render(CartPage, {
@@ -124,7 +124,7 @@ test("checkout localizes fields and honestly distinguishes delivery and payment"
   ])
     assert.ok(html.includes(label));
   assert.match(html, /Delivery details needed/);
-  assert.match(html, /Orders cannot be placed/);
+  assert.match(html, /Payment awaits confirmation/);
   assert.match(html, /aria-describedby="payment-help payment-error"/);
   assert.doesNotMatch(
     html,

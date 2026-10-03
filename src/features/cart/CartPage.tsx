@@ -7,10 +7,14 @@ import { UnavailableItems } from "./UnavailableItems";
 import { formatMoney } from "../../config/shop";
 import { EmptyCart } from "../../components/EmptyCart";
 import { OrderSummary } from "../checkout/OrderSummary";
+import { useAuth } from "../auth/AuthContext";
 
 export function CartPage() {
-  const { items, dispatch } = useCart();
+  const { items, dispatch, status } = useCart();
+  const auth = useAuth();
+  const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
   const { state, refresh } = useProducts();
+  if (status === "loading" || status === "error" || status === "checking-out") return <section className="wrap page-section"><h1>Your cart.</h1><p>Your saved cart is not ready yet.</p></section>;
   if (!items.length) return <EmptyCart />;
   if (state.status !== "ready")
     return (
@@ -33,7 +37,7 @@ export function CartPage() {
       <p className="eyebrow">YOUR EVERYDAY FINDS</p>
       <h1>Your cart.</h1>
       <p className="muted mb-8">
-        Your cart is temporary. Refreshing the page clears your items.
+        {auth.session ? "Your cart is saved to your account." : "Sign in to save your cart across visits. Guest items are kept only in this browser tab."}
       </p>
       <div className="checkout-grid">
         <div>
@@ -53,7 +57,7 @@ export function CartPage() {
                   <div className="quantity-control">
                     <button
                       aria-label={`Decrease ${product.name} quantity`}
-                      disabled={quantity === 1}
+                      disabled={busy || quantity === 1}
                       onClick={() =>
                         dispatch({
                           type: "quantity",
@@ -73,6 +77,7 @@ export function CartPage() {
                     <input
                       id={`quantity-${product.id}`}
                       type="number"
+                      disabled={busy}
                       min={1}
                       max={MAX_QUANTITY}
                       step={1}
@@ -87,7 +92,7 @@ export function CartPage() {
                     />
                     <button
                       aria-label={`Increase ${product.name} quantity`}
-                      disabled={quantity === MAX_QUANTITY}
+                      disabled={busy || quantity === MAX_QUANTITY}
                       onClick={() =>
                         dispatch({
                           type: "quantity",
@@ -101,6 +106,7 @@ export function CartPage() {
                   </div>
                   <button
                     className="remove-button"
+                    disabled={busy}
                     aria-label={`Remove ${product.name}`}
                     onClick={() =>
                       dispatch({ type: "remove", productId: product.id })
@@ -137,7 +143,7 @@ export function CartPage() {
             Refresh product prices
           </button>
           <p className="small-note">
-            Preview only. Orders and payments are not available.
+            Order totals are confirmed securely at checkout. Payment awaits confirmation.
           </p>
         </aside>
       </div>

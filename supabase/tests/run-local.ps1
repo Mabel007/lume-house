@@ -48,10 +48,14 @@ $guard$;
   $zoneBody = $zones -replace '(?m)^begin;\s*$', '' -replace '(?m)^commit;\s*$', ''
   Run-Sql 'zone migration preserves legacy orders and security' ((Read-Sql (Join-Path $testRoot 'zones-before.sql')) + $zoneBody + (Read-Sql (Join-Path $testRoot 'zones-after.sql')))
   Run-Sql 'zone snapshot migration' $zones
+  Run-Sql 'atomic checkout/email forward migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261002000400_atomic_checkout_email.sql'))
   $seed = Read-Sql (Join-Path $supabaseRoot 'seed.sql')
   Run-Sql 'NLE seed first run' $seed
   Run-Sql 'NLE seed repeated' $seed
+  Run-Sql 'reviewed photography metadata migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261003000500_product_photography.sql'))
+  Run-Sql 'additional reviewed photography metadata migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261003000600_remaining_product_photography.sql'))
   Run-Sql 'ownership, constraints, historical snapshots' (Read-Sql (Join-Path $testRoot 'commerce.sql'))
+  Run-Sql 'trusted atomic checkout/idempotency/email leases' (Read-Sql (Join-Path $testRoot 'checkout.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin

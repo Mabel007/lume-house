@@ -5,6 +5,11 @@ import type { Dispatch } from "react";
 export const CartContext = createContext<{
   items: CartItem[];
   dispatch: Dispatch<CartAction>;
+  status?: string;
+  error?: string | null;
+  retry?: () => void;
+  beginCheckout?: () => boolean;
+  finishCheckout?: (placed: boolean) => void;
 } | null>(null);
 export function useCart() {
   const cart = useContext(CartContext);

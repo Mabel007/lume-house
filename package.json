@@ -10,9 +10,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc --noEmit",
+    "typecheck:functions": "tsc -p supabase/functions/tsconfig.json",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node --experimental-strip-types --test src/features/cart/cart.test.ts src/features/products/products.test.ts src/lib/supabase/config.test.ts tests/catalog-ui.test.mjs src/features/checkout/commerce.test.ts tests/seed.test.mjs"
+    "test": "node --experimental-strip-types --test src/features/cart/cart.test.ts src/features/products/products.test.ts src/lib/supabase/config.test.ts tests/catalog-ui.test.mjs src/features/checkout/commerce.test.ts tests/seed.test.mjs src/features/auth/customer.test.ts tests/orders.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

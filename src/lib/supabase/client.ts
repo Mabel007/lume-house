@@ -10,11 +10,11 @@ export function getSupabaseClient(): SupabaseClient {
         .VITE_SUPABASE_PUBLISHABLE_KEY,
     });
     client = createClient(config.url, config.publishableKey, {
-      // Phase 2 is public catalog only. Auth configuration belongs to a later phase.
       auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: "pkce",
       },
     });
   }

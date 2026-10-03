@@ -1,0 +1,11 @@
+project_id = "lume-house"
+
+# JWTs are validated explicitly using Auth getUser inside each handler. This
+# supports Supabase's modern signing keys; these are NOT anonymous endpoints.
+[functions.place-order]
+verify_jwt = false
+import_map = "./functions/deno.json"
+
+[functions.order-email]
+verify_jwt = false
+import_map = "./functions/deno.json"

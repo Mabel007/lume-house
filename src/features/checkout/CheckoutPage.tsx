@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../cart/CartContext";
 import { getCartLines } from "../cart/cart";
 import { useProducts } from "../products/ProductContext";
@@ -19,10 +19,27 @@ import {
 } from "./payment";
 import { OrderSummary } from "./OrderSummary";
 import { EmptyCart } from "../../components/EmptyCart";
+import { useAuth } from "../auth/AuthContext";
+import { loadProfile } from "../account/profile";
+import { getSupabaseClient } from "../../lib/supabase/client";
+import { checkoutDefaults } from "./profileDefaults";
+import { CheckoutError, findCheckout, placeOrder } from '../orders/orderRepository';
+import { clearRequest,pendingRequest,rememberRequest } from '../orders/pendingCheckout';
 
 export function CheckoutPage() {
-  const { items } = useCart();
-  const { state } = useProducts();
+  const { items, status: cartStatus, retry, beginCheckout, finishCheckout } = useCart();
+  const navigate = useNavigate();
+  const auth = useAuth();
+  const dirty = useRef(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [profileNote, setProfileNote] = useState("");
+  const { state, refresh } = useProducts();
+  const [submitting,setSubmitting] = useState(false);
+  const submittingRef=useRef(false);
+  const [orderError,setOrderError]=useState('');
+  const [recovering,setRecovering]=useState(false);
+  const requestId=useRef<string|null>(null);
   const [fulfilment, setFulfilment] = useState<Fulfilment>("delivery");
   const [city, setCity] = useState("");
   const [area, setArea] = useState("");
@@ -34,10 +51,70 @@ export function CheckoutPage() {
   const [provider, setProvider] = useState<PaymentProvider>("orange");
   const [phone, setPhone] = useState("");
   const [touched, setTouched] = useState(false);
+  const userId = auth.session?.user.id;
+  const userEmail = auth.session?.user.email;
+  useEffect(()=>{
+    let active=true;
+    const saved=userId?pendingRequest(userId):null;
+    if(saved && userId) {
+      requestId.current=saved;
+      void (async()=>{
+        setRecovering(true);
+        try {
+          const id=await findCheckout(getSupabaseClient(),saved);
+          if(active&&id){clearRequest(userId);finishCheckout?.(true);navigate(`/orders/${id}/success`,{replace:true});}
+        }catch{if(active)setOrderError('A previous checkout could not be checked. Retry with the same request, or check My Orders before starting another.');}
+        finally{if(active)setRecovering(false);}
+      })();
+    }
+    return()=>{active=false};
+    // Identity-keyed route mounts once; callbacks must not restart recovery.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[userId,navigate]);
+  useEffect(() => {
+    let active = true;
+    if (userId) void loadProfile(getSupabaseClient(), userId).then(profile => {
+      if (!active || dirty.current) return;
+      const defaults = checkoutDefaults(profile, userEmail || "");
+      setEmail(defaults.email);
+      if (profile) {
+        setFullName(defaults.fullName); setContactPhone(defaults.contactPhone);
+        setAddress(defaults.address); setArea(defaults.area); setCity(defaults.city);
+        setProfileNote("Your profile defaults are filled in. Checkout edits apply here only.");
+      }
+    }).catch(() => { if (active) setProfileNote("Profile defaults could not be loaded. Please enter your checkout details."); });
+    return () => { active = false; };
+  }, [userId, userEmail]);
   const paymentPhone = getPaymentPhone(contactPhone, phone, reusePhone);
   const error =
     touched || reusePhone ? validatePaymentPhone(paymentPhone) : null;
-  if (!items.length) return <EmptyCart />;
+  async function submit(event:React.FormEvent) {
+    event.preventDefault();
+    if(submittingRef.current||state.status!=='ready'||!userId)return;
+    setTouched(true);
+    if(validatePaymentPhone(paymentPhone)||validatePaymentPhone(contactPhone)){setOrderError('Enter valid Sierra Leone contact and payment numbers.');return;}
+    if(getDeliveryFee(fulfilment,city,zoneId)===null){setOrderError('Choose a supported Freetown delivery zone.');return;}
+    if(beginCheckout && !beginCheckout()){setOrderError('Wait for your cart changes to finish saving.');return;}
+    submittingRef.current=true;setSubmitting(true);setOrderError('');
+    requestId.current ||= pendingRequest(userId)||crypto.randomUUID();
+    rememberRequest(userId,requestId.current);
+    try {
+      const expected=getCartLines(items,state.products).map(({product,quantity})=>({product_id:product.id,quantity,unit_price:product.price})).sort((a,b)=>a.product_id.localeCompare(b.product_id));
+      const result=await placeOrder(getSupabaseClient(),requestId.current,{full_name:fullName,email,contact_phone:normalizePhone(contactPhone),payment_phone:normalizePhone(paymentPhone),provider,fulfilment,zone_id:zoneId,street:address,area,city,instructions},expected);
+      clearRequest(userId);finishCheckout?.(true);
+      navigate(`/orders/${result.id}/success`,{replace:true});
+    }catch(error){
+      finishCheckout?.(false);
+      const code=error instanceof CheckoutError?error.code:'ORDER_UNAVAILABLE';
+      if(['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART'].includes(code)){setOrderError('Your cart or current prices changed. Review the refreshed cart before placing your order.');refresh();retry?.();}
+      else if(code==='AUTH_REQUIRED')setOrderError('Your session expired. Please sign in again before placing your order.');
+      else if(code.startsWith('INVALID_'))setOrderError('Please check your contact, payment and Freetown delivery details.');
+      else setOrderError('We could not confirm order placement. Your retry uses the same request to prevent duplicates. Check My Orders or try again.');
+    }finally{submittingRef.current=false;setSubmitting(false);}
+  }
+  if(recovering)return <section className="wrap page-section"><h1>Checking your order…</h1><p role="status">Restoring the result of your previous checkout.</p></section>;
+  if (cartStatus === "loading" || cartStatus === "error") return <section className="wrap page-section"><h1>Checkout.</h1><p>Waiting for your saved cart.</p></section>;
+  if (!items.length) return orderError ? <section className="wrap page-section"><p role="alert">{orderError}</p><Link to="/account/orders">Check My Orders</Link></section> : <EmptyCart />;
   if (state.status !== "ready")
     return (
       <section className="wrap page-section">
@@ -68,15 +145,14 @@ export function CheckoutPage() {
       </Link>
       <p className="eyebrow">YOUR HOME, CONSIDERED</p>
       <h1>Checkout.</h1>
-      <p className="checkout-notice" id="checkout-unavailable">
-        <strong>Online ordering is not available yet.</strong>You can explore
-        delivery, pickup and payment options. Orders cannot be placed, payments
-        cannot be collected or verified, and these details are not saved or
-        emailed.
-      </p>
+      <p className="checkout-notice" id="checkout-payment"><strong>Payment awaits confirmation.</strong>Placing an order saves your order and requests a confirmation email. Selecting mobile money does not charge or verify your account.</p>
+      {orderError&&<p role="alert" className="field-error">{orderError}</p>}
       <div className="checkout-grid">
         <form
-          onSubmit={(event) => event.preventDefault()}
+          id="checkout-form"
+          onChange={() => { dirty.current = true; }}
+          onSubmit={event=>void submit(event)}
+          aria-busy={submitting}
           aria-label="Checkout information"
         >
           <fieldset>
@@ -88,6 +164,8 @@ export function CheckoutPage() {
                 label="Full name"
                 name="full-name"
                 autoComplete="name"
+                value={fullName}
+                onChange={setFullName}
                 wide
               />
               <Field
@@ -103,8 +181,11 @@ export function CheckoutPage() {
                 name="email"
                 type="email"
                 autoComplete="email"
+                value={email}
+                onChange={setEmail}
               />
             </div>
+            <p className="small-note" role="status">{profileNote || (!auth.session ? "Sign in to use your saved profile defaults. Online order placement will require an account." : "Checkout edits do not change your saved profile.")}</p>
           </fieldset>
           <fieldset>
             <legend>
@@ -266,8 +347,8 @@ export function CheckoutPage() {
             </div>
           </fieldset>
           <p className="small-note">
-            Required fields are marked *. Payment status remains pending;
-            selecting a provider does not initiate payment.
+            Required fields are marked *. Payment awaits confirmation after placement;
+            selecting a provider does not initiate payment. Checkout edits do not update your profile.
           </p>
         </form>
         <aside className="summary">
@@ -295,15 +376,16 @@ export function CheckoutPage() {
             />
           </div>
           <button
-            type="button"
+            type="submit"
+            form="checkout-form"
             className="button w-full"
-            disabled
-            aria-describedby="checkout-unavailable"
+            disabled={!auth.session || submitting || cartStatus==='saving' || cartStatus==='loading' || cartStatus==='error' || recovering || deliveryFee===null}
+            aria-describedby="checkout-payment"
           >
-            Place order - unavailable
+            {submitting?'Placing order…':auth.session?'Place order':'Sign in to place order'}
           </button>
           <p className="small-note">
-            Your cart is temporary and clears on refresh.
+            {auth.session ? "Your checkout details will be saved with this order, independently of your profile." : "Sign in to place your order."}
           </p>
           <Link to="/cart" className="text-link">
             Edit your cart

@@ -1,3 +1,32 @@
+# Current commerce integration — 2026-10-03
+
+Hosted migrations 00100–00600 are verified in the existing Lumé House project wyvsbzcltrhnjeuijsva. Seven tables retain RLS and ownership policies/grants. All 20 active NLE products match current local names/descriptions/categories/images/prices. Photography forward migrations 00500 and 00600 update only current catalog metadata, preserving IDs, prices and historical order snapshots. No fake customer/order data was introduced.
+
+Google/profile/cart behavior has been manually verified by the human. Order/email runtime source is complete; deployment and private RESEND_API_KEY configuration are still a human checkpoint. Source/type/unit/SQL tests are distinct from a genuine application order/email test.
+
+## Trusted placement
+
+Edge Function place-order verifies the JWT through Supabase Auth, filters checkout fields, normalizes phone formats and calls public.place_order using that same JWT. The fixed-search-path SECURITY DEFINER RPC is deliberately executable only by authenticated users, never anon. It independently validates auth.uid(), owns/locks the persisted cart, locks active NLE products, enforces quantities/bounded integer totals and derives trusted zone prices: zone-1=4000, zone-2=5000, zone-3=6000; pickup=0 at Lumley, Freetown. Submitted unit prices form a stale-quote guard only. Browser order/order-item writes remain denied.
+
+An owner-specific advisory transaction lock plus unique (user_id, checkout_request_id) protects idempotent retries. The same request returns the original safe result even after the cart is cleared. Orders, immutable items, pending job and cart-item deletion commit atomically; deferred item/subtotal checks are forced before return. Initial states are placed and awaiting_payment, never paid. Contact/address/zone snapshots are independent of mutable profiles; payer history contains last4 only.
+
+## Confirmation jobs / Resend
+
+The committed order is the only source for recipient, items, totals and email content. Service-role-only claim/finish RPCs use a claim token, two-minute lease, one-minute retry delay, frozen sender and provider message ID. Browser roles cannot read/write jobs or execute those RPCs. Job states are pending/processing/sent/failed; sent means provider acceptance, not a guaranteed delivered message.
+
+The sender defaults to Lumé House <onboarding@resend.dev>, not the unverified display domain. Resend API keys exist only in trusted runtime secrets. A stable order-based idempotency key reduces duplicates within the provider window. After 23 hours from the first attempt, uncertain/failed jobs require manual reconciliation rather than risking a resend beyond the 24-hour provider window. This does not promise external exactly-once delivery.
+
+Sending is attempted after placement or by an owner-authorized order-email retry; failures never remove orders. A future scheduled worker can use the same claim/finish contract; no scheduler is configured now. Human runtime secret/deployment instructions are in the root README.
+
+## Local verification
+
+Run npm.cmd run lint, npm.cmd run typecheck, npm.cmd run typecheck:functions, npm.cmd run build and npm.cmd test. The server TypeScript check uses the installed Supabase SDK and the Deno import map; it is not native Deno execution. Run powershell.exe -NoProfile -ExecutionPolicy Bypass -File supabase/tests/run-local.ps1 for isolated PostgreSQL migrations/RLS/transaction/idempotency/leases and rollback fixtures. Never run supabase/tests against hosted Supabase.
+
+---
+## Historical foundation records
+
+The following sections document earlier checkpoints. Their statements about disabled providers, local runtime, 12 products, pending migrations or unimplemented checkout/email are historical and superseded by the current state above.
+
 # Lumé House database foundation
 
 Hosted Supabase foundation: **VERIFIED on 2026-10-02** in the existing hng-shop project (wyvsbzcltrhnjeuijsva, eu-west-1). Authorized read-only inspection established an empty public application schema and no applied migration history (classification A). A dry run selected exactly the two prepared migrations; both were then applied through the CLI and recorded in hosted history, followed separately by seed.sql. No reset or history repair was needed. Do not create another hosted project. The frontend continues using its local catalog.

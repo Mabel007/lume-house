@@ -9,7 +9,7 @@ import { ProductImage } from "./ProductImage";
 export function ShopPage() {
   const [category, setCategory] = useState("All pieces");
   const [notice, setNotice] = useState("");
-  const { items, dispatch } = useCart();
+  const { items, dispatch, status: cartStatus } = useCart();
   const { state, refresh } = useProducts();
   const products = state.status === "ready" ? state.products : [];
   const categories = [
@@ -37,8 +37,8 @@ export function ShopPage() {
         </div>
         <div className="hero-art">
           <img
-            src="/images/collection.svg"
-            alt="Illustrated still life of a terracotta vase, an olive branch and a ceramic cup on a warm wooden table"
+            src="/images/a-place-for-the-everyday.webp"
+            alt="Vases, greenery and candles arranged on a wooden tray in a warm neutral living room"
             fetchPriority="high"
           />
           <span className="art-label">A place for the everyday.</span>
@@ -174,11 +174,11 @@ export function ShopPage() {
                     <p className="product-description">{product.description}</p>
                     <button
                       className="add-button"
-                      disabled={quantity >= MAX_QUANTITY}
+                      disabled={quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out"}
                       onClick={() => {
                         dispatch({ type: "add", productId: product.id });
                         setNotice(
-                          `${product.name} added to cart. Quantity ${quantity + 1}.`,
+                          `${product.name}: cart update requested.`,
                         );
                       }}
                       aria-label={`Add ${product.name} to cart`}

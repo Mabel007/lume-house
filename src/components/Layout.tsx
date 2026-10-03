@@ -3,14 +3,16 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { shop } from "../config/shop";
 import { useCart } from "../features/cart/CartContext";
 import { BagIcon } from "./Icon";
+import { useAuth } from "../features/auth/AuthContext";
 
 export function Layout() {
-  const { items } = useCart();
+  const { items, status, error, retry } = useCart();
+  const auth = useAuth();
   const count = items.reduce((total, item) => total + item.quantity, 0);
   const { pathname } = useLocation();
   const main = useRef<HTMLElement>(null);
   useEffect(() => {
-    document.title = `${pathname === "/" ? "Shop" : pathname === "/cart" ? "Your cart" : pathname === "/checkout" ? "Checkout preview" : "Page not found"} | ${shop.name}`;
+    document.title = `${pathname === "/" ? "Shop" : pathname === "/cart" ? "Your cart" : pathname === "/checkout" ? "Checkout" : pathname.startsWith('/account') || pathname === "/auth/callback" ? "Your account" : pathname.startsWith('/orders/') ? 'Your order' : "Page not found"} | ${shop.name}`;
     main.current?.focus();
     window.scrollTo(0, 0);
   }, [pathname]);
@@ -34,10 +36,11 @@ export function Layout() {
           <NavLink to="/" end>
             Shop
           </NavLink>
+          <NavLink to="/account">{auth.loading ? "Account…" : auth.session ? "Account" : "Sign in"}</NavLink>
           <NavLink to="/cart" className="cart-link">
             <BagIcon />
             <span>Cart</span>
-            <span className="cart-count">
+            <span key={count} className="cart-count">
               {count}
               <span className="sr-only"> items</span>
             </span>
@@ -45,6 +48,9 @@ export function Layout() {
         </nav>
       </header>
       <main id="main" ref={main} tabIndex={-1}>
+        {status === "loading" && <p className="wrap" role="status">Loading your cart…</p>}
+        {status === "saving" && <p className="wrap" role="status">Saving your cart…</p>}
+        {error && <div className="wrap" role="alert">{error} <button onClick={retry}>Retry saved cart</button></div>}
         <Outlet />
       </main>
       <footer className="wrap site-footer">
