@@ -13,7 +13,7 @@ const normalize = (value: unknown) => {
 export function commerceHandler(mode: 'place' | 'email') {
   return async (request: Request): Promise<Response> => {
     const origin = request.headers.get('Origin');
-    const allowed = (Deno.env.get('ALLOWED_ORIGINS') || 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174').split(',').map(value=>value.trim());
+    const allowed = (Deno.env.get('ALLOWED_ORIGINS') || 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,https://lume-house-delta.vercel.app').split(',').map(value=>value.trim());
     const headers = { 'Content-Type':'application/json', 'Cache-Control':'no-store', Vary:'Origin',
       ...(origin && allowed.includes(origin) ? { 'Access-Control-Allow-Origin':origin, 'Access-Control-Allow-Headers':'authorization,apikey,content-type,x-client-info', 'Access-Control-Allow-Methods':'POST,OPTIONS' } : {}) };
     const reply = (body: unknown,status=200) => new Response(JSON.stringify(body),{status,headers});
