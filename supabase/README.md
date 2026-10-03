@@ -1,125 +1,87 @@
-# Current commerce integration — 2026-10-03
+# Lumé House Supabase
 
-Hosted migrations 00100–00600 are verified in the existing Lumé House project wyvsbzcltrhnjeuijsva. Seven tables retain RLS and ownership policies/grants. All 20 active NLE products match current local names/descriptions/categories/images/prices. Photography forward migrations 00500 and 00600 update only current catalog metadata, preserving IDs, prices and historical order snapshots. No fake customer/order data was introduced.
+## Current hosted state
 
-Google/profile/cart behavior has been manually verified by the human. Order/email runtime source is complete; deployment and private RESEND_API_KEY configuration are still a human checkpoint. Source/type/unit/SQL tests are distinct from a genuine application order/email test.
+Existing project **Lumé House**, reference wyvsbzcltrhnjeuijsva, is active. Migrations 00100–00600 are applied. Hosted catalogue has 20 active NLE products matching local catalogue/photography. Google Auth, profiles, authenticated carts, trusted checkout, durable orders/history and Resend confirmation work. place-order and order-email are deployed/active; Resend is configured server-side.
 
-## Trusted placement
+Genuine human E2E verified login, profile/cart refresh, checkout, durable order/history/details, logout privacy and restoration. Resend accepted/sent a genuine confirmation, reported delivery; Gmail SMTP accepted it and the human later found it in Gmail Spam. No Primary Inbox claim. Automated/local SQL, hosted read-only and human evidence are distinct.
 
-Edge Function place-order verifies the JWT through Supabase Auth, filters checkout fields, normalizes phone formats and calls public.place_order using that same JWT. The fixed-search-path SECURITY DEFINER RPC is deliberately executable only by authenticated users, never anon. It independently validates auth.uid(), owns/locks the persisted cart, locks active NLE products, enforces quantities/bounded integer totals and derives trusted zone prices: zone-1=4000, zone-2=5000, zone-3=6000; pickup=0 at Lumley, Freetown. Submitted unit prices form a stale-quote guard only. Browser order/order-item writes remain denied.
-
-An owner-specific advisory transaction lock plus unique (user_id, checkout_request_id) protects idempotent retries. The same request returns the original safe result even after the cart is cleared. Orders, immutable items, pending job and cart-item deletion commit atomically; deferred item/subtotal checks are forced before return. Initial states are placed and awaiting_payment, never paid. Contact/address/zone snapshots are independent of mutable profiles; payer history contains last4 only.
-
-## Confirmation jobs / Resend
-
-The committed order is the only source for recipient, items, totals and email content. Service-role-only claim/finish RPCs use a claim token, two-minute lease, one-minute retry delay, frozen sender and provider message ID. Browser roles cannot read/write jobs or execute those RPCs. Job states are pending/processing/sent/failed; sent means provider acceptance, not a guaranteed delivered message.
-
-The sender defaults to Lumé House <onboarding@resend.dev>, not the unverified display domain. Resend API keys exist only in trusted runtime secrets. A stable order-based idempotency key reduces duplicates within the provider window. After 23 hours from the first attempt, uncertain/failed jobs require manual reconciliation rather than risking a resend beyond the 24-hour provider window. This does not promise external exactly-once delivery.
-
-Sending is attempted after placement or by an owner-authorized order-email retry; failures never remove orders. A future scheduled worker can use the same claim/finish contract; no scheduler is configured now. Human runtime secret/deployment instructions are in the root README.
-
-## Local verification
-
-Run npm.cmd run lint, npm.cmd run typecheck, npm.cmd run typecheck:functions, npm.cmd run build and npm.cmd test. The server TypeScript check uses the installed Supabase SDK and the Deno import map; it is not native Deno execution. Run powershell.exe -NoProfile -ExecutionPolicy Bypass -File supabase/tests/run-local.ps1 for isolated PostgreSQL migrations/RLS/transaction/idempotency/leases and rollback fixtures. Never run supabase/tests against hosted Supabase.
-
----
-## Historical foundation records
-
-The following sections document earlier checkpoints. Their statements about disabled providers, local runtime, 12 products, pending migrations or unimplemented checkout/email are historical and superseded by the current state above.
-
-# Lumé House database foundation
-
-Hosted Supabase foundation: **VERIFIED on 2026-10-02** in the existing hng-shop project (wyvsbzcltrhnjeuijsva, eu-west-1). Authorized read-only inspection established an empty public application schema and no applied migration history (classification A). A dry run selected exactly the two prepared migrations; both were then applied through the CLI and recorded in hosted history, followed separately by seed.sql. No reset or history repair was needed. Do not create another hosted project. The frontend continues using its local catalog.
-
-Hosted verification found all seven application tables with RLS enabled, thirteen intended ownership/active-product policies, twelve exact active NLE catalog rows and zero rows in profiles, carts, cart_items, orders, order_items and order_confirmation_jobs. Browser-role grants prevent catalog/order writes and all access to confirmation jobs. A read-only rollback query under the hosted anon role returned twelve active NLE products. Real authenticated cross-user sessions, PostgREST/browser requests and future checkout/email integrations are not verified by these checks. No fake customer/order data was inserted. Further application features remain separately authorized phases.
-
-## Safe forward migration
-
-20261002000100_commerce_foundation.sql is preserved unchanged. Run 20261002000200_lume_house_foundation.sql forward from that exact schema, then seed.sql. Fresh databases run both migrations in filename order. The original migration's old defaults are historical; the final schema restricts active products and every new order to NLE.
-
-The forward migration locks affected tables and aborts atomically if ANY historical orders exist. Their payment/fulfilment semantics cannot safely be inferred. This requires a separately reviewed data migration, never deletion of orders. Unexpected schema drift also needs reconciliation. US-style order columns are removed only after proving orders empty under lock. Never drop/reset a hosted database or replay the original migration against existing tables.
-
-Product IDs change from UUID to text to retain the current local IDs (amber-candle, etc.). Existing UUIDs remain exact strings, with surviving cart references and restored foreign keys. Existing non-NLE products become inactive, preserving their currency/price; they are not relabeled or converted. Legacy inactive currencies are allowed only for migration safety. Active products must be NLE and new product currency defaults to NLE.
-
-The obsolete seed is replaced completely with the twenty local Lumé House products. ON CONFLICT (id) DO NOTHING makes repeats safe without resetting subsequent trusted catalog edits. Fresh local setup has twenty products; upgraded setups may additionally retain inactive legacy rows. Columns ending in _cents retain compatibility but mean **integer minor units, 100 per NLE**, not USD cents. No floating-point money is used.
-
-Before any future hosted change, inspect actual tables/constraints/policies, historical order counts and supabase_migrations.schema_migrations. SQL Editor executions may not be recorded in CLI history. Reconcile that history before db push. If the original migration is already applied exactly and orders are empty, only the forward migration and new seed are candidates. If tables are absent and neither migration is applied, both are candidates. Schema drift or existing orders blocks automatic application. Back up/review real data first. Both foundation migrations are now applied; do not replay them. The seed's DO NOTHING behavior preserves existing edits, so inspect conflicts rather than assuming a repeated seed corrects differing values.
-
-## Relationships and meaning
+## Schema and ownership
 
 ```text
-auth.users -> profiles (1:1 mutable defaults)
-auth.users -> carts (one per identity) -> cart_items -> products
-auth.users -> orders -> order_items -> optional product reference + historical snapshots
-                     -> order_confirmation_jobs (one server-only work record per order)
+auth.users → profiles
+auth.users → carts → cart_items → products
+auth.users → orders → order_items (product reference + historical snapshots)
+                    → order_confirmation_jobs
 ```
 
-Profile = mutable customer defaults/convenience data. Cart = current shopping intent using current product pricing. Order = durable historical transaction using immutable checkout/product/price snapshots. Orders do not depend on mutable profiles for delivery/contact history. Carts/orders directly reference Auth identity, so a missing/deleted profile does not erase history or prevent cart use.
+| Table | Purpose/security |
+|---|---|
+| profiles | Auth UUID PK, mutable defaults, own read/insert/update; Auth supplies account email |
+| products | Stable IDs/current integer NLE pricing/image/category/active metadata; active public reads, no browser writes |
+| carts | One authenticated owner's current intent |
+| cart_items | Unique cart/product, quantity 1–99, current prices; owner access |
+| orders | Durable LH-reference, owner, immutable checkout/fulfilment/money snapshots; owner reads only |
+| order_items | Historical names/quantities/unit prices; owner reads through order; no browser writes |
+| order_confirmation_jobs | Server-only durable status/attempts/leases/frozen sender/provider ID/safe error |
 
-| Table | Design |
-| --- | --- |
-| profiles | Auth UUID PK/FK; optional name, normalized Sierra Leone phone, default street/landmark, area/community, city; timestamps. No email duplicate. |
-| products | Stable text ID, name/description/category, integer price, currency, local image path, active flag, display order/color, timestamps. |
-| carts | UUID ID, unique Auth owner, creation timestamp. |
-| cart_items | UUID ID, unique cart/product pair, quantity 1-99, timestamps. No authoritative paid-price snapshot. |
-| orders | UUID ID, unique LH- reference with sixteen random hex digits, Auth owner, immutable customer/fulfilment/money snapshots, separate order/payment states, provider, optional suffix/reference, paid timestamp and timestamps. |
-| order_items | UUID ID, order FK, nullable product FK, historical name, quantity 1-99, integer paid unit price. Derive line total as quantity times snapshot price. |
-| order_confirmation_jobs | Order PK/FK, pending/sent/failed status, attempts, retry time, sent time, timestamps. No customer access/provider secrets. |
+All seven tables have RLS. Profiles are mutable defaults; carts are current intent; orders are historical snapshots. Checkout email is independently snapshotted, not copied into profiles. Product/profile changes never rewrite orders. Product deletion can null a historical reference without deleting the snapshot; cart deletion does not delete orders. Auth deletion with retained orders is restricted pending retention policy.
 
-Profiles are lazily created by the authenticated owner through restricted insert/upsert when the Profile feature is implemented. There is no new auth.users trigger, custom authentication or profile seed. Defaults can be null, but supplied blank strings are rejected. The current account email comes from Auth. Orders deliberately retain an immutable checkout contact email for historical contact and queued confirmation: it does not change when the Auth email changes, and is not a profile mirror.
+Browser privileges forbid direct order/item writes, job access and ownership reassignment. Historical snapshot triggers also protect against unauthorized trusted edits.
 
-## Historical constraints
+## Trusted transaction
 
-Order states: placed, confirmed, processing, ready_for_pickup, out_for_delivery, completed, cancelled. Payment states: pending, awaiting_payment, paid, failed. Placement defaults to pending; paid requires paid_at and non-paid forbids it. Provider is orange or afri, matching frontend selection. None of these fields establish real provider verification. Transition authorization/refunds/provider callbacks belong to future trusted work.
+place-order verifies JWT through Auth getUser and calls public.place_order with that identity. The fixed-empty-search-path SECURITY DEFINER RPC deliberately grants EXECUTE to authenticated, never anon; it independently derives auth.uid() and validates real identity.
 
-Delivery requires street/landmark, area and Freetown city snapshot; instructions are optional. Pickup requires a location snapshot, zero fee and null delivery fields. ready_for_pickup applies only to pickup; out_for_delivery only to delivery. The trusted endpoint must supply the pickup location, currently Lumley, Freetown. Delivery fee is required/nonnegative with no default or invented fee matrix. The future endpoint must refuse unknown fees until an approved matrix exists. Total must equal subtotal plus fee.
+It locks the owned cart/current active NLE products, validates quantities/bounded integer totals and derives names/prices. Submitted unit prices only detect stale quotes; user ownership, totals, fee/zone label and paid state are not browser authority.
 
-Deferred constraints require at least one item and the sum of quantity times historical unit price to equal subtotal at transaction end. Orders and items must be written in ONE transaction, not separate autocommit API requests. These constraints check consistency, not authoritative product pricing. A trusted server must still fetch current prices.
+Trusted provisional owner zones: zone-1=4000 / Goderich to Lumley;zone-2=5000 / Lumley to Congo Cross including Aberdeen;zone-3=6000 / Congo Cross to Central Freetown. Pickup=0 / Lumley, Freetown. Delivery requires supported Freetown details; orders snapshot zone/fee/address or pickup. Fees are product configuration, not researched courier rates.
 
-Triggers reject financial/customer/fulfilment snapshot updates and item name/quantity/unit-price updates even by trusted roles. Product references may become null on deletion; reassignment to another product is forbidden. State/verified payment metadata remain server-updatable. Corrections/refunds need a later explicit design.
+Owner advisory lock plus unique(user_id,checkout_request_id) protects durable idempotency. Order/items/job creation, total consistency and cart clearing commit in one transaction; failed conversion leaves no partial data. New orders initialize **status=placed, payment_status=awaiting_payment**. No real Orange Money/Afrimoney processing. Payer number is transient; only last4 persists, never PIN/OTP. Contact phone is a separate fulfilment snapshot.
 
-Product changes/deactivation do not alter historical items. Product deletion removes temporary cart references and sets historical product references null. Cart deletion never deletes orders. Auth deletion cascades mutable profiles/carts but is restricted while orders exist until a retention/account-deletion policy is approved. Browsers cannot delete orders; explicit trusted order deletion cascades items/jobs.
+## Resend confirmation
 
-History index (user_id, created_at DESC, id DESC) supports stable pagination/list/detail queries. Human order references are unique; future creation must retry improbable random collisions. Non-null provider transaction references are unique within the provider. RLS protects ownership even if a reference is known.
+Resend is active; Mailgun/Brevo are not integrated. Sending is attempted after committed placement or owner-authorized order-email retry. Recipient/content comes only from persisted order snapshots. Email failure never deletes/rolls back the order.
 
-## Payment metadata and privacy
+Service-only claim/finish RPCs use claim token, two-minute lease, one-minute retry delay, frozen sender and provider ID. Browsers cannot execute them. States: pending/processing/sent/failed; sent is provider acceptance, not delivery guarantee. Stable key lume-order-confirmation-v1-{order.id} reduces duplicates within the provider window. After 23 hours from first attempt, uncertain/failed jobs require manual reconciliation rather than resend beyond the 24-hour deduplication window. No external exactly-once promise or scheduled worker.
 
-Store only optional payment_phone_last4 for masked history, not a full payer number merely for display. A future trusted initiation flow can hold normalized payer input transiently and discard it; a real provider's retry needs must be reviewed before adding persistent storage. An opaque, non-secret provider reference can be recorded later. No PIN, OTP, token or credential field exists. Contact phone is a SEPARATE required full normalized fulfilment snapshot, not assumed to equal payer phone. Keep sensitive inputs out of logs. Frontend general number-format validation is not account/provider verification.
+Default sender **Lumé House <onboarding@resend.dev>** unless RESEND_FROM overrides it. Testing sender permits only the Resend account recipient; arbitrary recipients require a verified owned domain. See [Resend restrictions](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain). hello@lumehouse.sl is display-only. Verified sender/domain/deliverability remain future hardening.
 
-## RLS and grants
+## Configuration boundaries
 
-All seven tables have RLS and explicit privileges. Public/anonymous and authenticated visitors read active products only; browser roles cannot write the catalog. Authenticated customers can read/create/update only their profile; column grants prohibit changing owner/timestamps or deletion. Customers can read/create/delete only their own cart; read/insert/update quantity/delete only its items. Additions/quantity updates require active products. Ownership columns cannot be changed by browsers; inactive intent can be removed.
+Browser-safe: VITE_SUPABASE_URL,VITE_SUPABASE_PUBLISHABLE_KEY,optional same-origin VITE_AUTH_REDIRECT_URL. Production: https://lume-house-delta.vercel.app.
 
-Orders and items are owner-readable only, with NO browser insert/update/delete grants or policies. No browser paid-status/totals updates. Confirmation jobs have no browser grants/policies and are server-only. Trusted service_role access does not remove the need for secure server validation. Its keys must never be exposed in VITE variables or browser code.
+Google callback: https://wyvsbzcltrhnjeuijsva.supabase.co/auth/v1/callback. App callback: https://lume-house-delta.vercel.app/auth/callback. Production Site URL/origin/callback are configured; local development needs separately allowlisted URLs. Google secrets stay in private provider settings.
 
-## Future trusted checkout and email
+Server: RESEND_API_KEY,optional RESEND_FROM/ALLOWED_ORIGINS; built-in Supabase server credentials stay server-side. Never use private values in VITE/examples/Git. CORS default includes production and localhost/127.0.0.1 ports 5173/5174; overrides must preserve intended exact origins, never *. Gateway verify_jwt=false supports publishable configuration; explicit getUser/database identity checks remain mandatory.
 
-An authenticated Edge Function or equivalent must verify Auth identity and ownership, validate quantities/active products, consistently read or lock authoritative prices, validate checkout snapshots/coverage, calculate approved fees, atomically create order and immutable items, clear/convert cart and enqueue one confirmation job. Browser unit prices, subtotal, fees, total and paid status are NEVER authoritative. Multiple Supabase HTTP writes are not atomic: a trusted-only database transaction helper/RPC may be necessary. No order endpoint/RPC is implemented now. Order retries need a deliberate idempotency contract before Place Order is enabled.
+## Applied migration history
 
-A future worker sends from committed order/contact/item snapshots after persistence. Email failure records retry work and leaves the order intact. One job per order prevents duplicate enqueue but cannot alone guarantee exactly-once external delivery. Implement atomic claiming/locking and stable order-based provider idempotency (or reconcile uncertain sends) for crash/concurrency safety. No worker or email provider is implemented. hello@lumehouse.sl is display-only; later testing uses chrisbarbz17@gmail.com, never seeded recipients. Mailgun is not mandatory.
+| Version | Purpose |
+|---|---|
+| 20261002000100 | Original commerce foundation preserved |
+| 20261002000200 | Lumé House profiles/NLE/ownership/historical reconciliation |
+| 20261002000300 | Immutable delivery-zone snapshots |
+| 20261002000400 | Atomic checkout/idempotency/durable email processing |
+| 20261003000500 | Reviewed product photography metadata |
+| 20261003000600 | Remaining reviewed photography metadata |
 
-## Local SQL verification
+These are applied history, not replay instructions. Never reset hosted data, rewrite applied history or replay seed. seed.sql is a reproducible local reference, not an automatic production operation. Authorized hosted changes require inspection/reviewed forward changes; current catalogue updates never rewrite historical order items.
 
-Requires Docker and postgres:14.1-alpine:
+## Local validation
 
 ```powershell
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run typecheck:functions
+npm.cmd run build
+npm.cmd test
+git diff --check
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File supabase/tests/run-local.ps1
 ```
 
-The runner creates lume-foundation-sql-check without network/published ports, checks each command and removes the container in finally. Trust authentication is confined to this disposable environment. It runs the unchanged migration, tests populated-order refusal and UUID/cart preservation with rollback-only identities, applies the forward migration, seeds twice, and tests ownership/constraints/history inside rollback. Final assertions ensure no identities/private fixtures remain and twenty NLE products are unchanged.
+Baseline: 44 tests and 163 SQL PASS assertions/messages. Function typecheck uses installed SDK/Deno declarations, not native Deno execution. SQL runner uses disposable network-isolated postgres:14.1-alpine, rollback-only synthetic Auth identities and cleanup in finally. It checks migrations, repeated local seed, ownership denial, snapshots, repricing/zones, atomic conversion/idempotency and email leases. End checks ensure fixtures are gone. Never run supabase/tests against hosted data; no project credentials are used. Emulated SQL/Auth is distinct from genuine Google/JWT/PostgREST E2E.
 
-NEVER apply supabase/tests/ files to hosted Supabase. The bootstrap emulates only auth.users/auth.uid and SQL roles; it does not test Google OAuth, real JWTs, PostgREST, hosted Supabase grants/extensions/Auth triggers or browser sessions. Static inspection, local executable PostgreSQL checks and hosted verification are distinct. Mocked product tests verify local catalog-to-NLE repository mapping without contacting hosted services.
+## Remaining work
 
-Official references: [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [Auth-linked profiles](https://supabase.com/docs/guides/auth/managing-user-data), [migration history](https://supabase.com/docs/guides/local-development/database-migrations).
-
-## Local storefront refinement — hosted changes pending
-
-Hosted verification above is the historical 12-product foundation, not verification of the expanded catalog. This UX phase does not connect to or mutate hosted Supabase. Project display name is now Lumé House; reference unchanged. Local seed now has 20 stable IDs; existing first twelve unchanged. Later authorized reconciliation must inspect row conflicts before adding eight products; never blindly overwrite trusted catalog edits.
-
-20261002000300_delivery_zone_snapshots.sql is an additive local-only forward migration. Apply after both existing migrations only when authorized. It adds nullable delivery_zone_id and delivery_zone_label (coverage snapshot), accepts only paired nulls or valid delivery pairs, forbids pickup zone values and protects both against update. Null legacy pairs preserve existing history without guessing a zone; the future trusted order endpoint must require an active configured zone for NEW delivery orders. RLS/grants and existing historical guards remain unchanged. It deliberately stores no FK to mutable temporary zone configuration.
-
-Provisional frontend zones: zone-1 Goderich–Lumley 4000 minor units; zone-2 Lumley–Congo Cross including Aberdeen 5000; zone-3 Congo Cross–Central Freetown 6000. These are product configuration, not researched courier rates or exact geographical boundaries. No permanent DB fee matrix. Future trusted server reads authoritative approved configuration and snapshots the actual fee and coverage; browser-submitted prices/fees/totals are untrusted.
-
-Neither current profile/contact DB constraints nor the existing payment model restrict provider-specific phone prefixes: normalized +232 plus eight digits is already compatible. No phone-related migration needed. Payer input remains transient with optional last4 history; no secrets/PIN/OTP. Future success means persisted order placed, with pending/awaiting_payment, never payment verified. Collection instructions/provider integration remain deferred.
-
-The local runner additionally applies/tests this migration against rollback-only historical delivery data, checks pairs/pickup/immutability/RLS/grants, rolls back fixtures, then applies it to the isolated database before the existing suite. No Supabase test file is safe for hosted execution.
+Testing-sender limitations, verified domain/deliverability, scheduled retry worker, live payments, deferred unproven profile/autofill issue and broader authenticated cross-user runtime testing. Admin/product management, Storage, inventory, variants, order workflow and analytics are post-HNG. These are not evidenced submission blockers.
