@@ -14,12 +14,12 @@ export function CartPage() {
   const auth = useAuth();
   const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
   const { state, refresh } = useProducts();
-  if (status === "loading" || status === "error" || status === "checking-out") return <section className="wrap page-section"><h1>Your cart.</h1><p>Your saved cart is not ready yet.</p></section>;
+  if (status === "loading" || status === "error" || status === "checking-out") return <section className="wrap page-section"><h1>Your Bag.</h1><p>Your saved Bag is not ready yet.</p></section>;
   if (!items.length) return <EmptyCart />;
   if (state.status !== "ready")
     return (
       <section className="wrap page-section">
-        <h1>Your cart.</h1>
+        <h1>Your Bag.</h1>
         <ProductStatus />
       </section>
     );
@@ -35,9 +35,9 @@ export function CartPage() {
         ← Continue shopping
       </Link>
       <p className="eyebrow">YOUR EVERYDAY FINDS</p>
-      <h1>Your cart.</h1>
+      <h1>Your Bag.</h1>
       <p className="muted mb-8">
-        {auth.session ? "Your cart is saved to your account." : "Sign in to save your cart across visits. Guest items are kept only in this browser tab."}
+        {auth.session ? "Your Bag is saved to your account." : "Sign in to save your Bag across visits. Guest items are kept only in this browser tab."}
       </p>
       <div className="checkout-grid">
         <div>
@@ -46,7 +46,7 @@ export function CartPage() {
             <article className="cart-row" key={product.id}>
               <img
                 src={product.image}
-                alt={`Illustration of ${product.name}`}
+                alt={product.image.endsWith(".svg") ? `Illustration of ${product.name}` : product.name}
                 style={{ backgroundColor: product.color }}
               />
               <div className="cart-row-detail">
@@ -148,7 +148,7 @@ export function CartPage() {
         </aside>
       </div>
       <p className="sr-only" role="status">
-        Cart subtotal {formatMoney(subtotal)}.
+        Bag subtotal {formatMoney(subtotal)}.
       </p>
     </section>
   );

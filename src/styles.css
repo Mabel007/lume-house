@@ -1178,6 +1178,29 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 .quantity-control:focus-within { outline: 3px solid #9a542e; outline-offset: 4px; }
 
 /* Public content foundation: scoped to content pages, without commerce overrides. */
+/* Five direct links remain available at every width; no disclosure lifecycle. */
+.site-header .main-nav { display: flex; align-items: center; gap: clamp(8px, 2vw, 28px); }
+.site-header .main-nav a { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.site-header .main-nav .cart-link { gap: 3px; }
+.commerce-footer.site-footer { display: block; padding-block: 48px 28px; }
+.footer-content { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 48px; }
+.commerce-footer p { font-size: 13px; line-height: 1.8; margin-block: 12px; }
+.footer-brand { max-width: 340px; }
+.footer-brand > a:not(.brand), .footer-bottom a { text-decoration: underline; text-underline-offset: 4px; overflow-wrap: anywhere; }
+.footer-brand > a:not(.brand) { display: inline-block; padding-block: 10px; font-size: 13px; }
+.footer-links { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
+.footer-links h2 { font-family: inherit; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.footer-links ul { padding: 0; margin: 0; list-style: none; }
+.footer-links a { display: inline-block; padding-block: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.footer-links a:hover, .footer-links a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+.footer-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; border-top: 1px solid #deddd1; margin-top: 36px; padding-top: 20px; }
+@media (max-width: 1000px) { .footer-links { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) {
+  .site-header { flex-wrap: wrap; height: auto; padding-block: 20px; gap: 16px; }
+  .site-header .main-nav { width: 100%; justify-content: space-between; }
+  .footer-content { grid-template-columns: 1fr; gap: 32px; }
+}
+@media (max-width: 360px) { .footer-links { grid-template-columns: 1fr; } }
 .content-heading { max-width: 760px; padding-bottom: 32px; border-bottom: 1px solid #deddd1; }
 .content-heading > p:last-child, .about-intro { font-size: 18px; line-height: 1.8; color: #626c60; }
 .content-body { max-width: 760px; }

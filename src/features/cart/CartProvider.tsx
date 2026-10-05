@@ -50,7 +50,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }, productId => storeGuest(guest.current.filter(item => item.productId !== productId)));
         if (active && identity.current === userId) { current.current = merged; setSaved({ userId, items: merged }); setStatus("ready"); locked.current = false; }
       } catch {
-        if (active) { setError("Your saved cart could not be restored or merged. Unsaved guest items are retained. Please retry."); setStatus("error"); }
+        if (active) { setError("Your saved Bag could not be restored or merged. Unsaved guest items are retained. Please retry."); setStatus("error"); }
       }
     }
     void restore();
@@ -68,7 +68,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     locked.current = true; setStatus("saving"); setError(null);
     void writeCartItem(getSupabaseClient(), id, action.productId, item?.quantity ?? null, before.some(item => item.productId === action.productId)).then(() => {
       if (identity.current === userId && epoch.current === generation) { current.current = next; setSaved({ userId, items: next }); }
-    }).catch(() => { if (identity.current === userId && epoch.current === generation) setError("Your cart change was not saved. Please try again."); }).finally(() => {
+    }).catch(() => { if (identity.current === userId && epoch.current === generation) setError("Your Bag change was not saved. Please try again."); }).finally(() => {
       if (identity.current === userId && epoch.current === generation) { locked.current = false; setStatus("ready"); }
     });
   }

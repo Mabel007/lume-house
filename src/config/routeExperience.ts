@@ -1,6 +1,6 @@
 const routeTitles: Readonly<Record<string, string>> = {
   "/": "Shop",
-  "/cart": "Your cart",
+  "/cart": "Your Bag",
   "/checkout": "Checkout",
   "/account": "Your account",
   "/auth/callback": "Your account",

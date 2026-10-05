@@ -178,16 +178,16 @@ export function ShopPage() {
                       onClick={() => {
                         dispatch({ type: "add", productId: product.id });
                         setNotice(
-                          `${product.name}: cart update requested.`,
+                          `${product.name}: Bag update requested.`,
                         );
                       }}
-                      aria-label={`Add ${product.name} to cart`}
+                      aria-label={`Add ${product.name} to Bag`}
                     >
                       {quantity >= MAX_QUANTITY
                         ? "Quantity limit reached"
                         : quantity > 0
-                          ? `Add another · ${quantity} in cart`
-                          : "Add to cart"}
+                          ? `Add another · ${quantity} in Bag`
+                          : "Add to Bag"}
                       <span aria-hidden="true">+</span>
                     </button>
                   </article>
@@ -209,7 +209,7 @@ export function ShopPage() {
           <br />
           Pickup in Lumley.
           <br />
-          Delivery coverage: Freetown.
+          Delivery in supported Freetown areas.
         </div>
       </section>
     </>

@@ -2,12 +2,13 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { createServer } from "vite";
 
 let server;
 let ProductContext, CartContext, ShopPage, CartPage, CheckoutPage;
 let contentPages, routeTitle, aboutFragmentTarget;
+let Layout, SiteFooter;
 before(async () => {
   server = await createServer({
     server: { middlewareMode: true, hmr: false },
@@ -38,6 +39,8 @@ before(async () => {
     "/privacy": policies.PrivacyPage, "/terms": policies.TermsPage,
   };
   ({ routeTitle, aboutFragmentTarget } = await server.ssrLoadModule("/src/config/routeExperience.ts"));
+  ({ Layout } = await server.ssrLoadModule("/src/components/Layout.tsx"));
+  ({ SiteFooter } = await server.ssrLoadModule("/src/components/SiteFooter.tsx"));
 });
 
 function renderContent(path) {
@@ -99,7 +102,7 @@ test("policies preserve request eligibility, payment boundaries and separately c
 });
 
 test("route title mapping preserves existing titles and assigns all six public titles", () => {
-  const expected = { "/about": "About", "/help": "Help & Contact", "/help/delivery-pickup": "Delivery & Pickup", "/help/returns-refunds": "Returns & Refunds", "/privacy": "Privacy Policy", "/terms": "Terms & Conditions", "/": "Shop", "/cart": "Your cart", "/checkout": "Checkout", "/account/orders": "Your account", "/auth/callback": "Your account", "/orders/example/success": "Your order", "/unknown": "Page not found" };
+  const expected = { "/about": "About", "/help": "Help & Contact", "/help/delivery-pickup": "Delivery & Pickup", "/help/returns-refunds": "Returns & Refunds", "/privacy": "Privacy Policy", "/terms": "Terms & Conditions", "/": "Shop", "/cart": "Your Bag", "/checkout": "Checkout", "/account/orders": "Your account", "/auth/callback": "Your account", "/orders/example/success": "Your order", "/unknown": "Page not found" };
   for (const [path, title] of Object.entries(expected)) assert.equal(routeTitle(path), title);
   assert.equal(routeTitle("/about/"), "About");
   assert.equal(routeTitle("/constructor"), "Page not found");
@@ -147,11 +150,11 @@ test("loading and error states do not show stale totals or add-to-cart actions",
   for (const Page of [ShopPage, CartPage, CheckoutPage]) {
     const loading = render(Page, { status: "loading" });
     assert.match(loading, /Loading the collection/);
-    assert.doesNotMatch(loading, /\$|Add to cart|Continue to checkout/);
+    assert.doesNotMatch(loading, /\$|Add to Bag|Continue to checkout/);
     const failed = render(Page, { status: "error" });
     assert.match(failed, /The collection is unavailable/);
     assert.match(failed, /Try again/);
-    assert.doesNotMatch(failed, /\$|Add to cart|Continue to checkout/);
+    assert.doesNotMatch(failed, /\$|Add to Bag|Continue to checkout/);
   }
 });
 test("empty catalog does not fall back to demo products", () => {
@@ -183,12 +186,12 @@ test("unavailable products can be removed and cannot proceed to checkout", () =>
   assert.match(cart, /Remove unavailable item 1/);
   assert.doesNotMatch(cart, /Continue to checkout|\$5\.00/);
   const checkout = render(CheckoutPage, state);
-  assert.match(checkout, /Review your cart/);
+  assert.match(checkout, /Review your Bag/);
   assert.doesNotMatch(checkout, /Place order/);
-  assert.match(render(CartPage, state, []), /Your cart is taking a slow day/);
+  assert.match(render(CartPage, state, []), /Your Bag is taking a slow day/);
   assert.match(
     render(CheckoutPage, state, []),
-    /Your cart is taking a slow day/,
+    /Your Bag is taking a slow day/,
   );
 });
 
@@ -227,7 +230,7 @@ test("expanded catalog has accessible interactions, editorial sections and respo
   );
   const html = render(ShopPage, { status: "ready", products: catalog }, []);
   assert.equal((html.match(/class="product-card"/g) ?? []).length, 20);
-  for (const p of catalog) assert.ok(html.includes(`Add ${p.name} to cart`));
+  for (const p of catalog) assert.ok(html.includes(`Add ${p.name} to Bag`));
   assert.match(html, /Shop by collection/);
   assert.match(html, /THE LUMÉ EDIT/);
   assert.match(html, /product-grid/);
@@ -236,4 +239,63 @@ test("expanded catalog has accessible interactions, editorial sections and respo
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.match(css, /repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(css, /:focus-visible/);
+});
+
+function renderLayout(path, cartState = { items, status: "ready", error: null, retry() {} }) {
+  return renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [path] },
+    React.createElement(CartContext.Provider, { value: cartState },
+      React.createElement(Routes, null, React.createElement(Route, { element: React.createElement(Layout) },
+        React.createElement(Route, { path: "*", element: React.createElement("h1", null, "Page") }))))));
+}
+
+test("primary navigation has five destinations, account/help descendant active states and Bag count", () => {
+  const nav = renderLayout("/").match(/<nav aria-label="Main navigation"[^>]*>(.*?)<\/nav>/s)[1];
+  assert.equal((nav.match(/<a /g) ?? []).length, 5);
+  for (const path of ["/", "/about", "/help", "/account", "/cart"]) assert.ok(nav.includes(`href="${path}"`));
+  assert.match(nav, /aria-label="Bag \(2\)"/);
+  assert.doesNotMatch(nav, /My Orders|Sign in|Cart/);
+  for (const path of ["/help", "/help/delivery-pickup", "/help/returns-refunds"]) {
+    const active = renderLayout(path).match(/<a[^>]*aria-current="page"[^>]*>/g);
+    assert.equal(active.length, 1);
+    assert.ok(active[0].includes('href="/help"'));
+  }
+  assert.match(renderLayout("/account/orders"), /aria-current="page"[^>]*href="\/account"/);
+});
+
+test("ecommerce footer provides grouped real links, dynamic year and separate developer attribution", () => {
+  const html = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(SiteFooter)));
+  assert.match(html, /<footer/);
+  for (const group of ["Shop", "About", "Help", "Legal"]) assert.ok(html.includes(`>${group}</h2>`));
+  for (const path of ["/", "/cart", "/about#our-story", "/about#our-values", "/help", "/account/orders", "/help/delivery-pickup", "/help/returns-refunds", "/privacy", "/terms"]) assert.ok(html.includes(`href="${path}"`));
+  assert.equal((html.match(/<ul>/g) ?? []).length, 4);
+  assert.ok(html.includes(`© ${new Date().getFullYear()} Lumé House. All rights reserved.`));
+  assert.match(html, /Built by <a href="https:\/\/najbuilds.com">Naj Builds/);
+  assert.match(html, /portfolio ecommerce product by Naj Builds/);
+  assert.match(html, /mailto:contact@najbuilds.com/);
+  assert.doesNotMatch(html, /hello@lumehouse.sl|\+232|office|social/i);
+});
+
+test("Bag copy includes positive shop actions, checkout references and accurate photograph alt", () => {
+  const state = { status: "ready", products: [fixture] };
+  const shop = render(ShopPage, state, []);
+  assert.match(shop, /Add to Bag/);
+  assert.match(shop, /aria-label="Add Fixture mug to Bag"/);
+  assert.match(shop, /supported Freetown areas/);
+  const bag = render(CartPage, state);
+  assert.match(bag, /Your Bag/); assert.match(bag, /Bag subtotal/);
+  assert.match(bag, /alt="Illustration of Fixture mug"/);
+  const photoBag = render(CartPage, { ...state, products: [{ ...fixture, image: "/images/mug.webp" }] });
+  assert.match(photoBag, /alt="Fixture mug"/); assert.doesNotMatch(photoBag, /Illustration of/);
+  const checkout = render(CheckoutPage, state);
+  assert.match(checkout, /Back to Bag/); assert.match(checkout, /Edit your Bag/);
+  for (const html of [shop, bag, checkout]) assert.doesNotMatch(html.replace(/<[^>]+>/g, ""), /\bcart\b/i);
+});
+
+test("global loading saving and failure feedback uses Bag without claiming persistence success", async () => {
+  assert.match(renderLayout("/", { items: [], status: "loading" }), /Loading your Bag/);
+  assert.match(renderLayout("/", { items, status: "saving" }), /Saving your Bag/);
+  assert.match(renderLayout("/", { items, status: "error", error: "Your Bag change was not saved.", retry() {} }), /Retry saved Bag/);
+  const { readFileSync } = await import("node:fs");
+  assert.match(readFileSync("src/features/products/ShopPage.tsx", "utf8"), /Bag update requested/);
+  assert.doesNotMatch(readFileSync("src/features/cart/CartProvider.tsx", "utf8"), /Your (?:saved )?cart/i);
 });

@@ -3,12 +3,11 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { shop } from "../config/shop";
 import { useCart } from "../features/cart/CartContext";
 import { BagIcon } from "./Icon";
-import { useAuth } from "../features/auth/AuthContext";
 import { aboutFragmentTarget, routeTitle } from "../config/routeExperience";
+import { SiteFooter } from "./SiteFooter";
 
 export function Layout() {
   const { items, status, error, retry } = useCart();
-  const auth = useAuth();
   const count = items.reduce((total, item) => total + item.quantity, 0);
   const { pathname, hash, key } = useLocation();
   const main = useRef<HTMLElement>(null);
@@ -50,42 +49,32 @@ export function Layout() {
         </Link>
         <nav
           aria-label="Main navigation"
-          className="flex items-center gap-5 sm:gap-9"
+          className="main-nav"
         >
           <NavLink to="/" end>
             Shop
           </NavLink>
-          <NavLink to="/account">{auth.loading ? "Account…" : auth.session ? "Account" : "Sign in"}</NavLink>
-          <NavLink to="/cart" className="cart-link">
+          <NavLink to="/about">About</NavLink>
+          <NavLink to="/help">Help</NavLink>
+          <NavLink to="/account">Account</NavLink>
+          <NavLink to="/cart" className="cart-link" aria-label={`Bag (${count})`}>
             <BagIcon />
-            <span>Cart</span>
+            <span>Bag</span>
+            <span aria-hidden="true">(</span>
             <span key={count} className="cart-count">
               {count}
-              <span className="sr-only"> items</span>
             </span>
+            <span aria-hidden="true">)</span>
           </NavLink>
         </nav>
       </header>
       <main id="main" ref={main} tabIndex={-1}>
-        {status === "loading" && <p className="wrap" role="status">Loading your cart…</p>}
-        {status === "saving" && <p className="wrap" role="status">Saving your cart…</p>}
-        {error && <div className="wrap" role="alert">{error} <button onClick={retry}>Retry saved cart</button></div>}
+        {status === "loading" && <p className="wrap" role="status">Loading your Bag…</p>}
+        {status === "saving" && <p className="wrap" role="status">Saving your Bag…</p>}
+        {error && <div className="wrap" role="alert">{error} <button onClick={retry}>Retry saved Bag</button></div>}
         <Outlet />
       </main>
-      <footer className="wrap site-footer">
-        <div>
-          <Link className="brand" to="/">
-            {shop.name}
-            <span className="brand-dot">✳</span>
-          </Link>
-          <p>{shop.tagline}</p>
-        </div>
-        <p>
-          {shop.location}
-          <br />
-          {shop.phone}<br />{shop.email}
-        </p>
-      </footer>
+      <SiteFooter />
     </>
   );
 }
