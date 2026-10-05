@@ -54,6 +54,11 @@ $guard$;
   Run-Sql 'NLE seed repeated' $seed
   Run-Sql 'reviewed photography metadata migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261003000500_product_photography.sql'))
   Run-Sql 'additional reviewed photography metadata migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261003000600_remaining_product_photography.sql'))
+  $variants = Read-Sql (Join-Path $supabaseRoot 'migrations/20261005000700_product_variant_foundation.sql')
+  $variantBody = $variants -replace '(?m)^begin;\s*$', '' -replace '(?m)^commit;\s*$', ''
+  Run-Sql 'variant expansion preserves legacy history and rollback' ((Read-Sql (Join-Path $testRoot 'variants-before.sql')) + $variantBody + (Read-Sql (Join-Path $testRoot 'variants-after.sql')))
+  Run-Sql 'additive variant foundation' $variants
+  Run-Sql 'variant ownership, constraints and compatibility' (Read-Sql (Join-Path $testRoot 'variants.sql'))
   Run-Sql 'ownership, constraints, historical snapshots' (Read-Sql (Join-Path $testRoot 'commerce.sql'))
   Run-Sql 'trusted atomic checkout/idempotency/email leases' (Read-Sql (Join-Path $testRoot 'checkout.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
