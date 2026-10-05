@@ -9,6 +9,9 @@ import "./styles.css";
 import { ProductProvider } from "./features/products/ProductProvider";
 import { AuthProvider } from "./features/auth/AuthProvider";
 import { CustomerAccount, CustomerCheckout, CustomerOrders,CustomerOrder } from "./features/auth/CustomerRoutes";
+import { AboutPage } from "./features/content/AboutPage";
+import { HelpPage } from "./features/content/HelpPage";
+import { DeliveryPickupPage, ReturnsRefundsPage, PrivacyPage, TermsPage } from "./features/content/PolicyPages";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -19,6 +22,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Routes>
             <Route element={<Layout />}>
               <Route path="/" element={<ShopPage />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/help" element={<HelpPage />} />
+              <Route path="/help/delivery-pickup" element={<DeliveryPickupPage />} />
+              <Route path="/help/returns-refunds" element={<ReturnsRefundsPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
               <Route path="/cart" element={<CartPage />} />
               <Route path="/checkout" element={<CustomerCheckout />} />
               <Route path="/account" element={<CustomerAccount />} />

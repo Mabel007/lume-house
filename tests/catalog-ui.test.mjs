@@ -7,6 +7,7 @@ import { createServer } from "vite";
 
 let server;
 let ProductContext, CartContext, ShopPage, CartPage, CheckoutPage;
+let contentPages, routeTitle, aboutFragmentTarget;
 before(async () => {
   server = await createServer({
     server: { middlewareMode: true, hmr: false },
@@ -27,6 +28,88 @@ before(async () => {
   ({ CheckoutPage } = await server.ssrLoadModule(
     "/src/features/checkout/CheckoutPage.tsx",
   ));
+  const { AboutPage } = await server.ssrLoadModule("/src/features/content/AboutPage.tsx");
+  const { HelpPage } = await server.ssrLoadModule("/src/features/content/HelpPage.tsx");
+  const policies = await server.ssrLoadModule("/src/features/content/PolicyPages.tsx");
+  contentPages = {
+    "/about": AboutPage, "/help": HelpPage,
+    "/help/delivery-pickup": policies.DeliveryPickupPage,
+    "/help/returns-refunds": policies.ReturnsRefundsPage,
+    "/privacy": policies.PrivacyPage, "/terms": policies.TermsPage,
+  };
+  ({ routeTitle, aboutFragmentTarget } = await server.ssrLoadModule("/src/config/routeExperience.ts"));
+});
+
+function renderContent(path) {
+  return renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [path] }, React.createElement(contentPages[path])));
+}
+
+test("all six public content pages render without auth or catalog dependencies and are wired as routes", async () => {
+  const { readFileSync } = await import("node:fs");
+  const entry = readFileSync("src/main.tsx", "utf8");
+  for (const path of Object.keys(contentPages)) {
+    const html = renderContent(path);
+    assert.equal((html.match(/<h1[ >]/g) ?? []).length, 1, path);
+    assert.match(html, /<article/);
+    assert.ok(entry.includes(`path="${path}"`), `missing route ${path}`);
+    assert.doesNotMatch(html, /<form|Change Password|Forgot Password/);
+  }
+});
+
+test("About contains approved brand foundation, focusable fragment headings and shopping CTA", () => {
+  const html = renderContent("/about");
+  assert.match(html, /<h1>A home should feel like yours\.<\/h1>/);
+  assert.ok(html.includes("To make beautiful, thoughtfully selected home and lifestyle pieces accessible for creating spaces that feel personal, comfortable and considered."));
+  for (const value of ["Thoughtful Design", "Everyday Beauty", "Quality &amp; Care", "Warm Service"]) assert.ok(html.includes(value));
+  for (const id of ["our-story", "our-values"]) {
+    assert.ok(html.includes(`id="${id}" tabindex="-1"`));
+    assert.ok(html.includes(`href="/about#${id}"`));
+  }
+  assert.match(html, /href="\/"[^>]*>Explore the collection/);
+  assert.doesNotMatch(html, /sustainab|artisan|certified|manufactur|founded in/i);
+});
+
+test("Help connects existing account/history and policies with honest contact guidance", () => {
+  const html = renderContent("/help");
+  for (const path of ["/account", "/account/orders", "/help/delivery-pickup", "/help/returns-refunds"]) assert.ok(html.includes(`href="${path}"`));
+  assert.match(html, /mailto:contact@najbuilds.com/);
+  assert.match(html, /portfolio ecommerce product by/);
+  assert.match(html, /href="https:\/\/najbuilds.com"/);
+  assert.match(html, /Never send PINs, OTPs, passwords or mobile-money secrets/);
+  assert.match(html, /Sending a request does not cancel an order/);
+});
+
+test("policies preserve request eligibility, payment boundaries and separately confirmed fulfilment", () => {
+  const returns = renderContent("/help/returns-refunds");
+  assert.match(returns, /7 calendar days from receipt to request an eligible return/);
+  assert.match(returns, /not an automatic refund guarantee/);
+  assert.match(returns, /Eligibility is reviewed/);
+  assert.match(returns, /does not process or verify those payments, or automate their refunds/);
+  assert.doesNotMatch(returns, /refunds? (?:are|is) automatic|automatically refund|guaranteed refund|final.sale|non.returnable/i);
+  for (const path of ["/help", "/help/delivery-pickup", "/help/returns-refunds", "/terms"]) {
+    assert.match(renderContent(path), /Placing an order does not mean payment has been confirmed/);
+  }
+  const delivery = renderContent("/help/delivery-pickup");
+  assert.match(delivery, /Pickup in Lumley, Freetown is free/);
+  assert.match(delivery, /readiness are confirmed separately/);
+  assert.doesNotMatch(delivery, /same.day|next.day|ready immediately/i);
+  const privacy = renderContent("/privacy");
+  for (const service of ["Google", "Supabase", "Vercel", "Resend"]) assert.ok(privacy.includes(service));
+  assert.doesNotMatch(privacy, /GDPR|certif|retain.{0,20}\d+|delete your account|Google Analytics/i);
+});
+
+test("route title mapping preserves existing titles and assigns all six public titles", () => {
+  const expected = { "/about": "About", "/help": "Help & Contact", "/help/delivery-pickup": "Delivery & Pickup", "/help/returns-refunds": "Returns & Refunds", "/privacy": "Privacy Policy", "/terms": "Terms & Conditions", "/": "Shop", "/cart": "Your cart", "/checkout": "Checkout", "/account/orders": "Your account", "/auth/callback": "Your account", "/orders/example/success": "Your order", "/unknown": "Page not found" };
+  for (const [path, title] of Object.entries(expected)) assert.equal(routeTitle(path), title);
+  assert.equal(routeTitle("/about/"), "About");
+  assert.equal(routeTitle("/constructor"), "Page not found");
+});
+
+test("About fragment recognition is scoped, safely decoded and independent of route entry", () => {
+  for (const hash of ["#our-story", "#our-values", "#our%2Dvalues"]) assert.ok(aboutFragmentTarget("/about", hash));
+  assert.equal(aboutFragmentTarget("/about/", "#our-values"), "our-values");
+  for (const hash of ["", "#main", "#unknown", "#%bad"]) assert.equal(aboutFragmentTarget("/about", hash), null);
+  assert.equal(aboutFragmentTarget("/help", "#our-values"), null);
 });
 after(async () => {
   await server?.close();

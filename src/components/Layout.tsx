@@ -4,18 +4,37 @@ import { shop } from "../config/shop";
 import { useCart } from "../features/cart/CartContext";
 import { BagIcon } from "./Icon";
 import { useAuth } from "../features/auth/AuthContext";
+import { aboutFragmentTarget, routeTitle } from "../config/routeExperience";
 
 export function Layout() {
   const { items, status, error, retry } = useCart();
   const auth = useAuth();
   const count = items.reduce((total, item) => total + item.quantity, 0);
-  const { pathname } = useLocation();
+  const { pathname, hash, key } = useLocation();
   const main = useRef<HTMLElement>(null);
+  const previousPath = useRef<string | null>(null);
   useEffect(() => {
-    document.title = `${pathname === "/" ? "Shop" : pathname === "/cart" ? "Your cart" : pathname === "/checkout" ? "Checkout" : pathname.startsWith('/account') || pathname === "/auth/callback" ? "Your account" : pathname.startsWith('/orders/') ? 'Your order' : "Page not found"} | ${shop.name}`;
-    main.current?.focus();
-    window.scrollTo(0, 0);
-  }, [pathname]);
+    document.title = `${routeTitle(pathname)} | ${shop.name}`;
+    const pathChanged = previousPath.current !== pathname;
+    previousPath.current = pathname;
+    const targetId = aboutFragmentTarget(pathname, hash);
+    if (targetId) {
+      // The Outlet is committed; defer until native fragment scrolling has settled.
+      const frame = requestAnimationFrame(() => {
+        const target = document.getElementById(targetId);
+        target?.focus({ preventScroll: true });
+        target?.scrollIntoView({ behavior: "instant", block: "start" });
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+    if (pathChanged) {
+      main.current?.focus({ preventScroll: true });
+      if (hash) {
+        // Preserve native anchors (including the skip link and Help contact).
+        document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: "instant" });
+      } else window.scrollTo(0, 0);
+    }
+  }, [pathname, hash, key]);
   return (
     <>
       <a href="#main" className="skip-link">

@@ -1176,3 +1176,48 @@ nav a,
 .feedback[role="alert"]:not(:empty), .field-error { color: #8a4628; }
 main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1; font-size: 12px; color: #626c60; }
 .quantity-control:focus-within { outline: 3px solid #9a542e; outline-offset: 4px; }
+
+/* Public content foundation: scoped to content pages, without commerce overrides. */
+.content-heading { max-width: 760px; padding-bottom: 32px; border-bottom: 1px solid #deddd1; }
+.content-heading > p:last-child, .about-intro { font-size: 18px; line-height: 1.8; color: #626c60; }
+.content-body { max-width: 760px; }
+.content-body > section { margin-block: 40px; }
+.content-page h2, .about-page h2 { font-family: Georgia, serif; font-size: clamp(26px, 3vw, 40px); font-weight: normal; line-height: 1.2; }
+.content-body p, .content-body li, .about-page p { line-height: 1.8; }
+.content-body ul { list-style: disc; padding-left: 24px; }
+.content-body a:not(.button), .content-related a, .about-section-links a { text-decoration: underline; text-underline-offset: 4px; overflow-wrap: anywhere; }
+.content-related { display: flex; flex-wrap: wrap; gap: 16px 28px; padding-top: 28px; border-top: 1px solid #deddd1; }
+.content-related a, .about-section-links a { padding-block: 10px; }
+.help-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 32px; }
+.help-links > a { display: block; padding: 24px; border: 1px solid #deddd1; background: #eeeee4; text-decoration: none !important; }
+.help-links h2 { font-size: 25px; }
+.help-links p { margin-bottom: 0; color: #626c60; }
+.about-opening { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; }
+.about-opening h1 { font-size: clamp(42px, 5.5vw, 76px); }
+.about-opening figure { margin: 0; }
+.about-opening img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; }
+.about-opening figcaption { padding-top: 12px; color: #626c60; font-size: 13px; }
+.about-section-links { display: flex; flex-wrap: wrap; gap: 24px; }
+.about-story { display: grid; grid-template-columns: 1fr 2fr; gap: 48px; margin-block: 88px; }
+.about-story > div { max-width: 720px; }
+.about-mission { padding: 48px; background: #eeece3; }
+.about-mission > p:last-child { font-family: Georgia, serif; font-size: clamp(23px, 3vw, 34px); max-width: 900px; margin-bottom: 0; }
+.about-values { margin-block: 72px; }
+.about-values-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px; margin-top: 32px; }
+.about-values-grid > section { border-top: 1px solid #deddd1; padding-top: 24px; }
+.about-values-grid h3 { font-family: Georgia, serif; font-size: 24px; font-weight: normal; }
+.about-shopping { text-align: center; padding-block: 40px; border-top: 1px solid #deddd1; }
+.about-shopping .text-link { display: block; width: fit-content; margin: 24px auto 0; }
+.about-page #our-story, .about-page #our-values { scroll-margin-top: 28px; }
+@media (max-width: 850px) {
+  .about-opening { grid-template-columns: 1fr; gap: 28px; }
+  .about-opening img { aspect-ratio: 4 / 3; }
+  .about-values-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .about-story { grid-template-columns: 1fr; gap: 12px; margin-block: 48px; }
+}
+@media (max-width: 540px) {
+  .help-links, .about-values-grid { grid-template-columns: 1fr; }
+  .about-mission { padding: 28px 22px; }
+  .about-values { margin-block: 48px; }
+  .content-heading > p:last-child, .about-intro { font-size: 16px; }
+}
