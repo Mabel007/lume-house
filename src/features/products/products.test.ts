@@ -1,3 +1,4 @@
+import { parseVariants, requiresOptions, variantLabel } from "./variants.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@supabase/supabase-js";
@@ -18,14 +19,14 @@ const row = {
   background_color: "#e9e3d8",
   active: true,
 };
-function clientWith(fetch: typeof globalThis.fetch) {
+function clientWith(fetch: typeof globalThis.fetch, variants?: unknown) {
   return createClient("https://catalog.example.invalid", "unit-test-only", {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false,
     },
-    global: { fetch },
+    global: { fetch: async (input, init) => new URL(String(input)).pathname === "/rest/v1/product_variants" ? new Response(JSON.stringify(variants ?? {code:"PGRST205"}), {status:variants === undefined ? 404 : 200,headers:{"Content-Type":"application/json"}}) : fetch(input,init) },
   });
 }
 
@@ -141,4 +142,22 @@ test("NLE database boundary preserves the local catalog IDs and prices", async (
  const rows = catalog.map((p) => ({ id:p.id,name:p.name,description:p.description,category:p.category,price_cents:p.price,currency:"NLE",image_path:p.image,background_color:p.color,active:p.active }));
  const client=clientWith(async()=>new Response(JSON.stringify(rows),{headers:{"Content-Type":"application/json"}}));
  assert.deepEqual(await loadProducts(client,"NLE",new AbortController().signal),catalog.map(p=>({id:p.id,name:p.name,description:p.description,category:p.category,price:p.price,image:p.image,color:p.color})));
+});
+
+test("variant boundary preserves defaults and meaningful combinations without fake options", () => {
+  const base={id:'default:fixture-product',product_id:row.id,options:{},is_default:true,price_cents:1800,currency:'NLE',active:true,inventory_policy:'untracked'};
+  const variants=parseVariants([base,{...base,id:'blue',is_default:false,options:{Color:'Blue',Size:'Small'},price_cents:2000}]);
+  assert.equal(variants[0].productId,row.id);assert.equal(variantLabel(variants[0]),'');assert.equal(requiresOptions([variants[0]]),false);
+  assert.equal(requiresOptions(variants),true);assert.equal(variantLabel(variants[1]),'Color: Blue · Size: Small');
+  for(const change of [{active:false},{currency:'USD'},{price_cents:-1},{options:{Color:{}}},{options:{Color:''}},{options:{Color:'Blue'}},{inventory_policy:'unknown'}])assert.throws(()=>parseVariants([{...base,...change}]));
+  assert.throws(()=>parseVariants([base,base]));
+});
+
+test("expanded catalogue associates active variant rows while legacy schema remains compatible", async () => {
+  const variants=[{id:'default:fixture-product',product_id:row.id,options:{},is_default:true,price_cents:1800,currency:'NLE',active:true,inventory_policy:'untracked'}];
+  const response=async()=>new Response(JSON.stringify([row]),{headers:{'Content-Type':'application/json'}});
+  const expanded=await loadProducts(clientWith(response,variants),'NLE',new AbortController().signal);
+  assert.equal(expanded[0].variants?.[0].id,variants[0].id);
+  assert.equal((await loadProducts(clientWith(response),'NLE',new AbortController().signal))[0].variants,undefined);
+  await assert.rejects(loadProducts(clientWith(response,[{...variants[0],product_id:'other'}]),'NLE',new AbortController().signal));
 });

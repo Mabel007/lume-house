@@ -1,3 +1,4 @@
+import { useProducts } from "../features/products/ProductContext";
 import { useEffect, useRef } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { shop } from "../config/shop";
@@ -10,10 +11,12 @@ export function Layout() {
   const { items, status, error, retry } = useCart();
   const count = items.reduce((total, item) => total + item.quantity, 0);
   const { pathname, hash, key } = useLocation();
+  const { state: catalog } = useProducts();
+  const productName = catalog.status === "ready" ? catalog.products.find(product => pathname === `/products/${encodeURIComponent(product.id)}`)?.name : undefined;
   const main = useRef<HTMLElement>(null);
   const previousPath = useRef<string | null>(null);
   useEffect(() => {
-    document.title = `${routeTitle(pathname)} | ${shop.name}`;
+    document.title = `${routeTitle(pathname, productName)} | ${shop.name}`;
     const pathChanged = previousPath.current !== pathname;
     previousPath.current = pathname;
     const targetId = aboutFragmentTarget(pathname, hash);
@@ -33,7 +36,7 @@ export function Layout() {
         document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: "instant" });
       } else window.scrollTo(0, 0);
     }
-  }, [pathname, hash, key]);
+  }, [pathname, hash, key, productName]);
   return (
     <>
       <a href="#main" className="skip-link">

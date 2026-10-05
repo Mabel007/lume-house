@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+import { canUseLegacyBag, requiresOptions } from "./variants";
 import { useState } from "react";
 import { useProducts } from "./ProductContext";
 import { ProductStatus } from "./ProductStatus";
@@ -166,15 +168,15 @@ export function ShopPage() {
                     </div>
                     <p className="product-category">{product.category}</p>
                     <div className="flex items-start justify-between gap-3">
-                      <h3>{product.name}</h3>
+                      <h3><Link to={`/products/${encodeURIComponent(product.id)}`}>{product.name}</Link></h3>
                       <span className="price">
                         {formatMoney(product.price)}
                       </span>
                     </div>
                     <p className="product-description">{product.description}</p>
-                    <button
+                    {requiresOptions(product.variants) ? <Link className="add-button" to={`/products/${encodeURIComponent(product.id)}`}>Choose options <span aria-hidden="true">→</span></Link> : <button
                       className="add-button"
-                      disabled={quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out"}
+                      disabled={!canUseLegacyBag(product) || quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out"}
                       onClick={() => {
                         dispatch({ type: "add", productId: product.id });
                         setNotice(
@@ -189,7 +191,7 @@ export function ShopPage() {
                           ? `Add another · ${quantity} in Bag`
                           : "Add to Bag"}
                       <span aria-hidden="true">+</span>
-                    </button>
+                    </button>}
                   </article>
                 );
               })}

@@ -1,4 +1,6 @@
+import type { ProductVariant } from "./variants.ts";
 export type Product = {
+  variants?: ProductVariant[];
   id: string;
   name: string;
   category: string;

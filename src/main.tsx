@@ -1,3 +1,4 @@
+import { ProductDetailsPage } from "./features/products/ProductDetailsPage";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
@@ -22,6 +23,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Routes>
             <Route element={<Layout />}>
               <Route path="/" element={<ShopPage />} />
+              <Route path="/products/:productId" element={<ProductDetailsPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/help" element={<HelpPage />} />
               <Route path="/help/delivery-pickup" element={<DeliveryPickupPage />} />

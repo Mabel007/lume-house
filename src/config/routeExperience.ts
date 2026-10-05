@@ -12,9 +12,10 @@ const routeTitles: Readonly<Record<string, string>> = {
   "/terms": "Terms & Conditions",
 };
 
-export function routeTitle(pathname: string): string {
+export function routeTitle(pathname: string, productName?: string): string {
   const path = pathname.replace(/\/+$/, "") || "/";
   if (Object.hasOwn(routeTitles, path)) return routeTitles[path];
+  if (/^\/products\/[^/]+$/.test(path)) return productName || "Product details";
   if (path.startsWith("/account/")) return "Your account";
   if (path.startsWith("/orders/")) return "Your order";
   return "Page not found";

@@ -8,7 +8,7 @@ import { createServer } from "vite";
 let server;
 let ProductContext, CartContext, ShopPage, CartPage, CheckoutPage;
 let contentPages, routeTitle, aboutFragmentTarget;
-let Layout, SiteFooter, AccountExperience, accountInitials;
+let Layout, SiteFooter, AccountExperience, accountInitials, ProductDetails, ProductDetailsPage;
 before(async () => {
   server = await createServer({
     server: { middlewareMode: true, hmr: false },
@@ -20,6 +20,7 @@ before(async () => {
   ({ CartContext } = await server.ssrLoadModule(
     "/src/features/cart/CartContext.ts",
   ));
+  ({ ProductDetails, ProductDetailsPage } = await server.ssrLoadModule("/src/features/products/ProductDetailsPage.tsx"));
   ({ ShopPage } = await server.ssrLoadModule(
     "/src/features/products/ShopPage.tsx",
   ));
@@ -244,10 +245,14 @@ test("expanded catalog has accessible interactions, editorial sections and respo
 });
 
 function renderLayout(path, cartState = { items, status: "ready", error: null, retry() {} }) {
-  return renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [path] },
-    React.createElement(CartContext.Provider, { value: cartState },
-      React.createElement(Routes, null, React.createElement(Route, { element: React.createElement(Layout) },
-        React.createElement(Route, { path: "*", element: React.createElement("h1", null, "Page") }))))));
+  return renderToStaticMarkup(React.createElement(MemoryRouter,{initialEntries:[path]},
+    React.createElement(ProductContext.Provider,{value:{state:{status:"loading"},refresh(){}}},
+      React.createElement(CartContext.Provider,{value:cartState},
+        React.createElement(Routes,null,React.createElement(Route,{element:React.createElement(Layout)},
+          React.createElement(Route,{path:"*",element:React.createElement("h1",null,"Page")})))))));
+}
+function renderDetails(product) {
+  return renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(CartContext.Provider,{value:{items:[],dispatch(){},status:"ready"}},React.createElement(ProductDetails,{product}))));
 }
 
 test("primary navigation has five destinations, account/help descendant active states and Bag count", () => {
@@ -337,4 +342,27 @@ test("Account loading/error states keep saving disabled and empty identity has a
   assert.match(html, /class="account-name">Your account/);
   assert.equal((html.match(/disabled=""/g) ?? []).length, 6);
   assert.match(html, /role="status">Your profile could not be loaded/);
+});
+
+test("Product Details default-only renders a normal purchase without meaningless selectors", () => {
+  const product={id:'fixture',name:'Test piece',category:'Test',description:'Existing description',price:1800,image:'/images/mug.svg',color:'#e9e3d8',variants:[{id:'default:fixture',productId:'fixture',options:{},isDefault:true,price:1800,currency:'NLE',inventoryPolicy:'untracked'}]};
+  const html=renderDetails(product);
+  assert.match(html,/<h1>Test piece<\/h1>/);assert.match(html,/Add Test piece to Bag/);assert.match(html,/Available to add to your Bag/);assert.doesNotMatch(html,/Choose your options|Color: Default|Size: Default|reviews|ratings/i);
+  const unavailable=renderDetails({...product,variants:[]});
+  assert.match(unavailable,/disabled=""/);assert.match(unavailable,/currently unavailable/);
+});
+
+test("Product Details meaningful options have explicit radios and cannot arbitrarily use legacy checkout", () => {
+  const product={id:'fixture',name:'Test piece',category:'Test',description:'Existing description',price:1800,image:'/images/mug.svg',color:'#e9e3d8',variants:[{id:'blue',productId:'fixture',options:{Color:'Blue'},isDefault:false,price:2000,currency:'NLE',inventoryPolicy:'untracked'}]};
+  const html=renderDetails(product);
+  assert.match(html,/<legend>Choose your options/);assert.match(html,/type="radio"/);assert.match(html,/Color: Blue/);assert.match(html,/NLe 20/);assert.match(html,/disabled=""/);assert.doesNotMatch(html,/checked=""/);
+  assert.equal(routeTitle('/products/fixture'),'Product details');assert.equal(routeTitle('/products/fixture','Test piece'),'Test piece');
+});
+
+test("Product Details route handles loading, error and inactive/missing products accessibly", () => {
+  for(const state of [{status:'loading'},{status:'error'},{status:'ready',products:[]}]){
+    const html=renderToStaticMarkup(React.createElement(MemoryRouter,{initialEntries:['/products/missing']},React.createElement(ProductContext.Provider,{value:{state,refresh:()=>{}}},React.createElement(Routes,null,React.createElement(Route,{path:'/products/:productId',element:React.createElement(ProductDetailsPage)})))));
+    assert.equal((html.match(/<h1[ >]/g)??[]).length,1);
+    if(state.status==='ready')assert.match(html,/This piece is unavailable/);else assert.match(html,/role="status"|role="alert"/);
+  }
 });

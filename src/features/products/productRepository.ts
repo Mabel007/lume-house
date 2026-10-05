@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { parseVariants } from "./variants.ts";
 import { parseProducts } from "./products.ts";
 
 export async function loadProducts(
@@ -17,5 +18,15 @@ export async function loadProducts(
     .abortSignal(signal);
   // Do not show raw provider errors or connection values to customers.
   if (error) throw new Error("Products could not be loaded.");
-  return parseProducts(data, currency);
+  const products = parseProducts(data, currency);
+  const variants = await client.from("product_variants").select("id,product_id,options,is_default,price_cents,currency,active,inventory_policy").eq("active",true).order("id").abortSignal(signal);
+  if(variants.error) {
+    // Expand-first deployments may precede the schema. No other error silently
+    // degrades variant data or becomes a fallback/demo catalogue.
+    if(variants.error.code === "PGRST205" || variants.error.code === "42P01") return products;
+    throw new Error("Products could not be loaded.");
+  }
+  const rows=parseVariants(variants.data);
+  if(rows.some(variant=>!products.some(product=>product.id===variant.productId)))throw new Error("Products could not be loaded.");
+  return products.map(product=>({...product,variants:rows.filter(variant=>variant.productId===product.id)}));
 }
