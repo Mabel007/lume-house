@@ -1,15 +1,18 @@
 import { Link } from "react-router-dom";
 import { requiresOptions, variantAvailable } from "./variants";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useProducts } from "./ProductContext";
 import { ProductStatus } from "./ProductStatus";
 import { formatMoney, shop } from "../../config/shop";
 import { useCart } from "../cart/CartContext";
 import { defaultVariant, MAX_QUANTITY } from "../cart/cart";
 import { ProductImage } from "./ProductImage";
+import {searchProducts} from './search';
 
 export function ShopPage() {
   const [category, setCategory] = useState("All pieces");
+  const [query,setQuery]=useState('');
+  const searchInput=useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState("");
   const { items, dispatch, status: cartStatus } = useCart();
   const { state, refresh } = useProducts();
@@ -21,10 +24,7 @@ export function ShopPage() {
   const activeCategory = categories.includes(category)
     ? category
     : "All pieces";
-  const visible = products.filter(
-    (product) =>
-      activeCategory === "All pieces" || product.category === activeCategory,
-  );
+  const visible=searchProducts(products,query,activeCategory);
   return (
     <>
       <section className="hero wrap">
@@ -123,6 +123,11 @@ export function ShopPage() {
         <ProductStatus />
         {state.status === "ready" && products.length > 0 && (
           <>
+            <div className="product-search">
+              <label htmlFor="product-search">Search the collection</label>
+              <input ref={searchInput} id="product-search" name="product-search" type="search" maxLength={200} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Name, collection or description" autoComplete="off" />
+              {query.length>0&&<button className="remove-button" onClick={()=>{setQuery('');searchInput.current?.focus();}}>Clear search</button>}
+            </div>
             <div className="collection-toolbar">
               <div className="filters" aria-label="Filter products">
                 {categories.map((value) => (
@@ -145,6 +150,8 @@ export function ShopPage() {
             <p role="status" className="sr-only">
               {notice}
             </p>
+            <p className="collection-results" role="status">{visible.length} {visible.length===1?'piece':'pieces'} found{activeCategory!=='All pieces'?` in ${activeCategory}`:''}.</p>
+            {visible.length===0&&<div className="catalogue-no-results"><h3>No pieces found.</h3><p>Try a different search or collection.</p><button className="button" onClick={()=>{setQuery('');setCategory('All pieces');searchInput.current?.focus();}}>Reset search &amp; filters</button></div>}
             <div className="product-grid">
               {visible.map((product, index) => {
                 const variant=defaultVariant(product);

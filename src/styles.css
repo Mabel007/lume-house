@@ -1267,3 +1267,9 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 @media(max-width:700px) { .product-details-grid { grid-template-columns: minmax(0,1fr); } }
 .product-quantity { max-width: 140px; margin-top: 20px; }
 .order-item-options { display: block; font: normal 13px/1.6 Arial,sans-serif; margin-top: 6px; overflow-wrap: anywhere; }
+.product-search { display:flex; flex-wrap:wrap; align-items:center; gap:0.75rem; max-width:40rem; margin:1.5rem 0; }
+.product-search label { flex-basis:100%; font-weight:600; }
+.product-search input { min-width:0; flex:1 1 15rem; min-height:48px; border:1px solid var(--surface-border); border-radius:0; background:#fffdf8; padding:0.7rem 0.9rem; color:inherit; }
+.collection-results { margin:1rem 0 1.5rem; color:#68685e; }
+.catalogue-no-results { padding:2rem 0 3rem; }
+.catalogue-no-results p { margin:0.75rem 0 1.5rem; }

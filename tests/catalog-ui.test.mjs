@@ -297,6 +297,14 @@ test("Bag copy includes positive shop actions, checkout references and accurate 
   assert.match(checkout, /Back to Bag/); assert.match(checkout, /Edit your Bag/);
   for (const html of [shop, bag, checkout]) assert.doesNotMatch(html.replace(/<[^>]+>/g, ""), /\bcart\b/i);
 });
+test('storefront search has a labelled native search control and polite results alongside category filtering',()=>{
+ const html=render(ShopPage,{status:'ready',products:[fixture]},[]);
+ assert.match(html,/<label for="product-search">Search the collection/);
+ assert.match(html,/id="product-search"[^>]*type="search"/);
+ assert.match(html,/class="collection-results" role="status">1 piece found/);
+ assert.match(html,/aria-label="Filter products"/);
+ assert.doesNotMatch(html,/No pieces found|Reset search/);
+});
 
 test("global loading saving and failure feedback uses Bag without claiming persistence success", async () => {
   assert.match(renderLayout("/", { items: [], status: "loading" }), /Loading your Bag/);

@@ -6,6 +6,7 @@ import { catalog } from "./catalog.ts";
 import { parseProducts } from "./products.ts";
 import { loadProducts } from "./productRepository.ts";
 import { getCartLines } from "../cart/cart.ts";
+import {searchProducts} from './search.ts';
 
 // Synthetic network fixtures only; not a fallback catalog or project configuration.
 const row = {
@@ -176,4 +177,15 @@ test('tracked catalogue availability is an authoritative boolean, never invented
  assert.equal('on_hand' in product.variants![0],false);
  const corrupt=clientWith(async input=>new Response(JSON.stringify(new URL(String(input)).pathname.includes('catalogue_variant_availability')?[{variant_id:variant.id,available:3}]:[row]),{headers:{'Content-Type':'application/json'}}),[variant]);
  await assert.rejects(loadProducts(corrupt,'NLE',new AbortController().signal),/availability/);
+});
+test('catalogue search combines all words with the existing category filter without mutating products',()=>{
+ const products=[{name:'Café Mug',category:'Tableware',description:'Warm everyday coffee'},{name:'Soft Throw',category:'Textiles',description:'Warm woven texture'}];
+ assert.deepEqual(searchProducts(products,'  ','All pieces'),products);
+ assert.deepEqual(searchProducts(products,'CAFE coffee','All pieces'),[products[0]]);
+ assert.deepEqual(searchProducts(products,'warm','Textiles'),[products[1]]);
+ assert.deepEqual(searchProducts(products,'warm','Tableware'),[products[0]]);
+ assert.deepEqual(searchProducts(products,'mug','Textiles'),[]);
+ assert.deepEqual(searchProducts(products,'unknown','All pieces'),[]);
+ assert.deepEqual(searchProducts(products,'woven soft','All pieces'),[products[1]]);
+ assert.equal(products.length,2);
 });
