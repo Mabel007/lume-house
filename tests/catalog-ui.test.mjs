@@ -8,7 +8,7 @@ import { createServer } from "vite";
 let server;
 let ProductContext, CartContext, ShopPage, CartPage, CheckoutPage;
 let contentPages, routeTitle, aboutFragmentTarget;
-let Layout, SiteFooter;
+let Layout, SiteFooter, AccountExperience, accountInitials;
 before(async () => {
   server = await createServer({
     server: { middlewareMode: true, hmr: false },
@@ -41,6 +41,8 @@ before(async () => {
   ({ routeTitle, aboutFragmentTarget } = await server.ssrLoadModule("/src/config/routeExperience.ts"));
   ({ Layout } = await server.ssrLoadModule("/src/components/Layout.tsx"));
   ({ SiteFooter } = await server.ssrLoadModule("/src/components/SiteFooter.tsx"));
+  ({ AccountExperience } = await server.ssrLoadModule("/src/features/account/AccountExperience.tsx"));
+  ({ accountInitials } = await server.ssrLoadModule("/src/features/account/accountInitials.ts"));
 });
 
 function renderContent(path) {
@@ -298,4 +300,41 @@ test("global loading saving and failure feedback uses Bag without claiming persi
   const { readFileSync } = await import("node:fs");
   assert.match(readFileSync("src/features/products/ShopPage.tsx", "utf8"), /Bag update requested/);
   assert.doesNotMatch(readFileSync("src/features/cart/CartProvider.tsx", "utf8"), /Your (?:saved )?cart/i);
+});
+
+test("account initials handle whitespace, single names, missing names and Unicode graphemes", () => {
+  for (const [name, expected] of [["Naj Builds", "NB"], [" Naj  ", "N"], ["", "LH"], [null,"LH"], [undefined,"LH"], ["  ---  ", "LH"], ["Élodie 東京", "É東"], ["e\u0301lodie", "É"]]) assert.equal(accountInitials(name), expected);
+});
+
+function renderAccount(overrides = {}) {
+  const profile = { full_name: "Customer Name", phone: "", default_street_address: "", default_area: "", default_city: "" };
+  return renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(AccountExperience, { profile, savedName: "Saved Name", email: "customer@example.test", ready: true, busy: false, status: "", error: null, onChange: () => {}, onSave: () => {}, onSignOut: () => {}, ...overrides })));
+}
+
+test("Account separates saved identity, grouped defaults, orders and Google security", () => {
+  const html = renderAccount();
+  assert.match(html, /aria-hidden="true">SN/);
+  assert.match(html, /class="account-name">Saved Name/);
+  assert.match(html, /<legend>Profile<\/legend>/);
+  assert.match(html, /<legend>Delivery Details<\/legend>/);
+  assert.match(html, /Signed in with Google/);
+  assert.match(html, /does not manage a password for this account/);
+  assert.match(html, /href="\/account\/orders"[^>]*>My Orders/);
+  assert.match(html, />Sign Out<\/button>/);
+  assert.match(html, /Save profile &amp; delivery details/);
+  assert.doesNotMatch(html, /Change Password|Forgot Password|Reset Password|type="password"/);
+  for (const [name, token] of [["full_name","section-profile name"],["phone","section-profile tel"],["default_street_address","section-delivery address-line1"],["default_area","section-delivery address-level3"],["default_city","section-delivery address-level2"]]) {
+    assert.ok(html.includes(`for="${name}"`));
+    const input = html.match(new RegExp(`<input[^>]*id="${name}"[^>]*>`))?.[0] ?? "";
+    assert.ok(input.includes(`name="${name}"`));
+    assert.ok(input.includes(`autoComplete="${token}"`));
+  }
+});
+
+test("Account loading/error states keep saving disabled and empty identity has a safe fallback", () => {
+  const html = renderAccount({ savedName: " ", ready: false, status: "Your profile could not be loaded. Reload to try again." });
+  assert.match(html, /aria-hidden="true">LH/);
+  assert.match(html, /class="account-name">Your account/);
+  assert.equal((html.match(/disabled=""/g) ?? []).length, 6);
+  assert.match(html, /role="status">Your profile could not be loaded/);
 });

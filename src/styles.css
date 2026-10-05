@@ -1244,3 +1244,9 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
   .about-values { margin-block: 48px; }
   .content-heading > p:last-child, .about-intro { font-size: 16px; }
 }
+.account-summary { display: flex; align-items: center; gap: 20px; min-width: 0; }
+.account-summary > div { min-width: 0; }
+.account-avatar { display: flex; align-items: center; justify-content: center; flex: 0 0 64px; height: 64px; border-radius: 50%; background: #eaeade; font: 24px Georgia, serif; }
+.account-name { font: 24px Georgia, serif; overflow-wrap: anywhere; }
+.account-page .account-fieldset { min-width: 0; border: 0; padding: 0; margin: 28px 0; }
+.account-fieldset legend { font: 28px/1.25 Georgia, serif; margin-bottom: 18px; }
