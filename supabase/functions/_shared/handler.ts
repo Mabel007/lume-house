@@ -41,7 +41,8 @@ export function commerceHandler(mode: 'place' | 'email') {
         // RPC validates again. No ownership/prices/fees/status taken from body.
         const clean = { full_name:checkout.full_name,email:checkout.email,contact_phone:normalize(checkout.contact_phone),payment_phone:normalize(checkout.payment_phone),
           provider:checkout.provider,fulfilment:checkout.fulfilment,zone_id:checkout.zone_id,street:checkout.street,area:checkout.area,city:checkout.city,instructions:checkout.instructions };
-        const result = await client.rpc('place_order',{p_request_id:body.request_id,p_checkout:clean,p_expected_cart:body.expected_cart});
+        if(body.cart_version!==undefined && body.cart_version!==2)return reply({error:'INVALID_REQUEST'},400);
+        const result = await client.rpc(body.cart_version===2?'place_variant_order':'place_order',{p_request_id:body.request_id,p_checkout:clean,p_expected_cart:body.expected_cart});
         if (result.error) {
           const code = result.error.message;
           if (code === 'AUTH_REQUIRED') return reply({error:code},401);

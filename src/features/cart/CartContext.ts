@@ -8,8 +8,8 @@ export const CartContext = createContext<{
   status?: string;
   error?: string | null;
   retry?: () => void;
-  beginCheckout?: () => boolean;
-  finishCheckout?: (placed: boolean) => void;
+  beginCheckout?: () => number | null;
+  finishCheckout?: (placed: boolean, ticket: number | null | undefined) => void;
 } | null>(null);
 export function useCart() {
   const cart = useContext(CartContext);

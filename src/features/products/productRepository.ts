@@ -28,5 +28,8 @@ export async function loadProducts(
   }
   const rows=parseVariants(variants.data);
   if(rows.some(variant=>!products.some(product=>product.id===variant.productId)))throw new Error("Products could not be loaded.");
-  return products.map(product=>({...product,variants:rows.filter(variant=>variant.productId===product.id)}));
+  return products.map(product=>{
+    const variants=rows.filter(variant=>variant.productId===product.id);
+    return {...product,price:variants.find(variant=>variant.isDefault)?.price??variants[0]?.price??product.price,variants};
+  });
 }

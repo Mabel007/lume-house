@@ -1,11 +1,12 @@
 import { Link } from "react-router-dom";
 import { useCart } from "./CartContext";
-import { getCartLines, MAX_QUANTITY } from "./cart";
+import { getCartLines, cartLineKey, MAX_QUANTITY } from "./cart";
 import { useProducts } from "../products/ProductContext";
 import { ProductStatus } from "../products/ProductStatus";
 import { UnavailableItems } from "./UnavailableItems";
 import { formatMoney } from "../../config/shop";
 import { EmptyCart } from "../../components/EmptyCart";
+import { variantLabel } from "../products/variants";
 import { OrderSummary } from "../checkout/OrderSummary";
 import { useAuth } from "../auth/AuthContext";
 
@@ -26,7 +27,7 @@ export function CartPage() {
   const products = state.products;
   const lines = getCartLines(items, products);
   const unavailable = items.filter(
-    (item) => !products.some((product) => product.id === item.productId),
+    (item) => !lines.some(line => line.lineKey === cartLineKey(item)),
   );
   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
   return (
@@ -37,13 +38,15 @@ export function CartPage() {
       <p className="eyebrow">YOUR EVERYDAY FINDS</p>
       <h1>Your Bag.</h1>
       <p className="muted mb-8">
-        {auth.session ? "Your Bag is saved to your account." : "Sign in to save your Bag across visits. Guest items are kept only in this browser tab."}
+        {auth.session ? items.some(item=>!item.variantId) ? "Available selections are saved to your account. Unavailable guest items are retained in this browser until removed." : "Your Bag is saved to your account." : "Sign in to save your Bag across visits. Guest items are kept only in this browser tab."}
       </p>
       <div className="checkout-grid">
         <div>
           {unavailable.length > 0 && <UnavailableItems items={unavailable} />}
-          {lines.map(({ product, quantity, lineTotal }) => (
-            <article className="cart-row" key={product.id}>
+          {lines.map(({ product, variant, item, quantity, lineTotal, lineKey }) => {
+            const label=product.name+(variant&&variantLabel(variant)?`, ${variantLabel(variant)}`:'');
+            return (
+            <article className="cart-row" key={lineKey}>
               <img
                 src={product.image}
                 alt={product.image.endsWith(".svg") ? `Illustration of ${product.name}` : product.name}
@@ -51,17 +54,19 @@ export function CartPage() {
               />
               <div className="cart-row-detail">
                 <p className="product-category">{product.category}</p>
-                <h2>{product.name}</h2>
+                <h2><Link to={`/products/${encodeURIComponent(product.id)}`}>{product.name}</Link></h2>
+                {variant && variantLabel(variant) && <p>{variantLabel(variant)}</p>}
                 <p>{formatMoney(product.price)} each</p>
                 <div className="quantity-actions">
                   <div className="quantity-control">
                     <button
-                      aria-label={`Decrease ${product.name} quantity`}
+                      aria-label={`Decrease ${label} quantity`}
                       disabled={busy || quantity === 1}
                       onClick={() =>
                         dispatch({
                           type: "quantity",
                           productId: product.id,
+                          variantId: item.variantId,
                           quantity: quantity - 1,
                         })
                       }
@@ -70,12 +75,12 @@ export function CartPage() {
                     </button>
                     <label
                       className="sr-only"
-                      htmlFor={`quantity-${product.id}`}
+                      htmlFor={`quantity-${lineKey}`}
                     >
-                      {product.name} quantity
+                      {label} quantity
                     </label>
                     <input
-                      id={`quantity-${product.id}`}
+                      id={`quantity-${lineKey}`}
                       type="number"
                       disabled={busy}
                       min={1}
@@ -86,17 +91,19 @@ export function CartPage() {
                         dispatch({
                           type: "quantity",
                           productId: product.id,
+                          variantId: item.variantId,
                           quantity: event.target.valueAsNumber,
                         })
                       }
                     />
                     <button
-                      aria-label={`Increase ${product.name} quantity`}
+                      aria-label={`Increase ${label} quantity`}
                       disabled={busy || quantity === MAX_QUANTITY}
                       onClick={() =>
                         dispatch({
                           type: "quantity",
                           productId: product.id,
+                          variantId: item.variantId,
                           quantity: quantity + 1,
                         })
                       }
@@ -107,9 +114,9 @@ export function CartPage() {
                   <button
                     className="remove-button"
                     disabled={busy}
-                    aria-label={`Remove ${product.name}`}
+                    aria-label={`Remove ${label}`}
                     onClick={() =>
-                      dispatch({ type: "remove", productId: product.id })
+                      dispatch({ type: "remove", productId: product.id, variantId: item.variantId })
                     }
                   >
                     Remove
@@ -118,7 +125,7 @@ export function CartPage() {
               </div>
               <strong className="line-price">{formatMoney(lineTotal)}</strong>
             </article>
-          ))}
+          );})}
         </div>
         <aside className="summary">
           <h2>Order summary</h2>

@@ -1,3 +1,4 @@
+import { variantLabel } from "../products/variants";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../cart/CartContext";
@@ -31,6 +32,8 @@ export function CheckoutPage() {
   const navigate = useNavigate();
   const auth = useAuth();
   const dirty = useRef(false);
+  const mounted=useRef(true);
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [profileNote, setProfileNote] = useState("");
@@ -62,7 +65,7 @@ export function CheckoutPage() {
         setRecovering(true);
         try {
           const id=await findCheckout(getSupabaseClient(),saved);
-          if(active&&id){clearRequest(userId);finishCheckout?.(true);navigate(`/orders/${id}/success`,{replace:true});}
+          if(active&&id){clearRequest(userId);retry?.();navigate(`/orders/${id}/success`,{replace:true});}
         }catch{if(active)setOrderError('A previous checkout could not be checked. Retry with the same request, or check My Orders before starting another.');}
         finally{if(active)setRecovering(false);}
       })();
@@ -94,17 +97,18 @@ export function CheckoutPage() {
     setTouched(true);
     if(validatePaymentPhone(paymentPhone)||validatePaymentPhone(contactPhone)){setOrderError('Enter valid Sierra Leone contact and payment numbers.');return;}
     if(getDeliveryFee(fulfilment,city,zoneId)===null){setOrderError('Choose a supported Freetown delivery zone.');return;}
-    if(beginCheckout && !beginCheckout()){setOrderError('Wait for your Bag changes to finish saving.');return;}
+    const checkoutTicket=beginCheckout?.();
+    if(beginCheckout && checkoutTicket==null){setOrderError('Wait for your Bag changes to finish saving.');return;}
     submittingRef.current=true;setSubmitting(true);setOrderError('');
     requestId.current ||= pendingRequest(userId)||crypto.randomUUID();
     rememberRequest(userId,requestId.current);
     try {
-      const expected=getCartLines(items,state.products).map(({product,quantity})=>({product_id:product.id,quantity,unit_price:product.price})).sort((a,b)=>a.product_id.localeCompare(b.product_id));
-      const result=await placeOrder(getSupabaseClient(),requestId.current,{full_name:fullName,email,contact_phone:normalizePhone(contactPhone),payment_phone:normalizePhone(paymentPhone),provider,fulfilment,zone_id:zoneId,street:address,area,city,instructions},expected);
-      clearRequest(userId);finishCheckout?.(true);
-      navigate(`/orders/${result.id}/success`,{replace:true});
+      const expected=getCartLines(items,state.products).map(({product,variant,quantity})=>({product_id:product.id,variant_id:variant!.id,quantity,unit_price:product.price})).sort((a,b)=>a.variant_id.localeCompare(b.variant_id));
+      const result=await placeOrder(getSupabaseClient(),requestId.current,{full_name:fullName,email,contact_phone:normalizePhone(contactPhone),payment_phone:normalizePhone(paymentPhone),provider,fulfilment,zone_id:zoneId,street:address,area,city,instructions},expected,userId);
+      clearRequest(userId);finishCheckout?.(true,checkoutTicket);
+      if(mounted.current)navigate(`/orders/${result.id}/success`,{replace:true});
     }catch(error){
-      finishCheckout?.(false);
+      finishCheckout?.(false,checkoutTicket);
       const code=error instanceof CheckoutError?error.code:'ORDER_UNAVAILABLE';
       if(['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART'].includes(code)){setOrderError('Your Bag or current prices changed. Review the refreshed Bag before placing your order.');refresh();retry?.();}
       else if(code==='AUTH_REQUIRED')setOrderError('Your session expired. Please sign in again before placing your order.');
@@ -354,8 +358,8 @@ export function CheckoutPage() {
         <aside className="summary">
           <h2>Your selected pieces</h2>
           <ul className="summary-items">
-            {lines.map(({ product, quantity, lineTotal }) => (
-              <li key={product.id}>
+            {lines.map(({ product, variant, quantity, lineTotal, lineKey }) => (
+              <li key={lineKey}>
                 <img
                   src={product.image}
                   alt=""
@@ -363,6 +367,7 @@ export function CheckoutPage() {
                 />
                 <div>
                   <h3>{product.name}</h3>
+                  {variant && variantLabel(variant) && <p>{variantLabel(variant)}</p>}
                   <span>Qty {quantity}</span>
                 </div>
                 <span>{formatMoney(lineTotal)}</span>

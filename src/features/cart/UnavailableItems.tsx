@@ -1,5 +1,5 @@
 import { useCart } from "./CartContext";
-import type { CartItem } from "./cart";
+import { cartLineKey, type CartItem } from "./cart";
 
 export function UnavailableItems({ items }: { items: CartItem[] }) {
   const { dispatch, status } = useCart();
@@ -13,7 +13,7 @@ export function UnavailableItems({ items }: { items: CartItem[] }) {
       <ul>
         {items.map((item, index) => (
           <li
-            key={item.productId}
+            key={cartLineKey(item)}
             className="flex items-center justify-between gap-4"
           >
             <span>
@@ -24,7 +24,7 @@ export function UnavailableItems({ items }: { items: CartItem[] }) {
               disabled={status === "saving" || status === "loading" || status === "error" || status === "checking-out"}
               aria-label={`Remove unavailable item ${index + 1}`}
               onClick={() =>
-                dispatch({ type: "remove", productId: item.productId })
+                dispatch({ type: "remove", productId: item.productId, variantId: item.variantId })
               }
             >
               Remove

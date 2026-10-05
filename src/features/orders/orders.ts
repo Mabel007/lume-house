@@ -2,7 +2,7 @@ export type OrderListItem = {
   id: string; order_reference: string; created_at: string; total_cents: number;
   currency: 'NLE'; fulfilment_method: 'delivery' | 'pickup'; status: string; payment_status: string;
 };
-export type OrderItem = { product_name: string; quantity: number; unit_price_cents: number };
+export type OrderItem = { product_name: string; quantity: number; unit_price_cents: number; variant_id?: string; variant_sku?: string; variant_options?: Readonly<Record<string,string>>; variant_currency?: "NLE" };
 export type Order = OrderListItem & {
   full_name: string; customer_email: string; customer_phone: string;
   delivery_street_address: string | null; delivery_area: string | null; delivery_city: string | null;
@@ -26,13 +26,21 @@ export function parseOrderList(value: unknown): OrderListItem {
   if (!/^[0-9a-f-]{36}$/i.test(id) || !/^LH-[A-F0-9]{16}$/.test(reference) || Number.isNaN(Date.parse(date)) || r.currency !== 'NLE' || !['delivery','pickup'].includes(String(r.fulfilment_method)) || !orderStates.includes(String(r.status)) || !paymentStates.includes(String(r.payment_status))) throw new Error('Invalid order data.');
   return { id, order_reference:reference, created_at:date, total_cents:money(r.total_cents), currency:'NLE', fulfilment_method:r.fulfilment_method as 'delivery'|'pickup', status:String(r.status), payment_status:String(r.payment_status) };
 }
+function variantSnapshot(item: Record<string,unknown>): Partial<OrderItem> {
+  const values=[item.variant_id,item.variant_sku,item.variant_options,item.variant_currency];
+  if(values.every(value=>value===null||value===undefined))return {};
+  if(typeof item.variant_id!=='string'||!item.variant_id||typeof item.variant_sku!=='string'||!item.variant_sku||item.variant_currency!=='NLE'||!item.variant_options||typeof item.variant_options!=='object'||Array.isArray(item.variant_options))throw new Error('Invalid variant snapshot.');
+  const options=item.variant_options as Record<string,unknown>;
+  if(Object.keys(options).length>8||Object.entries(options).some(([key,value])=>!key.trim()||typeof value!=='string'||!value.trim()))throw new Error('Invalid variant snapshot.');
+  return {variant_id:item.variant_id,variant_sku:item.variant_sku,variant_options:options as Record<string,string>,variant_currency:'NLE'};
+}
 export function parseOrder(value: unknown): Order {
   const r = row(value); const base = parseOrderList(r);
   if (!Array.isArray(r.order_items) || !r.order_items.length || !['orange','afri'].includes(String(r.payment_provider))) throw new Error('Invalid order data.');
   const order_items = r.order_items.map(value => {
     const item = row(value);
     if (!Number.isInteger(item.quantity) || (item.quantity as number)<1 || (item.quantity as number)>99) throw new Error('Invalid order data.');
-    return { product_name:text(item.product_name), quantity:item.quantity as number, unit_price_cents:money(item.unit_price_cents) };
+    return { product_name:text(item.product_name), quantity:item.quantity as number, unit_price_cents:money(item.unit_price_cents), ...variantSnapshot(item) };
   });
   const subtotal = money(r.subtotal_cents); const fee = money(r.delivery_fee_cents);
   if (subtotal + fee !== base.total_cents || order_items.reduce((sum,item)=>sum+item.quantity*item.unit_price_cents,0)!==subtotal) throw new Error('Invalid order totals.');

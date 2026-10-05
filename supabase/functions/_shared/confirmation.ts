@@ -14,7 +14,7 @@ export async function deliverConfirmation(admin: SupabaseClient, orderId: string
   let providerId: string | null = null;
   let errorCode: string | null = null;
   try {
-    const loaded = await admin.from('orders').select('id,order_reference,full_name,customer_email,fulfilment_method,delivery_street_address,delivery_area,delivery_city,delivery_zone_label,delivery_instructions,pickup_location,subtotal_cents,delivery_fee_cents,total_cents,payment_provider,order_items(product_name,quantity,unit_price_cents)').eq('id',orderId).single();
+    const loaded = await admin.from('orders').select('id,order_reference,full_name,customer_email,fulfilment_method,delivery_street_address,delivery_area,delivery_city,delivery_zone_label,delivery_instructions,pickup_location,subtotal_cents,delivery_fee_cents,total_cents,payment_provider,order_items(product_name,quantity,unit_price_cents,variant_options)').eq('id',orderId).single();
     if (loaded.error) throw new Error('order_snapshot_unavailable');
     loaded.data.order_items.sort((a,b) => a.product_name.localeCompare(b.product_name));
     providerId = await sendResend(apiKey, claim.data.sender, loaded.data as EmailOrder);

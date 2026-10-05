@@ -16,7 +16,7 @@ export function parseVariants(value: unknown): ProductVariant[] {
     return {id:r.id,productId:r.product_id,options:options as Record<string,string>,isDefault:r.is_default,price:r.price_cents as number,currency:'NLE',inventoryPolicy:r.inventory_policy as ProductVariant['inventoryPolicy']};
   });
 }
-export function variantLabel(variant: ProductVariant): string {
+export function variantLabel(variant: Pick<ProductVariant,"options">): string {
   return Object.entries(variant.options).map(([key,value])=>`${key}: ${value}`).join(' · ');
 }
 export function requiresOptions(variants: readonly ProductVariant[] | undefined): boolean {

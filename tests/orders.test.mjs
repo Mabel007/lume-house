@@ -22,6 +22,20 @@ test('historical order boundary preserves prices and rejects inconsistent money'
  assert.throws(()=>parseOrder({...orderFixture,currency:'USD'}));
  assert.throws(()=>parseOrder({...orderFixture,payment_status:'pretend_paid'}));
 });
+test('variant order snapshots render selected options while genuine historical rows remain unchanged',()=>{
+ const snapshot={variant_id:'blue',variant_sku:'TEST-BLUE',variant_options:{Color:'Blue <test>'},variant_currency:'NLE'};
+ const fixture={...orderFixture,order_items:[{...orderFixture.order_items[0],...snapshot}]};
+ const order=parseOrder(fixture);
+ assert.deepEqual(order.order_items[0].variant_options,snapshot.variant_options);
+ assert.match(render(components.OrderSnapshot,{order}),/Color: Blue &lt;test&gt;/);
+ const email=renderConfirmation(order);
+ assert.match(email.html,/Color: Blue &lt;test&gt;/);assert.match(email.text,/Color: Blue <test>/);
+ assert.doesNotMatch(email.html,/TEST-BLUE|payment successful/i);
+ assert.equal(parseOrder(orderFixture).order_items[0].variant_id,undefined);
+ assert.doesNotMatch(renderConfirmation(orderFixture).html,/Color:|Default option/);
+ assert.throws(()=>parseOrder({...fixture,order_items:[{...fixture.order_items[0],variant_currency:null}]}),/variant snapshot/);
+ assert.throws(()=>parseOrder({...fixture,order_items:[{...fixture.order_items[0],variant_options:{Color:2}}]}),/variant snapshot/);
+});
 test('My Orders list and detail render durable reference, historical prices and masked payer',()=>{
  const list=render(components.OrderHistory,{orders:[orderFixture]});
  assert.match(list,/LH-1234567890ABCDEF/);assert.match(list,/NLe 550/);assert.match(list,/Awaiting confirmation/);assert.match(list,/account\/orders\//);
@@ -55,7 +69,11 @@ test('browser order placement calls Edge with JWT and reuses request ID, never t
  assert.equal(calls[0].name,'place-order');assert.equal(calls[0].options.body.request_id,calls[1].options.body.request_id);
  assert.equal(calls[0].options.headers.Authorization,'Bearer synthetic-test-jwt');
  assert.equal('user_id' in calls[0].options.body,false);
+ await placeOrder(client,orderFixture.id,{},[{product_id:'amber-candle',variant_id:'default:amber-candle',quantity:1,unit_price:25000}]);
+ assert.equal(calls[2].options.body.cart_version,2);
+ assert.equal(calls[2].options.body.expected_cart[0].variant_id,'default:amber-candle');
  await assert.rejects(placeOrder({auth:{getSession:async()=>({data:{session:null}})}},orderFixture.id,{},[]),/AUTH_REQUIRED/);
+ await assert.rejects(placeOrder({auth:{getSession:async()=>({data:{session:{access_token:'synthetic-test-jwt',user:{id:'other-identity'}}}})}},orderFixture.id,{},[], 'previous-identity'),/AUTH_REQUIRED/);
 });
 test('owner history repository reads through RLS newest-first, with no browser writes',async()=>{
  const calls=[];let detail=false;
@@ -70,7 +88,7 @@ test('private mail configuration never enters browser source or env example',()=
  assert.doesNotMatch(checkout,/from\(['"]orders['"]\)\.insert|RESEND_API_KEY|SERVICE_ROLE/);
  assert.doesNotMatch(readFileSync('.env.example','utf8'),/VITE_.*(?:RESEND|SECRET|SERVICE_ROLE)/);
  const handler=readFileSync('supabase/functions/_shared/handler.ts','utf8');
- assert.match(handler,/auth\.getUser/);assert.match(handler,/client\.rpc\('place_order'/);
+ assert.match(handler,/auth\.getUser/);assert.match(handler,/client\.rpc\(body\.cart_version===2\?'place_variant_order':'place_order'/);
  assert.doesNotMatch(handler,/console\.log|body\.user_id/);
 });
 test('trusted handler authenticates JWT, rejects invalid auth, and strips ownership/totals before RPC',async()=>{
@@ -80,7 +98,7 @@ test('trusted handler authenticates JWT, rejects invalid auth, and strips owners
  globalThis.fetch=async(url,options)=>{
   const path=String(url);calls.push({path,options});
   if(path.includes('/auth/v1/user'))return new Response(JSON.stringify({id:orderFixture.id,email:'fixture@example.invalid'}),{status:200,headers:{'Content-Type':'application/json'}});
-  if(path.includes('/rest/v1/rpc/place_order'))return new Response(JSON.stringify({id:orderFixture.id,reference:orderFixture.order_reference,status:'placed',payment_status:'awaiting_payment'}),{status:200,headers:{'Content-Type':'application/json'}});
+  if(path.includes('/rest/v1/rpc/place_order')||path.includes('/rest/v1/rpc/place_variant_order'))return new Response(JSON.stringify({id:orderFixture.id,reference:orderFixture.order_reference,status:'placed',payment_status:'awaiting_payment'}),{status:200,headers:{'Content-Type':'application/json'}});
   throw new Error('Unexpected external request in isolated test');
  };
  try {
@@ -92,6 +110,13 @@ test('trusted handler authenticates JWT, rejects invalid auth, and strips owners
   const rpc=calls.find(call=>call.path.includes('/rpc/place_order'));const body=JSON.parse(rpc.options.body);
   assert.equal(body.p_checkout.contact_phone,'+23276521208');assert.equal(body.p_checkout.payment_phone,'+23230521208');
   assert.equal('user_id' in body.p_checkout,false);assert.equal('total' in body.p_checkout,false);assert.equal('payment_status' in body.p_checkout,false);
+  const variantQuote=[{product_id:'amber-candle',variant_id:'default:amber-candle',quantity:1,unit_price:25000}];
+  const variantResponse=await handler(new Request('https://edge.example.invalid',{method:'POST',headers:{Authorization:'Bearer synthetic-test-jwt','Content-Type':'application/json'},body:JSON.stringify({...payload,cart_version:2,expected_cart:variantQuote})}));
+  assert.equal(variantResponse.status,200);
+  const variantRpc=calls.find(call=>call.path.includes('/rpc/place_variant_order'));
+  assert.deepEqual(JSON.parse(variantRpc.options.body).p_expected_cart,variantQuote);
+  assert.equal('user_id' in JSON.parse(variantRpc.options.body).p_checkout,false);
+  assert.equal((await handler(new Request('https://edge.example.invalid',{method:'POST',headers:{Authorization:'Bearer synthetic-test-jwt','Content-Type':'application/json'},body:JSON.stringify({...payload,cart_version:3})}))).status,400);
   globalThis.fetch=async()=>new Response(JSON.stringify({msg:'invalid JWT'}),{status:401});
   assert.equal((await handler(new Request('https://edge.example.invalid',{method:'POST',headers:{Authorization:'Bearer invalid-test-jwt'},body:'{}'}))).status,401);
  }finally{globalThis.fetch=previousFetch;if(previousDeno===undefined)delete globalThis.Deno;else globalThis.Deno=previousDeno;}

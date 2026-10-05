@@ -7,7 +7,7 @@ export async function loadOrders(client: SupabaseClient, page = 0) {
   return (data || []).map(parseOrderList);
 }
 export async function loadOrder(client: SupabaseClient, id: string) {
-  const { data,error } = await client.from('orders').select('id,order_reference,created_at,total_cents,currency,fulfilment_method,status,payment_status,full_name,customer_email,customer_phone,delivery_street_address,delivery_area,delivery_city,delivery_zone_label,delivery_instructions,pickup_location,payment_provider,payment_phone_last4,subtotal_cents,delivery_fee_cents,order_items(product_name,quantity,unit_price_cents)').eq('id',id).maybeSingle();
+  const { data,error } = await client.from('orders').select('id,order_reference,created_at,total_cents,currency,fulfilment_method,status,payment_status,full_name,customer_email,customer_phone,delivery_street_address,delivery_area,delivery_city,delivery_zone_label,delivery_instructions,pickup_location,payment_provider,payment_phone_last4,subtotal_cents,delivery_fee_cents,order_items(product_name,quantity,unit_price_cents,variant_id,variant_sku,variant_options,variant_currency)').eq('id',id).maybeSingle();
   if (error) throw new Error('Your order could not be loaded.');
   return data ? parseOrder(data) : null;
 }
@@ -17,10 +17,10 @@ export async function findCheckout(client:SupabaseClient,requestId:string) {
   if(error)throw new Error('Previous checkout could not be checked.');
   return data?.id as string | undefined;
 }
-export async function placeOrder(client: SupabaseClient, requestId: string, checkout: CheckoutInput, expectedCart: {product_id:string;quantity:number;unit_price:number}[]) {
+export async function placeOrder(client: SupabaseClient, requestId: string, checkout: CheckoutInput, expectedCart: {product_id:string;variant_id?:string;quantity:number;unit_price:number}[], expectedUserId?:string) {
   const { data:{session} } = await client.auth.getSession();
-  if (!session) throw new CheckoutError('AUTH_REQUIRED');
-  const { data,error } = await client.functions.invoke('place-order',{body:{request_id:requestId,checkout,expected_cart:expectedCart},headers:{Authorization:`Bearer ${session.access_token}`}});
+  if (!session || expectedUserId && session.user.id!==expectedUserId) throw new CheckoutError('AUTH_REQUIRED');
+  const { data,error } = await client.functions.invoke('place-order',{body:{request_id:requestId,checkout,expected_cart:expectedCart,...(expectedCart.length && expectedCart.every(item=>typeof item.variant_id==='string')?{cart_version:2}:{})},headers:{Authorization:`Bearer ${session.access_token}`}});
   if (error) {
     let code = 'ORDER_UNAVAILABLE';
     try { if (error.context instanceof Response) { const body = await error.context.json(); if(typeof body.error==='string') code=body.error; } } catch { /* Never echo raw provider errors. */ }

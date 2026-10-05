@@ -352,11 +352,22 @@ test("Product Details default-only renders a normal purchase without meaningless
   assert.match(unavailable,/disabled=""/);assert.match(unavailable,/currently unavailable/);
 });
 
-test("Product Details meaningful options have explicit radios and cannot arbitrarily use legacy checkout", () => {
+test("Product Details meaningful options require an explicit valid selection", () => {
   const product={id:'fixture',name:'Test piece',category:'Test',description:'Existing description',price:1800,image:'/images/mug.svg',color:'#e9e3d8',variants:[{id:'blue',productId:'fixture',options:{Color:'Blue'},isDefault:false,price:2000,currency:'NLE',inventoryPolicy:'untracked'}]};
   const html=renderDetails(product);
   assert.match(html,/<legend>Choose your options/);assert.match(html,/type="radio"/);assert.match(html,/Color: Blue/);assert.match(html,/NLe 20/);assert.match(html,/disabled=""/);assert.doesNotMatch(html,/checked=""/);
   assert.equal(routeTitle('/products/fixture'),'Product details');assert.equal(routeTitle('/products/fixture','Test piece'),'Test piece');
+});
+test('Bag and checkout show separate variant options and variant-derived prices for the same parent',()=>{
+ const variants=[{id:'blue',productId:fixture.id,options:{Color:'Blue'},isDefault:false,price:2000,currency:'NLE',inventoryPolicy:'untracked'}, {id:'red',productId:fixture.id,options:{Color:'Red'},isDefault:false,price:2500,currency:'NLE',inventoryPolicy:'untracked'}];
+ const state={status:'ready',products:[{...fixture,variants}]};
+ const lines=[{productId:fixture.id,variantId:'blue',quantity:2},{productId:fixture.id,variantId:'red',quantity:1}];
+ for(const page of [CartPage,CheckoutPage]){
+  const html=render(page,state,lines);
+  assert.match(html,/Color: Blue/);assert.match(html,/Color: Red/);assert.match(html,/NLe 65/);
+ }
+ const bag=render(CartPage,state,lines);
+ assert.match(bag,/quantity-v:blue/);assert.match(bag,/quantity-v:red/);
 });
 
 test("Product Details route handles loading, error and inactive/missing products accessibly", () => {

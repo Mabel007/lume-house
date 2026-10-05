@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
-import { canUseLegacyBag, requiresOptions } from "./variants";
+import { requiresOptions } from "./variants";
 import { useState } from "react";
 import { useProducts } from "./ProductContext";
 import { ProductStatus } from "./ProductStatus";
 import { formatMoney, shop } from "../../config/shop";
 import { useCart } from "../cart/CartContext";
-import { MAX_QUANTITY } from "../cart/cart";
+import { defaultVariant, MAX_QUANTITY } from "../cart/cart";
 import { ProductImage } from "./ProductImage";
 
 export function ShopPage() {
@@ -147,8 +147,9 @@ export function ShopPage() {
             </p>
             <div className="product-grid">
               {visible.map((product, index) => {
+                const variant=defaultVariant(product);
                 const quantity =
-                  items.find((item) => item.productId === product.id)
+                  items.find((item) => item.variantId===variant?.id || !item.variantId && item.productId === product.id)
                     ?.quantity ?? 0;
                 return (
                   <article className="product-card" key={product.id}>
@@ -176,9 +177,9 @@ export function ShopPage() {
                     <p className="product-description">{product.description}</p>
                     {requiresOptions(product.variants) ? <Link className="add-button" to={`/products/${encodeURIComponent(product.id)}`}>Choose options <span aria-hidden="true">→</span></Link> : <button
                       className="add-button"
-                      disabled={!canUseLegacyBag(product) || quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out"}
+                      disabled={!variant || variant.inventoryPolicy!=="untracked" || quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out"}
                       onClick={() => {
-                        dispatch({ type: "add", productId: product.id });
+                        dispatch({ type: "add", productId: product.id, variantId: variant!.id });
                         setNotice(
                           `${product.name}: Bag update requested.`,
                         );
