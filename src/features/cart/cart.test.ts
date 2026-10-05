@@ -39,6 +39,13 @@ test('variants of one parent remain distinct through add, quantity, removal and 
   assert.equal(items[0].quantity,3);assert.equal(items[1].quantity,4);
   assert.deepEqual(cartReducer(items,{type:'remove',productId:'a',variantId:'blue'}).map(item=>item.variantId),['red']);
 });
+test('untracked intent stays usable while unavailable tracked lines are retained but excluded from estimates',()=>{
+ const cart=[{productId:'a',variantId:'blue',quantity:3}];
+ const tracked={...product,variants:product.variants!.map(variant=>({...variant,inventoryPolicy:'tracked' as const,available:false}))};
+ assert.equal(getCartLines(cart,[product]).length,1);
+ assert.equal(getCartLines(cart,[tracked]).length,0);assert.equal(cart[0].quantity,3);
+ assert.equal(getCartLines(cart,[{...tracked,variants:tracked.variants.map(variant=>({...variant,available:true}))}])[0].lineTotal,5400);
+});
 test('legacy guest storage resolves only the deterministic default and retains unresolved intent',()=>{
   const legacy=readGuestCart('[{"productId":"a","quantity":2},{"productId":"missing","quantity":1}]');
   const resolved=resolveGuestCart(legacy,[product]);

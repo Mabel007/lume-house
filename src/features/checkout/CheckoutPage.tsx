@@ -110,7 +110,7 @@ export function CheckoutPage() {
     }catch(error){
       finishCheckout?.(false,checkoutTicket);
       const code=error instanceof CheckoutError?error.code:'ORDER_UNAVAILABLE';
-      if(['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART'].includes(code)){setOrderError('Your Bag or current prices changed. Review the refreshed Bag before placing your order.');refresh();retry?.();}
+      if(['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART','OUT_OF_STOCK'].includes(code)){setOrderError(code==='OUT_OF_STOCK'?'A selected quantity is no longer available. Review your Bag and current availability before trying again.':'Your Bag or current prices changed. Review the refreshed Bag before placing your order.');refresh();retry?.();}
       else if(code==='AUTH_REQUIRED')setOrderError('Your session expired. Please sign in again before placing your order.');
       else if(code.startsWith('INVALID_'))setOrderError('Please check your contact, payment and Freetown delivery details.');
       else setOrderError('We could not confirm order placement. Your retry uses the same request to prevent duplicates. Check My Orders or try again.');

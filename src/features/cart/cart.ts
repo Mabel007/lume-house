@@ -1,4 +1,5 @@
 ﻿import type { ProductVariant } from '../products/variants.ts';
+import {variantAvailable} from '../products/variants.ts';
 export type CartItem = { productId: string; variantId?: string; quantity: number; mergeId?: string };
 type Identity = { productId: string; variantId?: string };
 export type CartAction =
@@ -29,7 +30,7 @@ export function getCartLines<T extends {id:string;price:number;variants?: readon
     const product=catalog.find(product=>product.id===item.productId);
     if(!product)return [];
     const variant=item.variantId ? product.variants?.find(variant=>variant.id===item.variantId)??(item.variantId===`default:${product.id}`&&product.variants===undefined?defaultVariant(product):undefined) : defaultVariant(product);
-    if(item.variantId&&!variant || product.variants!==undefined&&!variant)return [];
+    if(item.variantId&&!variant || product.variants!==undefined&&!variant || variant&&!variantAvailable(variant))return [];
     const price=variant?.price??product.price;
     return [{product:{...product,price},variant,item,quantity:item.quantity,lineTotal:price*item.quantity,lineKey:cartLineKey(item)}];
   });

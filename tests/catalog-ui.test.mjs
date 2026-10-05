@@ -358,6 +358,16 @@ test("Product Details meaningful options require an explicit valid selection", (
   assert.match(html,/<legend>Choose your options/);assert.match(html,/type="radio"/);assert.match(html,/Color: Blue/);assert.match(html,/NLe 20/);assert.match(html,/disabled=""/);assert.doesNotMatch(html,/checked=""/);
   assert.equal(routeTitle('/products/fixture'),'Product details');assert.equal(routeTitle('/products/fixture','Test piece'),'Test piece');
 });
+test('tracked Product Details refuses unverified or unavailable stock without showing fictional quantities',()=>{
+ const variant={id:'default:fixture',productId:'fixture',options:{},isDefault:true,price:1800,currency:'NLE',inventoryPolicy:'tracked'};
+ const product={...fixture,id:'fixture',variants:[variant]};
+ for(const available of [undefined,false]){
+  const html=renderDetails({...product,variants:[{...variant,available}]});
+  assert.match(html,/currently unavailable/);assert.match(html,/disabled=""/);assert.doesNotMatch(html,/Only \d+ left/);
+ }
+ const html=renderDetails({...product,variants:[{...variant,available:true}]});
+ assert.match(html,/Available to add to your Bag/);assert.doesNotMatch(html,/<button[^>]*class="button product-details-add"[^>]*disabled/);
+});
 test('Bag and checkout show separate variant options and variant-derived prices for the same parent',()=>{
  const variants=[{id:'blue',productId:fixture.id,options:{Color:'Blue'},isDefault:false,price:2000,currency:'NLE',inventoryPolicy:'untracked'}, {id:'red',productId:fixture.id,options:{Color:'Red'},isDefault:false,price:2500,currency:'NLE',inventoryPolicy:'untracked'}];
  const state={status:'ready',products:[{...fixture,variants}]};

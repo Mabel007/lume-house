@@ -26,7 +26,17 @@ export async function loadProducts(
     if(variants.error.code === "PGRST205" || variants.error.code === "42P01") return products;
     throw new Error("Products could not be loaded.");
   }
-  const rows=parseVariants(variants.data);
+  let rows=parseVariants(variants.data);
+  if(rows.some(variant=>variant.inventoryPolicy==='tracked')){
+    const result=await client.rpc('catalogue_variant_availability').abortSignal(signal);
+    if(result.error||!Array.isArray(result.data))throw new Error('Product availability could not be loaded.');
+    const available=new Map<string,boolean>();
+    for(const row of result.data){
+      if(!row||typeof row.variant_id!=='string'||typeof row.available!=='boolean'||available.has(row.variant_id))throw new Error('Invalid product availability.');
+      available.set(row.variant_id,row.available);
+    }
+    rows=rows.map(variant=>({...variant,available:available.get(variant.id)===true}));
+  }
   if(rows.some(variant=>!products.some(product=>product.id===variant.productId)))throw new Error("Products could not be loaded.");
   return products.map(product=>{
     const variants=rows.filter(variant=>variant.productId===product.id);

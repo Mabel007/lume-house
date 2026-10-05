@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { requiresOptions } from "./variants";
+import { requiresOptions, variantAvailable } from "./variants";
 import { useState } from "react";
 import { useProducts } from "./ProductContext";
 import { ProductStatus } from "./ProductStatus";
@@ -177,7 +177,7 @@ export function ShopPage() {
                     <p className="product-description">{product.description}</p>
                     {requiresOptions(product.variants) ? <Link className="add-button" to={`/products/${encodeURIComponent(product.id)}`}>Choose options <span aria-hidden="true">→</span></Link> : <button
                       className="add-button"
-                      disabled={!variant || variant.inventoryPolicy!=="untracked" || quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out"}
+                      disabled={!variantAvailable(variant) || quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out"}
                       onClick={() => {
                         dispatch({ type: "add", productId: product.id, variantId: variant!.id });
                         setNotice(

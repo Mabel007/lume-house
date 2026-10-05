@@ -46,7 +46,7 @@ export function commerceHandler(mode: 'place' | 'email') {
         if (result.error) {
           const code = result.error.message;
           if (code === 'AUTH_REQUIRED') return reply({error:code},401);
-          if (['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART'].includes(code)) return reply({error:code},409);
+          if (['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART','OUT_OF_STOCK'].includes(code)) return reply({error:code},409);
           if (['INVALID_REQUEST','INVALID_CHECKOUT','INVALID_DELIVERY_ZONE','INVALID_DELIVERY_DETAILS','ORDER_TOTAL_LIMIT','CART_LIMIT'].includes(code)) return reply({error:code},400);
           return reply({error:'ORDER_UNAVAILABLE'},503);
         }

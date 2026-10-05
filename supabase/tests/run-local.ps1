@@ -64,6 +64,11 @@ $guard$;
   Run-Sql 'variant checkout expansion preserves legacy data' ((Read-Sql (Join-Path $testRoot 'variant-checkout-before.sql')) + $variantCheckoutBody + (Read-Sql (Join-Path $testRoot 'variant-checkout-after.sql')))
   Run-Sql 'variant cart and trusted checkout migration' $variantCheckout
   Run-Sql 'variant cart, merge, snapshots and checkout security' (Read-Sql (Join-Path $testRoot 'variant-checkout.sql'))
+  $inventory = Read-Sql (Join-Path $supabaseRoot 'migrations/20261005000900_variant_inventory.sql')
+  $inventoryBody = $inventory -replace '(?m)^begin;\s*$', '' -replace '(?m)^commit;\s*$', ''
+  Run-Sql 'inventory migration preserves populated legacy history' ((Read-Sql (Join-Path $testRoot 'variant-checkout-before.sql')) + $inventoryBody + (Read-Sql (Join-Path $testRoot 'variant-checkout-after.sql')))
+  Run-Sql 'inventory foundation without fabricated counts' $inventory
+  Run-Sql 'finite stock allocation, ledger and security' (Read-Sql (Join-Path $testRoot 'inventory.sql'))
   Run-Sql 'ownership, constraints, historical snapshots' (Read-Sql (Join-Path $testRoot 'commerce.sql'))
   Run-Sql 'trusted atomic checkout/idempotency/email leases' (Read-Sql (Join-Path $testRoot 'checkout.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'

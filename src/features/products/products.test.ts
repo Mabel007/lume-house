@@ -1,4 +1,4 @@
-import { parseVariants, requiresOptions, variantLabel } from "./variants.ts";
+import { parseVariants, requiresOptions, variantLabel, variantAvailable } from "./variants.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@supabase/supabase-js";
@@ -160,4 +160,20 @@ test("expanded catalogue associates active variant rows while legacy schema rema
   assert.equal(expanded[0].variants?.[0].id,variants[0].id);
   assert.equal((await loadProducts(clientWith(response),'NLE',new AbortController().signal))[0].variants,undefined);
   await assert.rejects(loadProducts(clientWith(response,[{...variants[0],product_id:'other'}]),'NLE',new AbortController().signal));
+});
+test('tracked catalogue availability is an authoritative boolean, never invented counts',async()=>{
+ const variant={id:'default:fixture-product',product_id:row.id,options:{},is_default:true,price_cents:2000,currency:'NLE',active:true,inventory_policy:'tracked'};
+ const calls:string[]=[];
+ const client=clientWith(async input=>{
+  const path=new URL(String(input)).pathname;calls.push(path);
+  return new Response(JSON.stringify(path.includes('catalogue_variant_availability')?[{variant_id:variant.id,available:false}]:[row]),{headers:{'Content-Type':'application/json'}});
+ },[variant]);
+ const [product]=await loadProducts(client,'NLE',new AbortController().signal);
+ assert.equal(product.price,2000);assert.equal(variantAvailable(product.variants![0]),false);
+ assert.equal(variantAvailable({...product.variants![0],available:true}),true);
+ assert.equal(variantAvailable({...product.variants![0],available:undefined}),false);
+ assert.ok(calls.includes('/rest/v1/rpc/catalogue_variant_availability'));
+ assert.equal('on_hand' in product.variants![0],false);
+ const corrupt=clientWith(async input=>new Response(JSON.stringify(new URL(String(input)).pathname.includes('catalogue_variant_availability')?[{variant_id:variant.id,available:3}]:[row]),{headers:{'Content-Type':'application/json'}}),[variant]);
+ await assert.rejects(loadProducts(corrupt,'NLE',new AbortController().signal),/availability/);
 });

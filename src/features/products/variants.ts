@@ -1,6 +1,6 @@
 ﻿export type ProductVariant = {
   id: string; productId: string; options: Readonly<Record<string,string>>;
-  isDefault: boolean; price: number; currency: 'NLE'; inventoryPolicy: 'untracked' | 'tracked';
+  isDefault: boolean; price: number; currency: 'NLE'; inventoryPolicy: 'untracked' | 'tracked'; available?:boolean;
 };
 export function parseVariants(value: unknown): ProductVariant[] {
   if (!Array.isArray(value)) throw new Error('Invalid variant response.');
@@ -15,6 +15,9 @@ export function parseVariants(value: unknown): ProductVariant[] {
     ids.add(r.id);
     return {id:r.id,productId:r.product_id,options:options as Record<string,string>,isDefault:r.is_default,price:r.price_cents as number,currency:'NLE',inventoryPolicy:r.inventory_policy as ProductVariant['inventoryPolicy']};
   });
+}
+export function variantAvailable(variant:ProductVariant|undefined):boolean {
+  return !!variant&&(variant.inventoryPolicy==='untracked'||variant.available===true);
 }
 export function variantLabel(variant: Pick<ProductVariant,"options">): string {
   return Object.entries(variant.options).map(([key,value])=>`${key}: ${value}`).join(' · ');
