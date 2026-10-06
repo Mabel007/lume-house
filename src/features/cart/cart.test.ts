@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cartReducer, getCartLines, MAX_QUANTITY } from "./cart.ts";
 import {readGuestCart,resolveGuestCart,serializeGuestCart,stampGuestIntent} from './guestCart.ts';
-import {parseVariantCart,loadVariantCart,changeVariantCart} from './variantCartRepository.ts';
+import {parseVariantCart,loadVariantCart,changeVariantCart,VariantCartError} from './variantCartRepository.ts';
 import type {Product} from '../products/products.ts';
 import type {SupabaseClient} from '@supabase/supabase-js';
 
@@ -78,6 +78,16 @@ test('authenticated Bag uses JWT-bound trusted RPCs and rejects duplicate or cor
   assert.deepEqual(calls[1],['Authorization','Bearer synthetic-test-jwt']);
   assert.deepEqual(calls[2],['change_variant_cart',{p_variant_id:'blue',p_mode:'merge',p_quantity:2,p_expected_quantity:null,p_operation_id:'11111111-1111-4111-8111-111111111111'}]);
   assert.equal(JSON.stringify(calls).includes('user_id'),false);
+});
+test('missing variant RPC is a schema deployment error, never a successful restore or legacy table mutation',async()=>{
+  const guest=stampGuestIntent([{productId:'a',variantId:'default:a',quantity:2}],[],()=> '11111111-1111-4111-8111-111111111111');
+  const original=serializeGuestCart(guest);
+  const calls:string[]=[];
+  const client={rpc(name:string){calls.push(name);return {setHeader(){return Promise.resolve({data:null,error:{code:'PGRST202',message:'Could not find function in schema cache'}});}}},from(){throw new Error('Must not fall back to untrusted table writes');}} as unknown as SupabaseClient;
+  await assert.rejects(loadVariantCart(client,'synthetic-test-jwt'),error=>error instanceof VariantCartError&&error.code==='SCHEMA_NOT_READY'&&error.message.includes('Guest items are retained'));
+  await assert.rejects(changeVariantCart(client,'synthetic-test-jwt','default:a','merge',2,null,guest[0].mergeId!),error=>error instanceof VariantCartError&&error.code==='SCHEMA_NOT_READY');
+  assert.equal(serializeGuestCart(guest),original);
+  assert.deepEqual(calls,['load_variant_cart','change_variant_cart']);
 });
 test("rejects invalid quantities and caps repeated additions", () => {
   const state = [{ productId: "a", quantity: MAX_QUANTITY }];

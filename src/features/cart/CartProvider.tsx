@@ -52,7 +52,7 @@ export function CartProvider({children}:{children:ReactNode}) {
           const items=withPending(loaded.items,guest.current,catalog.products);current.current=items;setSaved({userId,items});setStatus('ready');locked.current=false;
           if(pendingGuest(guest.current,catalog.products).length)setError('Some guest items are unavailable. Remove them from your Bag to continue; their browser intent has been retained.');
         }
-      }catch{if(isCurrent()){setError('Your saved Bag could not be restored or merged. Unsaved guest items are retained. Please retry.');setStatus('error');}}
+      }catch(reason){if(isCurrent()){setError(reason instanceof VariantCartError&&reason.code==='SCHEMA_NOT_READY'?reason.message:'Your saved Bag could not be restored or merged. Unsaved guest items are retained. Please retry.');setStatus('error');}}
     }
     void restore();return()=>{active=false;};
   },[userId,accessToken,auth.loading,catalog,revision]);
