@@ -5,17 +5,26 @@ import { VariantManager } from './VariantManager';
 
 export function ProductEditor({ product, token, saved }: { product: AdminProduct | null; token: string; saved: () => void }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const creation = useRef<{id: string; signature: string} | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, []);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = new FormData(event.currentTarget); setBusy(true); setError('');
-    try { await adminRpc(getSupabaseClient(), token, 'admin_save_product', {
+    try { const args = {
       p_id: product?.id ?? null, p_expected_updated_at: product?.updated_at ?? null,
       p_name: form.get('name'), p_description: form.get('description'), p_category: form.get('category'),
       p_image_path: form.get('image_path'), p_background_color: form.get('background_color'),
       p_display_order: Number(form.get('display_order')), p_active: form.get('active') === 'on',
       p_initial_price: product ? null : Number(form.get('initial_price')),
-    }); saved(); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Save failed.'); }
+    };
+      if (!product) {
+        const request = {p_name: args.p_name, p_description: args.p_description, p_category: args.p_category, p_image_path: args.p_image_path, p_background_color: args.p_background_color, p_display_order: args.p_display_order, p_active: args.p_active, p_initial_price: args.p_initial_price};
+        const signature = JSON.stringify(request);
+        if (creation.current && creation.current.signature !== signature) throw new Error('Retry the original creation unchanged, or deliberately start a new creation.');
+        creation.current ??= {id: crypto.randomUUID(), signature};
+        await adminRpc(getSupabaseClient(), token, 'admin_create_product', {...request, p_operation_id: creation.current.id});
+      } else await adminRpc(getSupabaseClient(), token, 'admin_save_product', args);
+      saved(); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Save failed.'); }
     finally { setBusy(false); }
   }
   return <form className="admin-form" onSubmit={submit}><h3 ref={heading} tabIndex={-1}>{product ? `Edit ${product.name}` : 'Create product'}</h3>
@@ -30,6 +39,7 @@ export function ProductEditor({ product, token, saved }: { product: AdminProduct
     {!product && <label>Initial default variant price (NLe minor units)<input name="initial_price" type="number" required min="0" step="1" /></label>}
     <label className="admin-checkbox"><input name="active" type="checkbox" defaultChecked={product?.active ?? false} />Active in catalogue</label>
     <p>Deactivate to archive. Existing orders keep their original snapshots.</p>
+    {!product && error && <button type="button" disabled={busy} onClick={() => { if (window.confirm('Start a separate creation? The previous request may have succeeded. Check the catalogue first.')) { creation.current = null; setError(''); } }}>Start a new creation</button>}
     {error && <p role="alert">{error}</p>}<button className="button" disabled={busy}>{busy ? 'Saving…' : 'Save product'}</button>
   </form>;
 }

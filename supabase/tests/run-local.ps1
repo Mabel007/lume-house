@@ -81,6 +81,8 @@ $guard$;
   Run-Sql 'admin inventory operations' (Read-Sql (Join-Path $testRoot 'admin-inventory.sql'))
   Run-Sql 'admin order lifecycle migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001400_admin_orders.sql'))
   Run-Sql 'admin order transitions and atomic inventory' (Read-Sql (Join-Path $testRoot 'admin-orders.sql'))
+  Run-Sql 'product creation receipts migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001500_product_creation_receipts.sql'))
+  Run-Sql 'idempotent product creation' (Read-Sql (Join-Path $testRoot 'product-creation.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin
@@ -89,6 +91,7 @@ begin
     or exists(select 1 from public.order_confirmation_jobs)
     or exists(select 1 from public.business_admins)
     or exists(select 1 from public.business_order_operations)
+    or exists(select 1 from public.business_product_creations)
     or exists(select 1 from public.variant_inventory)
     or exists(select 1 from public.inventory_ledger)
     or (select count(*) from public.product_variants) <> 20
