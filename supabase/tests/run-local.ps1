@@ -75,6 +75,8 @@ $guard$;
   Run-Sql 'business authorization security' (Read-Sql (Join-Path $testRoot 'admin.sql'))
   Run-Sql 'admin products migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001100_admin_products.sql'))
   Run-Sql 'admin products security and history' (Read-Sql (Join-Path $testRoot 'admin-products.sql'))
+  Run-Sql 'admin variants migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001200_admin_variants.sql'))
+  Run-Sql 'admin variant safety' (Read-Sql (Join-Path $testRoot 'admin-variants.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin
