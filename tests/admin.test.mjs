@@ -80,3 +80,9 @@ test('media foundation states its actual capability without pretending uploads',
  const html=renderToStaticMarkup(React.createElement(ProductMedia,{product:{id:'local',name:'Local',image_path:'/images/mug.svg'},token:'local',saved:()=>{}}));
  assert.match(html,/Product media/);assert.match(html,/Uploads and galleries are not available yet/);assert.match(html,/Loading reviewed media/);assert.doesNotMatch(html,/type="file"/);
 });
+
+test('membership UI preserves service bootstrap boundary',async()=>{
+ const {MembershipManager}=await server.ssrLoadModule('/src/features/admin/MembershipManager.tsx');
+ const html=renderToStaticMarkup(React.createElement(MembershipManager,{token:'local'}));
+ assert.match(html,/service-only operations/);assert.match(html,/Self-revocation is disabled/);assert.match(html,/Loading memberships/);assert.doesNotMatch(html,/Invite by email/);
+});

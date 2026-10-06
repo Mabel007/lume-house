@@ -85,6 +85,8 @@ $guard$;
   Run-Sql 'idempotent product creation' (Read-Sql (Join-Path $testRoot 'product-creation.sql'))
   Run-Sql 'reviewed media foundation' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001600_product_media_foundation.sql'))
   Run-Sql 'reviewed media security' (Read-Sql (Join-Path $testRoot 'media.sql'))
+  Run-Sql 'membership operations' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001700_admin_membership_operations.sql'))
+  Run-Sql 'membership authorization and revocation' (Read-Sql (Join-Path $testRoot 'memberships.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin
@@ -92,6 +94,7 @@ begin
     or exists(select 1 from public.carts) or exists(select 1 from public.orders)
     or exists(select 1 from public.order_confirmation_jobs)
     or exists(select 1 from public.business_admins)
+    or exists(select 1 from public.business_admin_history)
     or exists(select 1 from public.business_order_operations)
     or exists(select 1 from public.business_product_creations)
     or exists(select 1 from public.variant_inventory)
