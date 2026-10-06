@@ -31,11 +31,11 @@ function AdminOrderDetail({id,token,changed}:{id:string;token:string;changed:()=
 }
 export function OrderManager({token}:{token:string}){
   const [orders,setOrders]=useState<OrderListItem[]>([]);const [selected,setSelected]=useState<string|null>(null);const [filters,setFilters]=useState({query:'',status:''});const [revision,setRevision]=useState(0);const [error,setError]=useState('');const [loading,setLoading]=useState(true);
-  useEffect(()=>{let active=true;adminRpc(getSupabaseClient(),token,'admin_list_orders',{p_query:filters.query,p_status:filters.status}).then(data=>{if(!Array.isArray(data))throw new Error('Invalid order list.');const parsed=data.map(parseOrderList);if(active){setOrders(parsed);setLoading(false);}}).catch(cause=>{if(active){setError(cause.message);setLoading(false);}});return()=>{active=false;};},[token,filters,revision]);
+  useEffect(()=>{let active=true;async function load(){setLoading(true);setError('');try{const data=await adminRpc(getSupabaseClient(),token,'admin_list_orders',{p_query:filters.query,p_status:filters.status});if(!Array.isArray(data))throw new Error('Invalid order list.');const parsed=data.map(parseOrderList);if(active){setOrders(parsed);setLoading(false);}}catch(cause){if(active){setError(cause instanceof Error?cause.message:'Load failed.');setLoading(false);}}}void load();return()=>{active=false;};},[token,filters,revision]);
   return <section><h2>Orders</h2><p>Showing up to 200 matching orders. Customer and fulfilment details are private business information.</p>
     <form onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);setFilters({query:String(data.get('query')),status:String(data.get('status'))});}}><label>Search reference, customer name or email<input name="query" type="search" maxLength={200}/></label><label>Order status<select name="status"><option value="">All statuses</option>{orderStates.map(s=><option key={s} value={s}>{orderLabel(s)}</option>)}</select></label><button className="button">Apply filters</button></form>
-    {loading&&<p role="status">Loading orders…</p>}{error&&<p role="alert">{error}</p>}{!loading&&!error&&!orders.length&&<p>No matching orders.</p>}
-    <ul className="admin-list">{orders.map(o=><li key={o.id}><button onClick={()=>setSelected(o.id)}>{o.order_reference} — {orderLabel(o.status)} — Payment: {orderLabel(o.payment_status)} — {formatMoney(o.total_cents)}</button></li>)}</ul>
-    {selected&&<AdminOrderDetail key={selected} id={selected} token={token} changed={()=>setRevision(r=>r+1)}/>}
+    {loading&&<p role="status">Loading orders…</p>}{error&&<p role="alert">{error} <button onClick={()=>setRevision(r=>r+1)}>Retry loading orders</button></p>}{!loading&&!error&&!orders.length&&<p>No matching orders.</p>}
+    {!loading&&!error&&<ul className="admin-list">{orders.map(o=><li key={o.id}><button onClick={()=>setSelected(o.id)}>{o.order_reference} — {orderLabel(o.status)} — Payment: {orderLabel(o.payment_status)} — {formatMoney(o.total_cents)}</button></li>)}</ul>}
+    {!loading&&!error&&selected&&<AdminOrderDetail key={selected} id={selected} token={token} changed={()=>setRevision(r=>r+1)}/>}
   </section>;
 }

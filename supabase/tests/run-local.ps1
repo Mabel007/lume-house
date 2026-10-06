@@ -87,12 +87,18 @@ begin
   if exists(select 1 from auth.users) or exists(select 1 from public.profiles)
     or exists(select 1 from public.carts) or exists(select 1 from public.orders)
     or exists(select 1 from public.order_confirmation_jobs)
+    or exists(select 1 from public.business_admins)
+    or exists(select 1 from public.business_order_operations)
+    or exists(select 1 from public.variant_inventory)
+    or exists(select 1 from public.inventory_ledger)
+    or (select count(*) from public.product_variants) <> 20
     or (select count(*) from public.products where active and currency='NLE') <> 20 then
     raise exception 'Unexpected fixture persistence or seed mutation';
   end if;
 end;
 $$;
 select 'PASS: rollback fixtures gone; twenty active NLE products remain';
+select 'PASS: admin, operation and stock fixtures absent; twenty genuine default variants remain';
 '@
 } finally {
   if ($created) {

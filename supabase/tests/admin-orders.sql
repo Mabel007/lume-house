@@ -33,6 +33,7 @@ select pg_temp.assert(not (public.admin_get_order(:'cancellation_id') ? 'user_id
 select pg_temp.error('update public.orders set status=''cancelled''','42501','direct admin-browser order write denied');
 select public.admin_transition_order(:'cancellation_id','placed','cancelled','Local eligible cancellation','10000000-4444-4000-8000-000000000001');
 select public.admin_transition_order(:'cancellation_id','placed','cancelled','Local eligible cancellation','10000000-4444-4000-8000-000000000001');
+select pg_temp.error(format('select public.admin_transition_order(%L,%L,%L,%L,%L)',:'cancellation_id','placed','cancelled','Changed request','10000000-4444-4000-8000-000000000001'),'22023','operation UUID cannot be reused with changed arguments');
 select pg_temp.error(format('select public.admin_transition_order(%L,%L,%L,%L,%L)',:'cancellation_id','cancelled','cancelled','Repeat','10000000-4444-4000-8000-000000000099'),'22023','new operation cannot cancel terminal order again');
 reset role;
 select pg_temp.assert((select on_hand=5 and allocated=1 from public.variant_inventory where variant_id='default:amber-candle'),'cancellation releases exactly allocated stock, not physical stock');

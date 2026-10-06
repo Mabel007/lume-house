@@ -1,10 +1,12 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { getSupabaseClient } from '../../lib/supabase/client';
 import { adminRpc, parseAdminProduct, type AdminProduct } from './adminRepository';
 import { VariantManager } from './VariantManager';
 
 export function ProductEditor({ product, token, saved }: { product: AdminProduct | null; token: string; saved: () => void }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { heading.current?.focus(); }, []);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = new FormData(event.currentTarget); setBusy(true); setError('');
     try { await adminRpc(getSupabaseClient(), token, 'admin_save_product', {
@@ -16,7 +18,7 @@ export function ProductEditor({ product, token, saved }: { product: AdminProduct
     }); saved(); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Save failed.'); }
     finally { setBusy(false); }
   }
-  return <form className="admin-form" onSubmit={submit}><h3>{product ? `Edit ${product.name}` : 'Create product'}</h3>
+  return <form className="admin-form" onSubmit={submit}><h3 ref={heading} tabIndex={-1}>{product ? `Edit ${product.name}` : 'Create product'}</h3>
     <p>Editorial fields belong to the product. Prices and options belong to its variants.</p>
     <label>Name<input name="name" required maxLength={200} defaultValue={product?.name ?? ''} /></label>
     <label>Description<textarea name="description" required maxLength={2000} defaultValue={product?.description ?? ''} /></label>
@@ -36,18 +38,20 @@ export function ProductManager({ token }: { token: string }) {
   const [products, setProducts] = useState<AdminProduct[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0); const [selected, setSelected] = useState<AdminProduct | null | undefined>(); const [query, setQuery] = useState('');
   useEffect(() => { let active = true;
-    adminRpc(getSupabaseClient(), token, 'admin_list_products').then(data => {
+    async function load() { setLoading(true); setError(''); try {
+      const data = await adminRpc(getSupabaseClient(), token, 'admin_list_products');
       if (!Array.isArray(data)) throw new Error('Invalid catalogue response.');
       const parsed = data.map(parseAdminProduct); if (active) { setProducts(parsed); setLoading(false); }
-    }).catch(cause => { if (active) { setError(cause.message); setLoading(false); } });
+    } catch (cause) { if (active) { setProducts([]); setSelected(undefined); setError(cause instanceof Error ? cause.message : 'Load failed.'); setLoading(false); } } }
+    void load();
     return () => { active = false; };
   }, [token, revision]);
   const visible = products.filter(p => `${p.name} ${p.category}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   return <section><h2>Products</h2><p>Showing up to 200 products, including archived products.</p>
     <label>Search products<input value={query} onChange={e => setQuery(e.target.value)} type="search" /></label><button className="button" onClick={() => setSelected(null)}>Create product</button>
-    {loading && <p role="status">Loading products…</p>}{error && <p role="alert">{error}</p>}{!loading && !error && !visible.length && <p>No products match.</p>}
-    <ul className="admin-list">{visible.map(p => <li key={p.id}><button onClick={() => setSelected(p)}>{p.name} — {p.active ? 'Active' : 'Archived'}</button></li>)}</ul>
-    {selected !== undefined && <ProductEditor key={selected?.id ?? 'new'} product={selected} token={token} saved={() => { setSelected(undefined); setRevision(r => r + 1); }} />}
-    {selected && <VariantManager key={selected.id} productId={selected.id} token={token} />}
+    {loading && <p role="status">Loading products…</p>}{error && <p role="alert">{error} <button onClick={() => setRevision(r => r + 1)}>Retry loading products</button></p>}{!loading && !error && !visible.length && <p>No products match.</p>}
+    {!loading && !error && <ul className="admin-list">{visible.map(p => <li key={p.id}><button onClick={() => setSelected(p)}>{p.name} — {p.active ? 'Active' : 'Archived'}</button></li>)}</ul>}
+    {!loading && !error && selected !== undefined && <ProductEditor key={selected?.id ?? 'new'} product={selected} token={token} saved={() => { setSelected(undefined); setRevision(r => r + 1); }} />}
+    {!loading && !error && selected && <VariantManager key={selected.id} productId={selected.id} token={token} />}
   </section>;
 }

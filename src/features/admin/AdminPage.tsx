@@ -21,7 +21,7 @@ function AdminAccess({ token }: { token: string }) {
 
 export function AdminPage() {
   const { session, loading } = useAuth();
-  return <section className="content-page"><p className="eyebrow">Lumé House / Business</p><h1>Administration</h1>
+  return <section className="wrap page-section content-page admin-page"><p className="eyebrow">Lumé House / Business</p><h1>Administration</h1>
     {loading ? <p role="status">Restoring your session…</p> : session
       ? <AdminAccess key={`${session.user.id}:${session.access_token}`} token={session.access_token} />
       : <p>Sign in with your authorized Google account to continue. <Link to="/account">Go to Account</Link></p>}

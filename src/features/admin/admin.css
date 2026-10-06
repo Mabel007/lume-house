@@ -12,3 +12,7 @@
 .admin-list button { min-height: 44px; text-align: left; text-decoration: underline; }
 .admin-workspace button, .admin-workspace a { overflow-wrap: anywhere; }
 .admin-workspace :focus-visible { outline: 3px solid #726244; outline-offset: 3px; }
+.admin-page { padding-block: 2rem; }
+.admin-page h1, .admin-workspace h3, .admin-workspace h4 { overflow-wrap: anywhere; }
+.admin-workspace .checkout-grid { grid-template-columns: minmax(0, 1fr); }
+.admin-workspace .order-items li { flex-wrap: wrap; gap: .5rem; }

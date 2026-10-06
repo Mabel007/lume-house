@@ -28,6 +28,7 @@ set constraints all immediate;
 select updated_at::text as fixture_updated from public.products where id=:'fixture_id' \gset
 set local role authenticated;
 select public.admin_save_product(:'fixture_id',:'fixture_updated','Renamed','Edited','Test','/images/mug.svg','#e9e3d8',1,true,null);
+select pg_temp.error(format('select public.admin_save_product(%L,%L,%L,%L,%L,%L,%L,1,true,null)',:'fixture_id','2000-01-01','Renamed','Edited','Test','/images/mug.svg','#e9e3d8'),'40001','stale product update denied');
 select pg_temp.error('update public.products set active=false','42501','admin direct-table bypass denied');
 reset role;
 select pg_temp.assert((select active and name='Renamed' and price_cents=100 from public.products where id=:'fixture_id'),'edit/reactivate preserves variant-owned price');

@@ -7,6 +7,13 @@ import {createServer} from 'vite';
 let server,AdminPage,AuthContext,checkAdmin;
 before(async()=>{server=await createServer({server:{middlewareMode:true,hmr:false},appType:'custom'});({AdminPage}=await server.ssrLoadModule('/src/features/admin/AdminPage.tsx'));({AuthContext}=await server.ssrLoadModule('/src/features/auth/AuthContext.ts'));({checkAdmin}=await server.ssrLoadModule('/src/features/admin/adminRepository.ts'));});
 after(async()=>{await server?.close();});
+test('admin title and editor heading support useful focus context',async()=>{
+ const {routeTitle}=await server.ssrLoadModule('/src/config/routeExperience.ts');
+ assert.equal(routeTitle('/admin/products'),'Administration');
+ const {ProductEditor}=await server.ssrLoadModule('/src/features/admin/ProductManager.tsx');
+ const html=renderToStaticMarkup(React.createElement(ProductEditor,{product:null,token:'local-token',saved:()=>{}}));
+ assert.match(html,/<h3 tabindex="-1">Create product/);
+});
 test('operational transitions are mode-specific and terminal-protected',async()=>{
  const {nextOperationalStatuses:next}=await server.ssrLoadModule('/src/features/admin/orderOperations.ts');
  assert.deepEqual(next('placed','pickup'),['confirmed','cancelled']);assert.deepEqual(next('confirmed','delivery'),['processing','cancelled']);
