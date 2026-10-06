@@ -19,6 +19,12 @@ export function parseVariants(value: unknown): ProductVariant[] {
 export function variantAvailable(variant:ProductVariant|undefined):boolean {
   return !!variant&&(variant.inventoryPolicy==='untracked'||variant.available===true);
 }
+export function cataloguePrice(product:{price:number;variants?:readonly ProductVariant[]}):{price:number;from:boolean}{
+  const choices=product.variants?.filter(variant=>Object.keys(variant.options).length>0)??[];
+  if(!choices.length)return {price:product.variants?.find(variant=>variant.isDefault)?.price??product.price,from:false};
+  const available=choices.filter(variantAvailable);
+  return {price:Math.min(...(available.length?available:choices).map(variant=>variant.price)),from:true};
+}
 export function variantLabel(variant: Pick<ProductVariant,"options">): string {
   return Object.entries(variant.options).map(([key,value])=>`${key}: ${value}`).join(' · ');
 }

@@ -1,4 +1,4 @@
-import { parseVariants, requiresOptions, variantLabel, variantAvailable } from "./variants.ts";
+import { parseVariants, requiresOptions, variantLabel, variantAvailable, cataloguePrice } from "./variants.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@supabase/supabase-js";
@@ -188,4 +188,11 @@ test('catalogue search combines all words with the existing category filter with
  assert.deepEqual(searchProducts(products,'unknown','All pieces'),[]);
  assert.deepEqual(searchProducts(products,'woven soft','All pieces'),[products[1]]);
  assert.equal(products.length,2);
+});
+test('option previews use selectable variant prices rather than an unselectable technical default',()=>{
+ const base={id:'default:test',productId:'test',options:{},isDefault:true,price:1000,currency:'NLE' as const,inventoryPolicy:'untracked' as const};
+ assert.deepEqual(cataloguePrice({price:800,variants:[base]}),{price:1000,from:false});
+ const choices=[base,{...base,id:'blue',isDefault:false,options:{Color:'Blue'},price:2500},{...base,id:'red',isDefault:false,options:{Color:'Red'},price:2000}];
+ assert.deepEqual(cataloguePrice({price:800,variants:choices}),{price:2000,from:true});
+ assert.deepEqual(cataloguePrice({price:800,variants:choices.map(variant=>({...variant,inventoryPolicy:'tracked',available:variant.id==='blue'}))}),{price:2500,from:true});
 });

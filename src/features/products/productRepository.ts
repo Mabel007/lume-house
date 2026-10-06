@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseVariants } from "./variants.ts";
+import { parseVariants, cataloguePrice } from "./variants.ts";
 import { parseProducts } from "./products.ts";
 
 export async function loadProducts(
@@ -40,6 +40,6 @@ export async function loadProducts(
   if(rows.some(variant=>!products.some(product=>product.id===variant.productId)))throw new Error("Products could not be loaded.");
   return products.map(product=>{
     const variants=rows.filter(variant=>variant.productId===product.id);
-    return {...product,price:variants.find(variant=>variant.isDefault)?.price??variants[0]?.price??product.price,variants};
+    return {...product,price:cataloguePrice({...product,variants}).price,variants};
   });
 }

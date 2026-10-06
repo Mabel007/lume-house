@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { requiresOptions, variantAvailable } from "./variants";
+import { requiresOptions, variantAvailable, cataloguePrice } from "./variants";
 import { useRef, useState } from "react";
 import { useProducts } from "./ProductContext";
 import { ProductStatus } from "./ProductStatus";
@@ -76,7 +76,7 @@ export function ShopPage() {
                     </div>
                     <figcaption>
                       {product.name}
-                      <span>{formatMoney(product.price)}</span>
+                      <span>{cataloguePrice(product).from?'From ':''}{formatMoney(product.price)}</span>
                     </figcaption>
                   </figure>
                 ))}
@@ -155,6 +155,7 @@ export function ShopPage() {
             <div className="product-grid">
               {visible.map((product, index) => {
                 const variant=defaultVariant(product);
+                const displayPrice=cataloguePrice(product);
                 const quantity =
                   items.find((item) => item.variantId===variant?.id || !item.variantId && item.productId === product.id)
                     ?.quantity ?? 0;
@@ -178,7 +179,7 @@ export function ShopPage() {
                     <div className="flex items-start justify-between gap-3">
                       <h3><Link to={`/products/${encodeURIComponent(product.id)}`}>{product.name}</Link></h3>
                       <span className="price">
-                        {formatMoney(product.price)}
+                        {displayPrice.from?'From ':''}{formatMoney(displayPrice.price)}
                       </span>
                     </div>
                     <p className="product-description">{product.description}</p>
