@@ -71,6 +71,8 @@ $guard$;
   Run-Sql 'finite stock allocation, ledger and security' (Read-Sql (Join-Path $testRoot 'inventory.sql'))
   Run-Sql 'ownership, constraints, historical snapshots' (Read-Sql (Join-Path $testRoot 'commerce.sql'))
   Run-Sql 'trusted atomic checkout/idempotency/email leases' (Read-Sql (Join-Path $testRoot 'checkout.sql'))
+  Run-Sql 'trusted business authorization migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001000_business_admin.sql'))
+  Run-Sql 'business authorization security' (Read-Sql (Join-Path $testRoot 'admin.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin

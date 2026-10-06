@@ -17,6 +17,7 @@ export function routeTitle(pathname: string, productName?: string): string {
   if (Object.hasOwn(routeTitles, path)) return routeTitles[path];
   if (/^\/products\/[^/]+$/.test(path)) return productName || "Product details";
   if (path.startsWith("/account/")) return "Your account";
+  if (path === "/admin" || path.startsWith("/admin/")) return "Administration";
   if (path.startsWith("/orders/")) return "Your order";
   return "Page not found";
 }
