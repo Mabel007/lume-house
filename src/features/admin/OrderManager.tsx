@@ -2,6 +2,7 @@ import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {getSupabaseClient} from '../../lib/supabase/client';
 import {formatMoney} from '../../config/shop';
 import {orderLabel,orderStates,parseOrder,parseOrderList,type Order,type OrderListItem} from '../orders/orders';
+import {CancellationRequest} from '../orders/CancellationRequest';
 import {OrderSnapshot} from '../orders/OrderPages';
 import {adminRpc} from './adminRepository';
 import {nextOperationalStatuses} from './orderOperations';
@@ -27,7 +28,7 @@ function AdminOrderDetail({id,token,changed}:{id:string;token:string;changed:()=
   useEffect(()=>{let active=true;Promise.all([adminRpc(getSupabaseClient(),token,'admin_get_order',{p_order_id:id}),adminRpc(getSupabaseClient(),token,'admin_order_history',{p_order_id:id})]).then(([data,events])=>{const parsed=parseOrder(data);if(!Array.isArray(events))throw new Error('Invalid operation history.');if(active){setOrder(parsed);setHistory(events);}}).catch(cause=>{if(active)setError(cause.message);});return()=>{active=false;};},[id,token,revision]);
   if(error)return <p role="alert">{error}</p>;
   if(!order)return <p role="status">Loading order details…</p>;
-  return <section><h3>{order.order_reference}</h3><OrderSnapshot order={order}/><OrderOperations key={`${order.id}:${order.status}`} order={order} token={token} saved={()=>{setRevision(r=>r+1);changed();}}/><h3>Operational history</h3><ul className="admin-list">{history.map(h=><li key={h.operation_id}>{h.created_at}: {orderLabel(h.from_status)} → {orderLabel(h.to_status)}. {h.reason}</li>)}</ul></section>;
+  return <section><h3>{order.order_reference}</h3><OrderSnapshot order={order}/><CancellationRequest key={`${order.id}:${order.status}:request`} orderId={order.id} status={order.status} token={token} admin /><OrderOperations key={`${order.id}:${order.status}`} order={order} token={token} saved={()=>{setRevision(r=>r+1);changed();}}/><h3>Operational history</h3><ul className="admin-list">{history.map(h=><li key={h.operation_id}>{h.created_at}: {orderLabel(h.from_status)} → {orderLabel(h.to_status)}. {h.reason}</li>)}</ul></section>;
 }
 export function OrderManager({token}:{token:string}){
   const [orders,setOrders]=useState<OrderListItem[]>([]);const [selected,setSelected]=useState<string|null>(null);const [filters,setFilters]=useState({query:'',status:''});const [revision,setRevision]=useState(0);const [error,setError]=useState('');const [loading,setLoading]=useState(true);

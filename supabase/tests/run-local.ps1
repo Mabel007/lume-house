@@ -87,6 +87,8 @@ $guard$;
   Run-Sql 'reviewed media security' (Read-Sql (Join-Path $testRoot 'media.sql'))
   Run-Sql 'membership operations' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001700_admin_membership_operations.sql'))
   Run-Sql 'membership authorization and revocation' (Read-Sql (Join-Path $testRoot 'memberships.sql'))
+  Run-Sql 'customer cancellation requests' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001800_cancellation_requests.sql'))
+  Run-Sql 'cancellation request security and stock boundary' (Read-Sql (Join-Path $testRoot 'cancellation-requests.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin
@@ -95,6 +97,7 @@ begin
     or exists(select 1 from public.order_confirmation_jobs)
     or exists(select 1 from public.business_admins)
     or exists(select 1 from public.business_admin_history)
+    or exists(select 1 from public.order_cancellation_requests)
     or exists(select 1 from public.business_order_operations)
     or exists(select 1 from public.business_product_creations)
     or exists(select 1 from public.variant_inventory)
