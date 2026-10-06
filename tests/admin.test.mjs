@@ -91,7 +91,7 @@ test('cancellation copy preserves request and refund boundaries',async()=>{
  const {CancellationRequest,CancellationStatus}=await server.ssrLoadModule('/src/features/orders/CancellationRequest.tsx');
  const {parseCancellation}=await server.ssrLoadModule('/src/features/orders/cancellation.ts');
  const html=renderToStaticMarkup(React.createElement(CancellationRequest,{orderId:'local',status:'placed',token:'local'}));
- assert.match(html,/not immediate cancellation/);assert.match(html,/confirmation is required/);assert.match(html,/does not issue a refund/);
+ assert.match(html,/<h3 tabindex="-1">Cancellation request/);assert.match(html,/not immediate cancellation/);assert.match(html,/confirmation is required/);assert.match(html,/does not issue a refund/);
  const request={order_id:'local',reason:'Changed plans',requested_at:'2026-10-06T00:00:00Z',status:'pending',resolution:null};
  assert.deepEqual(parseCancellation(request),request);assert.equal(parseCancellation(null),null);assert.throws(()=>parseCancellation({status:'refunded'}));
  const pending=renderToStaticMarkup(React.createElement(CancellationStatus,{request}));assert.match(pending,/pending/);assert.match(pending,/Changed plans/);assert.doesNotMatch(pending,/Payment successful/);
