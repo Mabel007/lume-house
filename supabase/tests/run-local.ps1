@@ -83,6 +83,8 @@ $guard$;
   Run-Sql 'admin order transitions and atomic inventory' (Read-Sql (Join-Path $testRoot 'admin-orders.sql'))
   Run-Sql 'product creation receipts migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001500_product_creation_receipts.sql'))
   Run-Sql 'idempotent product creation' (Read-Sql (Join-Path $testRoot 'product-creation.sql'))
+  Run-Sql 'reviewed media foundation' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001600_product_media_foundation.sql'))
+  Run-Sql 'reviewed media security' (Read-Sql (Join-Path $testRoot 'media.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin

@@ -74,3 +74,9 @@ test('structured existing options have labeled controls and removal',async()=>{
  const html=renderToStaticMarkup(React.createElement(VariantEditor,{variant:{options:{Color:'Cream',Size:'Large'},sku:'LOCAL',price_cents:100},productId:'local',token:'local',saved:()=>{}}));
  assert.match(html,/Option 1 name/);assert.match(html,/value="Cream"/);assert.match(html,/Remove option 2/);assert.doesNotMatch(html,/textarea/);
 });
+
+test('media foundation states its actual capability without pretending uploads',async()=>{
+ const {ProductMedia}=await server.ssrLoadModule('/src/features/admin/ProductMedia.tsx');
+ const html=renderToStaticMarkup(React.createElement(ProductMedia,{product:{id:'local',name:'Local',image_path:'/images/mug.svg'},token:'local',saved:()=>{}}));
+ assert.match(html,/Product media/);assert.match(html,/Uploads and galleries are not available yet/);assert.match(html,/Loading reviewed media/);assert.doesNotMatch(html,/type="file"/);
+});

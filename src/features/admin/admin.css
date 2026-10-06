@@ -20,3 +20,5 @@
 .admin-option-row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; margin-block: 1rem; }
 .admin-option-row label { flex: 1 1 12rem; min-width: 0; }
 .admin-form fieldset { min-width: 0; }
+
+.admin-media-preview { width: min(100%, 20rem); aspect-ratio: 1; object-fit: contain; }
