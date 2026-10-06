@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { getSupabaseClient } from '../../lib/supabase/client';
 import { checkAdmin } from './adminRepository';
+import { AdminWorkspace } from './AdminWorkspace';
 
 function AdminAccess({ token }: { token: string }) {
   const [state, setState] = useState<'loading' | 'denied' | 'allowed' | 'error'>('loading');
@@ -15,7 +16,7 @@ function AdminAccess({ token }: { token: string }) {
   if (state === 'loading') return <p role="status">Checking administration access…</p>;
   if (state === 'error') return <p role="alert">Administration access could not be checked. Reload to retry.</p>;
   if (state === 'denied') return <p>This account does not have business administration access.</p>;
-  return <p>Business administration access is authorized. Operational tools will appear here.</p>;
+  return <AdminWorkspace token={token} />;
 }
 
 export function AdminPage() {

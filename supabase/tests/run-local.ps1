@@ -73,6 +73,8 @@ $guard$;
   Run-Sql 'trusted atomic checkout/idempotency/email leases' (Read-Sql (Join-Path $testRoot 'checkout.sql'))
   Run-Sql 'trusted business authorization migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001000_business_admin.sql'))
   Run-Sql 'business authorization security' (Read-Sql (Join-Path $testRoot 'admin.sql'))
+  Run-Sql 'admin products migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001100_admin_products.sql'))
+  Run-Sql 'admin products security and history' (Read-Sql (Join-Path $testRoot 'admin-products.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin

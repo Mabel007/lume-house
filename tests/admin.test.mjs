@@ -7,6 +7,13 @@ import {createServer} from 'vite';
 let server,AdminPage,AuthContext,checkAdmin;
 before(async()=>{server=await createServer({server:{middlewareMode:true,hmr:false},appType:'custom'});({AdminPage}=await server.ssrLoadModule('/src/features/admin/AdminPage.tsx'));({AuthContext}=await server.ssrLoadModule('/src/features/auth/AuthContext.ts'));({checkAdmin}=await server.ssrLoadModule('/src/features/admin/adminRepository.ts'));});
 after(async()=>{await server?.close();});
+test('product editor labels editorial inputs separately from initial variant price',async()=>{
+ const {ProductEditor}=await server.ssrLoadModule('/src/features/admin/ProductManager.tsx');
+ const render=product=>renderToStaticMarkup(React.createElement(ProductEditor,{product,token:'local-token',saved:()=>{}}));
+ assert.match(render(null),/Initial default variant price/);assert.match(render(null),/name="description"/);
+ const product={id:'fixture',name:'Local',description:'Description',category:'Test',image_path:'/images/mug.svg',background_color:'#e9e3d8',display_order:0,active:false,updated_at:'2026-10-06'};
+ assert.doesNotMatch(render(product),/name="initial_price"/);assert.match(render(product),/Existing orders keep/);
+});
 test('signed-out admin renders account entry and never operational data',()=>{
  const html=renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(AuthContext.Provider,{value:{loading:false,session:null}},React.createElement(AdminPage))));
  assert.match(html,/authorized Google account/);assert.match(html,/href="\/account"/);assert.doesNotMatch(html,/Operational tools/);
