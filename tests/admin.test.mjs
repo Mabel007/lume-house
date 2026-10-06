@@ -7,6 +7,19 @@ import {createServer} from 'vite';
 let server,AdminPage,AuthContext,checkAdmin;
 before(async()=>{server=await createServer({server:{middlewareMode:true,hmr:false},appType:'custom'});({AdminPage}=await server.ssrLoadModule('/src/features/admin/AdminPage.tsx'));({AuthContext}=await server.ssrLoadModule('/src/features/auth/AuthContext.ts'));({checkAdmin}=await server.ssrLoadModule('/src/features/admin/adminRepository.ts'));});
 after(async()=>{await server?.close();});
+test('operational transitions are mode-specific and terminal-protected',async()=>{
+ const {nextOperationalStatuses:next}=await server.ssrLoadModule('/src/features/admin/orderOperations.ts');
+ assert.deepEqual(next('placed','pickup'),['confirmed','cancelled']);assert.deepEqual(next('confirmed','delivery'),['processing','cancelled']);
+ assert.deepEqual(next('processing','pickup'),['ready_for_pickup']);assert.deepEqual(next('processing','delivery'),['out_for_delivery']);
+ assert.deepEqual(next('completed','pickup'),[]);assert.deepEqual(next('cancelled','delivery'),[]);assert.deepEqual(next('ready_for_pickup','delivery'),[]);
+});
+test('order operations preserve payment distinction and do not offer paid controls',async()=>{
+ const {OrderOperations}=await server.ssrLoadModule('/src/features/admin/OrderManager.tsx');
+ const html=renderToStaticMarkup(React.createElement(OrderOperations,{order:{status:'placed',fulfilment_method:'pickup'},token:'local-token',saved:()=>{}}));
+ assert.match(html,/Operational status is separate from payment/);assert.match(html,/Cancellation does not issue a refund/);assert.doesNotMatch(html,/value="paid"/);assert.match(html,/name="reason"/);
+ const terminal=renderToStaticMarkup(React.createElement(OrderOperations,{order:{status:'completed',fulfilment_method:'pickup'},token:'local-token',saved:()=>{}}));
+ assert.match(terminal,/No further operational transitions/);assert.doesNotMatch(terminal,/<form/);
+});
 test('inventory editor labels actual adjustment and never implies invented stock',async()=>{
  const {InventoryEditor}=await server.ssrLoadModule('/src/features/admin/InventoryManager.tsx');
  const html=renderToStaticMarkup(React.createElement(InventoryEditor,{row:{variant_id:'local',product_name:'Local',sku:'LOCAL',inventory_policy:'untracked',on_hand:null,allocated:null},token:'local-token',saved:()=>{}}));

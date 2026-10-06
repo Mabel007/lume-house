@@ -79,6 +79,8 @@ $guard$;
   Run-Sql 'admin variant safety' (Read-Sql (Join-Path $testRoot 'admin-variants.sql'))
   Run-Sql 'admin inventory migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001300_admin_inventory.sql'))
   Run-Sql 'admin inventory operations' (Read-Sql (Join-Path $testRoot 'admin-inventory.sql'))
+  Run-Sql 'admin order lifecycle migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001400_admin_orders.sql'))
+  Run-Sql 'admin order transitions and atomic inventory' (Read-Sql (Join-Path $testRoot 'admin-orders.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin
