@@ -16,3 +16,7 @@
 .admin-page h1, .admin-workspace h3, .admin-workspace h4 { overflow-wrap: anywhere; }
 .admin-workspace .checkout-grid { grid-template-columns: minmax(0, 1fr); }
 .admin-workspace .order-items li { flex-wrap: wrap; gap: .5rem; }
+
+.admin-option-row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; margin-block: 1rem; }
+.admin-option-row label { flex: 1 1 12rem; min-width: 0; }
+.admin-form fieldset { min-width: 0; }

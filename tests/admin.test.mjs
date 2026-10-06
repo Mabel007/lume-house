@@ -35,7 +35,7 @@ test('inventory editor labels actual adjustment and never implies invented stock
 test('variant editor preserves default identity and requires explicit real options',async()=>{
  const {VariantEditor}=await server.ssrLoadModule('/src/features/admin/VariantManager.tsx');
  const render=variant=>renderToStaticMarkup(React.createElement(VariantEditor,{variant,productId:'local',token:'local-token',saved:()=>{}}));
- assert.match(render(null),/Options \(JSON object\)/);assert.match(render(null),/Do not invent default options/);
+ assert.match(render(null),/Variant options/);assert.match(render(null),/Add option/);assert.match(render(null),/Do not invent default options/);
  const html=render({id:'default:local',is_default:true,sku:'DEFAULT-local',options:{},price_cents:200,active:false});
  assert.doesNotMatch(html,/name="options"/);assert.match(html,/readOnly=""/);assert.match(html,/Currency is NLE/);
 });
@@ -59,4 +59,18 @@ test('membership check freezes bearer identity and fails closed',async()=>{
  assert.equal(await checkAdmin(client,'local-token'),false);assert.deepEqual(captured,{name:'is_business_admin',k:'Authorization',v:'Bearer local-token'});
  await assert.rejects(checkAdmin({rpc:()=>({setHeader:async()=>({data:null,error:{code:'42501'}})})},'local-token'),/could not be checked/);
  await assert.rejects(checkAdmin({rpc:()=>({setHeader:async()=>({data:'true',error:null})})},'local-token'),/could not be checked/);
+});
+
+test('structured options round trip, trim and reject malformed rows',async()=>{
+ const {optionRows,serializeOptions}=await server.ssrLoadModule('/src/features/admin/variantOptions.ts');
+ assert.deepEqual(serializeOptions([]),{});
+ assert.deepEqual(serializeOptions([{id:1,name:' Size ',value:' Large '},{id:2,name:'Color',value:'Cream'}]),{Color:'Cream',Size:'Large'});
+ assert.deepEqual(serializeOptions(optionRows({Color:'Cream',Size:'Large'})),{Color:'Cream',Size:'Large'});
+ for(const rows of [[{id:0,name:'',value:'x'}],[{id:0,name:'Color',value:''}],[{id:0,name:'Color',value:'x'},{id:1,name:' Color ',value:'y'}]]) assert.throws(()=>serializeOptions(rows));
+ assert.throws(()=>optionRows({Color:123}));assert.throws(()=>optionRows({Color:' Cream '}));assert.throws(()=>optionRows([]));
+});
+test('structured existing options have labeled controls and removal',async()=>{
+ const {VariantEditor}=await server.ssrLoadModule('/src/features/admin/VariantManager.tsx');
+ const html=renderToStaticMarkup(React.createElement(VariantEditor,{variant:{options:{Color:'Cream',Size:'Large'},sku:'LOCAL',price_cents:100},productId:'local',token:'local',saved:()=>{}}));
+ assert.match(html,/Option 1 name/);assert.match(html,/value="Cream"/);assert.match(html,/Remove option 2/);assert.doesNotMatch(html,/textarea/);
 });
