@@ -7,6 +7,11 @@ import {createServer} from 'vite';
 let server,AdminPage,AuthContext,checkAdmin;
 before(async()=>{server=await createServer({server:{middlewareMode:true,hmr:false},appType:'custom'});({AdminPage}=await server.ssrLoadModule('/src/features/admin/AdminPage.tsx'));({AuthContext}=await server.ssrLoadModule('/src/features/auth/AuthContext.ts'));({checkAdmin}=await server.ssrLoadModule('/src/features/admin/adminRepository.ts'));});
 after(async()=>{await server?.close();});
+test('inventory editor labels actual adjustment and never implies invented stock',async()=>{
+ const {InventoryEditor}=await server.ssrLoadModule('/src/features/admin/InventoryManager.tsx');
+ const html=renderToStaticMarkup(React.createElement(InventoryEditor,{row:{variant_id:'local',product_name:'Local',sku:'LOCAL',inventory_policy:'untracked',on_hand:null,allocated:null},token:'local-token',saved:()=>{}}));
+ assert.match(html,/Not configured/);assert.match(html,/Quantity change \(integer\)/);assert.match(html,/name="reason"/);assert.match(html,/Allocated stock must stay tracked/);assert.doesNotMatch(html,/Only \d+ left/);
+});
 test('variant editor preserves default identity and requires explicit real options',async()=>{
  const {VariantEditor}=await server.ssrLoadModule('/src/features/admin/VariantManager.tsx');
  const render=variant=>renderToStaticMarkup(React.createElement(VariantEditor,{variant,productId:'local',token:'local-token',saved:()=>{}}));
