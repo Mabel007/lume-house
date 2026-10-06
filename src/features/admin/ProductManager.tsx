@@ -62,8 +62,8 @@ export function ProductManager({ token }: { token: string }) {
     <label>Search products<input value={query} onChange={e => setQuery(e.target.value)} type="search" /></label><button className="button" onClick={() => setSelected(null)}>Create product</button>
     {loading && <p role="status">Loading products…</p>}{error && <p role="alert">{error} <button onClick={() => setRevision(r => r + 1)}>Retry loading products</button></p>}{!loading && !error && !visible.length && <p>No products match.</p>}
     {!loading && !error && <ul className="admin-list">{visible.map(p => <li key={p.id}><button onClick={() => setSelected(p)}>{p.name} — {p.active ? 'Active' : 'Archived'}</button></li>)}</ul>}
-    {!loading && !error && selected !== undefined && <ProductEditor key={selected?.id ?? 'new'} product={selected} token={token} saved={() => { setSelected(undefined); setRevision(r => r + 1); }} />}
+    {!loading && !error && selected !== undefined && <ProductEditor key={`editor-${selected?.id ?? 'new'}`} product={selected} token={token} saved={() => { setSelected(undefined); setRevision(r => r + 1); }} />}
     {!loading && !error && selected && <ProductMedia key={`media-${selected.id}-${selected.updated_at}`} product={selected} token={token} saved={() => { setSelected(undefined); setRevision(r => r + 1); }} />}
-    {!loading && !error && selected && <VariantManager key={selected.id} productId={selected.id} token={token} />}
+    {!loading && !error && selected && <VariantManager key={`variants-${selected.id}`} productId={selected.id} token={token} />}
   </section>;
 }
