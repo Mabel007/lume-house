@@ -7,6 +7,17 @@ const fixture = {
   VITE_SUPABASE_URL: "https://catalog.example.invalid",
   VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_unit-test-only",
 };
+test("loopback HTTP requires explicit development and retains origin/key guards", () => {
+  for (const host of ["localhost", "127.0.0.1"]) {
+    const local = { ...fixture, VITE_SUPABASE_URL: `http://${host}:54321` };
+    assert.throws(() => readSupabaseConfig(local));
+    assert.equal(readSupabaseConfig(local, true).url, local.VITE_SUPABASE_URL);
+    assert.throws(() => readSupabaseConfig({ ...local, VITE_SUPABASE_PUBLISHABLE_KEY: "sb_secret_test" }, true));
+  }
+  for (const url of ["http://example.invalid", "http://localhost.example.invalid", "http://127.0.0.1:54321/path", "http://user:pass@localhost:54321"]) {
+    assert.throws(() => readSupabaseConfig({ ...fixture, VITE_SUPABASE_URL: url }, true));
+  }
+});
 test("accepts only HTTPS project origins and publishable-format keys", () => {
   assert.equal(readSupabaseConfig(fixture).url, fixture.VITE_SUPABASE_URL);
   for (const VITE_SUPABASE_URL of [
