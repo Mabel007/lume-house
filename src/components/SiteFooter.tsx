@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { shop } from "../config/shop";
 import { customerContent } from "../config/customerContent";
+import { hngEvaluation } from "../config/hngEvaluation";
+import { LockIcon } from "./Icon";
 
 const groups = [
   { title: "Shop", links: [["Shop All", "/"], ["Bag", "/cart"]] },
@@ -9,7 +11,7 @@ const groups = [
   { title: "Legal", links: [["Privacy Policy", "/privacy"], ["Terms & Conditions", "/terms"]] },
 ] as const;
 
-export function SiteFooter() {
+export function SiteFooter({ showStaffLogin = hngEvaluation.showStaffLogin }: { showStaffLogin?: boolean } = {}) {
   return <footer className="wrap site-footer commerce-footer">
     <div className="footer-content">
       <div className="footer-brand">
@@ -29,6 +31,7 @@ export function SiteFooter() {
     <div className="footer-bottom">
       <p>© {new Date().getFullYear()} Lumé House. All rights reserved.</p>
       <p>Built by <a href="https://najbuilds.com">Naj Builds</a></p>
+      {showStaffLogin && <div className="footer-staff-access"><Link to="/admin" aria-describedby="staff-access-description"><LockIcon />Staff Login</Link><p id="staff-access-description">For authorized store personnel</p></div>}
     </div>
   </footer>;
 }

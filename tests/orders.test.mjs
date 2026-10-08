@@ -16,6 +16,15 @@ let server, components;
 before(async()=>{server=await createServer({server:{middlewareMode:true,hmr:false},appType:'custom'});components=await server.ssrLoadModule('/src/features/orders/OrderPages.tsx');});
 after(async()=>{await server?.close()});
 const render=(Component,props={})=>renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(Component,props)));
+test('shared snapshot separates operational/payment/fulfilment states and contextual heading levels',()=>{
+ const customer=render(components.OrderSnapshot,{order:orderFixture});const admin=render(components.OrderSnapshot,{order:orderFixture,context:'admin'});
+ assert.match(customer,/<h2[^>]*>Your selected pieces/);assert.match(admin,/<h3[^>]*>Ordered items/);assert.doesNotMatch(admin,/<h2[ >]/);
+ for(const html of [customer,admin]){for(const text of ['Operational status','Payment status','Fulfilment — Delivery','Payment: Awaiting confirmation','not been charged or verified','not payment settlement','NLe 500','NLe 50','number ending 1208'])assert.ok(html.includes(text));assert.doesNotMatch(html,/Mark Paid|Verify Payment|Refund payment|Charge card/);}
+ for(const payment_status of ['pending','awaiting_payment','paid','failed'])for(const status of ['completed','cancelled']){
+  const order={...orderFixture,status,payment_status,fulfilment_method:'pickup',pickup_location:'Lumley'};const html=render(components.OrderSnapshot,{order,context:'admin'});
+  assert.ok(html.includes(`Order: ${status}`));assert.ok(html.includes(`Payment: ${payment_status==='awaiting_payment'?'Awaiting confirmation':payment_status}`));assert.match(html,/Fulfilment — Pickup/);assert.match(html,/ready for pickup/);assert.equal(order.payment_status,payment_status);
+ }
+});
 test('historical order boundary preserves prices and rejects inconsistent money',()=>{
  const order=parseOrder(orderFixture);assert.equal(order.order_items[0].unit_price_cents,25000);
  assert.throws(()=>parseOrder({...orderFixture,total_cents:1}));

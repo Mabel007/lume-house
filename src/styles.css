@@ -1194,6 +1194,11 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 .footer-links a { display: inline-block; padding-block: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .footer-links a:hover, .footer-links a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
 .footer-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; border-top: 1px solid #deddd1; margin-top: 36px; padding-top: 20px; }
+.footer-staff-access { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; max-width: 100%; }
+.footer-staff-access a { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 44px; padding: .65rem 1rem; border: 1px solid #817d70; border-radius: 4px; background: var(--color-paper); color: var(--color-ink); font-size: .875rem; font-weight: 600; text-decoration: none; }
+.footer-staff-access a:hover { background: #eeeee4; }
+.footer-staff-access svg { flex-shrink: 0; }
+.footer-staff-access p { font-size: .75rem; color: #626c60; margin: 0; }
 @media (max-width: 1000px) { .footer-links { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) {
   .site-header { flex-wrap: wrap; height: auto; padding-block: 20px; gap: 16px; }

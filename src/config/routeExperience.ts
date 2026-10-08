@@ -1,3 +1,5 @@
+import { adminSection, isAdminRoute } from "./adminNavigation";
+
 const routeTitles: Readonly<Record<string, string>> = {
   "/": "Shop",
   "/cart": "Your Bag",
@@ -17,7 +19,7 @@ export function routeTitle(pathname: string, productName?: string): string {
   if (Object.hasOwn(routeTitles, path)) return routeTitles[path];
   if (/^\/products\/[^/]+$/.test(path)) return productName || "Product details";
   if (path.startsWith("/account/")) return "Your account";
-  if (path === "/admin" || path.startsWith("/admin/")) return "Administration";
+  if (isAdminRoute(path)) return `${adminSection(path)?.title ?? "Page not found"} | Administration`;
   if (path.startsWith("/orders/")) return "Your order";
   return "Page not found";
 }

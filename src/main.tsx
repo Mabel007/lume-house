@@ -2,7 +2,7 @@ import { ProductDetailsPage } from "./features/products/ProductDetailsPage";
 import { AdminPage } from "./features/admin/AdminPage";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
+import { createBrowserRouter, createRoutesFromElements, Link, Route, RouterProvider } from "react-router-dom";
 import { CartProvider } from "./features/cart/CartProvider";
 import { Layout } from "./components/Layout";
 import { ShopPage } from "./features/products/ShopPage";
@@ -14,15 +14,10 @@ import { CustomerAccount, CustomerCheckout, CustomerOrders,CustomerOrder } from 
 import { AboutPage } from "./features/content/AboutPage";
 import { HelpPage } from "./features/content/HelpPage";
 import { DeliveryPickupPage, ReturnsRefundsPage, PrivacyPage, TermsPage } from "./features/content/PolicyPages";
+import "./typography.css";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-      <ProductProvider>
-        <CartProvider>
-          <Routes>
-            <Route element={<Layout />}>
+const router = createBrowserRouter(createRoutesFromElements(
+            <Route element={<AuthProvider><ProductProvider><CartProvider><Layout /></CartProvider></ProductProvider></AuthProvider>}>
               <Route path="/" element={<ShopPage />} />
               <Route path="/admin/*" element={<AdminPage />} />
               <Route path="/products/:productId" element={<ProductDetailsPage />} />
@@ -53,10 +48,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 }
               />
             </Route>
-          </Routes>
-        </CartProvider>
-      </ProductProvider>
-      </AuthProvider>
-    </BrowserRouter>
-  </React.StrictMode>,
-);
+));
+ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><RouterProvider router={router} /></React.StrictMode>);

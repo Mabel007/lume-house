@@ -4,6 +4,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { createServer } from "vite";
+import { readFileSync } from "node:fs";
 
 let server;
 let ProductContext, CartContext, ShopPage, CartPage, CheckoutPage;
@@ -395,4 +396,42 @@ test("Product Details route handles loading, error and inactive/missing products
     assert.equal((html.match(/<h1[ >]/g)??[]).length,1);
     if(state.status==='ready')assert.match(html,/This piece is unavailable/);else assert.match(html,/role="status"|role="alert"/);
   }
+});
+
+test('admin chrome is scoped without changing storefront landmarks or private Bag feedback',()=>{
+ for(const path of ['/admin','/admin/orders','/admin/products','/admin/inventory','/admin/memberships','/admin/unknown']){
+  const html=renderLayout(path,{items,status:'saving',error:'Synthetic Bag failure',retry(){}});
+  assert.match(html,/href="#main"/);assert.match(html,/<main id="main"[^>]*tabindex="-1"/);
+  assert.doesNotMatch(html,/Main navigation|<footer|Saving your Bag|Synthetic Bag failure/);
+ }
+ for(const path of ['/','/cart','/account/orders','/administrator']){
+  const html=renderLayout(path,{items,status:'saving',error:'Synthetic Bag failure',retry(){}});
+  assert.match(html,/Main navigation/);assert.match(html,/<footer/);assert.match(html,/Saving your Bag/);assert.match(html,/Synthetic Bag failure/);
+ }
+});
+
+test('temporary Staff Login follows its flag, targets permanent admin, and disables without losing footer links',async()=>{
+ const {hngEvaluation}=await server.ssrLoadModule('/src/config/hngEvaluation.ts');
+ const footer=props=>renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(SiteFooter,props)));
+ assert.equal(footer().includes('Staff Login'),hngEvaluation.showStaffLogin);
+ const enabled=footer({showStaffLogin:true});assert.match(enabled,/<a[^>]*href="\/admin"[^>]*>.*?Staff Login<\/a>/);
+ assert.match(enabled,/aria-describedby="staff-access-description"/);assert.match(enabled,/<svg[^>]*aria-hidden="true"/);assert.match(enabled,/id="staff-access-description">For authorized store personnel/);
+ const disabled=footer({showStaffLogin:false});assert.doesNotMatch(disabled,/Staff Login|href="\/admin"|For authorized store personnel|staff-access-description|footer-staff-access/);
+ for(const html of [footer(),disabled]){
+  for(const path of ['/','/cart','/about#our-story','/about#our-values','/help','/account/orders','/help/delivery-pickup','/help/returns-refunds','/privacy','/terms'])assert.ok(html.includes(`href="${path}"`));
+  assert.equal((html.match(/<ul>/g)??[]).length,4);assert.match(html,/Built by/);
+ }
+});
+test('Staff Login stays absolute on customer nested pages and absent throughout the admin shell',async()=>{
+ const {hngEvaluation}=await server.ssrLoadModule('/src/config/hngEvaluation.ts');
+ for(const path of ['/','/products/local-test','/cart','/checkout','/account','/account/orders','/account/orders/local-test','/orders/local-test/success','/auth/callback','/about','/help','/help/delivery-pickup','/help/returns-refunds','/privacy','/terms','/not-found']){
+  const html=renderLayout(path);const footer=html.match(/<footer[^>]*>(.*?)<\/footer>/s)[1];
+  assert.equal(footer.includes('Staff Login'),hngEvaluation.showStaffLogin);
+  if(hngEvaluation.showStaffLogin)assert.match(footer,/<a[^>]*href="\/admin"[^>]*>.*?Staff Login<\/a>/);
+ }
+ for(const path of ['/admin','/admin/orders','/admin/products','/admin/inventory','/admin/memberships','/admin/missing'])assert.doesNotMatch(renderLayout(path),/<footer|Staff Login/);
+});
+test('responsive role tokens retain user font preferences and aligned admin controls',()=>{
+ const css=readFileSync('src/typography.css','utf8');for(const token of ['hero','h1','h2','h3','body','functional','name','meta','eyebrow','footer','tertiary'])assert.ok(css.includes(`--type-${token}:`));assert.match(css,/--type-hero: 2.75rem/);assert.match(css,/--type-hero: 3.75rem/);assert.match(css,/--type-hero: 4.75rem/);assert.match(css,/--type-body: 1.0625rem/);assert.match(css,/min-width: 700px/);assert.match(css,/min-width: 1000px/);assert.doesNotMatch(css,/(?:html|:root)\s*\{[^}]*font-size:/);assert.match(css,/\.footer-staff-access a \{ font-size: var\(--type-functional\)/);assert.match(css,/min-height: 44px/);
+ const admin=readFileSync('src/features/admin/admin.css','utf8');assert.match(admin,/\.admin-order-filters \{ display: grid;[^}]*align-items: end/);assert.match(admin,/\.admin-workspace \.admin-order-filters label \{ margin: 0/);
 });

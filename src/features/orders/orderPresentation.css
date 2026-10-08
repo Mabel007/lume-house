@@ -1,0 +1,15 @@
+.order-snapshot { min-width: 0; }
+.order-snapshot .order-state-group { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #deddd1; }
+.order-snapshot h2, .order-snapshot h3 { font: normal 1.375rem/1.35 Georgia, serif; margin-bottom: .75rem; overflow-wrap: anywhere; }
+.order-snapshot p { line-height: 1.65; overflow-wrap: anywhere; }
+.order-snapshot .status-pill { font-size: .875rem; }
+.order-snapshot .order-items li { flex-wrap: wrap; gap: .75rem; }
+.order-snapshot .order-information { margin-top: 1.5rem; }
+.order-snapshot .detail-group { min-width: 0; }
+.order-activity { list-style: none; padding: 0; margin-block: 1rem; }
+.order-activity li { position: relative; border-left: 2px solid #b9b1a0; padding: .25rem 0 1.25rem 1rem; overflow-wrap: anywhere; }
+.order-activity li:last-child { padding-bottom: .25rem; }
+.order-activity p { margin: .4rem 0 0; line-height: 1.6; }
+.order-activity time { display: block; margin-top: .35rem; font-size: .875rem; color: #4c574a; }
+.order-activity-note { font-size: .875rem; line-height: 1.6; color: #4c574a; }
+@media (max-width: 700px) { .order-snapshot .order-information { grid-template-columns: minmax(0, 1fr); } }

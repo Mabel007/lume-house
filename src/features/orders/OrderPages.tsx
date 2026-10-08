@@ -1,5 +1,6 @@
 import { CancellationRequest } from './CancellationRequest';
-import { variantLabel } from "../products/variants";
+import { OrderSnapshot } from './OrderSnapshot';
+export { OrderSnapshot } from './OrderSnapshot';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -7,7 +8,7 @@ import { getSupabaseClient } from '../../lib/supabase/client';
 import { formatMoney } from '../../config/shop';
 import { loadOrders,loadOrder,retryConfirmation,historyPageSize } from './orderRepository';
 import { orderLabel,type Order,type OrderListItem } from './orders';
-import { OrderSummary } from '../checkout/OrderSummary';
+
 
 export function OrderHistory({ orders }: {orders:OrderListItem[]}) {
   return <ul className="order-history">{orders.map(order=><li key={order.id}><Link to={`/account/orders/${order.id}`}><div className="order-reference"><span className="eyebrow">ORDER</span><strong>{order.order_reference}</strong><span className="order-date">{new Date(order.created_at).toLocaleDateString('en-GB')} · {order.fulfilment_method === 'pickup' ? 'Pickup' : 'Delivery'}</span></div><div className="order-statuses"><span className="status-pill">{orderLabel(order.status)}</span><span className="status-pill payment-pill">Payment: {orderLabel(order.payment_status)}</span></div><div className="order-total"><strong>{formatMoney(order.total_cents)}</strong><span className="text-link">View details <span aria-hidden="true">→</span></span></div></Link></li>)}</ul>;
@@ -24,9 +25,6 @@ export function MyOrdersPage() {
   },[id,page,revision]);
   if(!id || auth.loading) return <AccountRequired/>;
   return <section className="wrap page-section orders-page motion-enter"><Link to="/account" className="back-link">My account</Link><p className="eyebrow">MY ORDERS</p><h1>Orders for your home.</h1><p className="account-intro">A record of the pieces you have chosen.</p>{busy&&<p role="status">Loading your orders…</p>}{error&&<p role="alert">{error} <button onClick={()=>{setBusy(true);setRevision(value=>value+1)}}>Retry</button></p>}{!busy&&!error&&!orders.length&&<p>You haven’t placed an order yet. <Link to="/">Explore the collection</Link></p>}<OrderHistory orders={orders}/>{more&&!busy&&!error&&<button className="button" onClick={()=>{setBusy(true);setPage(value=>value+1)}}>Load more orders</button>}</section>;
-}
-export function OrderSnapshot({order}: {order:Order}) {
-  return <><div className="checkout-grid order-detail-grid"><div className="order-detail-content"><p className="order-date">{new Date(order.created_at).toLocaleString('en-GB')}</p><div className="detail-statuses"><span className="status-pill">Order: {orderLabel(order.status)}</span><span className="status-pill payment-pill">Payment: {orderLabel(order.payment_status)}</span></div><h2 className="detail-title">Your selected pieces</h2><ul className="order-items">{order.order_items.map((item,index)=><li key={index}><strong>{item.product_name}{item.variant_options && variantLabel({options:item.variant_options}) && <small className="order-item-options">{variantLabel({options:item.variant_options})}</small>}</strong><span>{item.quantity} × {formatMoney(item.unit_price_cents)}</span><span>{formatMoney(item.quantity*item.unit_price_cents)}</span></li>)}</ul><div className="order-information"><section className="detail-group"><p className="eyebrow">FULFILMENT</p><h2>{order.fulfilment_method==='pickup'?'Pickup':'Delivery'}</h2><p>{order.full_name}<br/>{order.customer_phone}<br/>{order.customer_email}</p>{order.fulfilment_method==='pickup'?<p>{order.pickup_location}</p>:<p>{order.delivery_street_address}<br/>{order.delivery_area}, {order.delivery_city}<br/>{order.delivery_zone_label}{order.delivery_instructions&&<><br/>{order.delivery_instructions}</>}</p>}</section><section className="detail-group"><p className="eyebrow">MOBILE MONEY</p><h2>Payment</h2><p>{order.payment_provider==='orange'?'Orange Money':'Afrimoney'}{order.payment_phone_last4&&<> · number ending {order.payment_phone_last4}</>}<br/>{orderLabel(order.payment_status)}</p></section></div></div><aside className="summary order-summary"><h2>Order summary</h2><OrderSummary subtotal={order.subtotal_cents} deliveryFee={order.delivery_fee_cents}/></aside></div></>;
 }
 export function OrderSuccessMessage() { return <p className="checkout-notice"><strong>Your order has been placed.</strong>Payment is awaiting confirmation. Your selected mobile-money method has not been charged or verified by Lumé House.</p>; }
 export function OrderDetailPage({success=false}: {success?:boolean}) {

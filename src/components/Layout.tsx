@@ -6,11 +6,13 @@ import { useCart } from "../features/cart/CartContext";
 import { BagIcon } from "./Icon";
 import { aboutFragmentTarget, routeTitle } from "../config/routeExperience";
 import { SiteFooter } from "./SiteFooter";
+import { isAdminRoute } from "../config/adminNavigation";
 
 export function Layout() {
   const { items, status, error, retry } = useCart();
   const count = items.reduce((total, item) => total + item.quantity, 0);
   const { pathname, hash, key } = useLocation();
+  const administration = isAdminRoute(pathname);
   const { state: catalog } = useProducts();
   const productName = catalog.status === "ready" ? catalog.products.find(product => pathname === `/products/${encodeURIComponent(product.id)}`)?.name : undefined;
   const main = useRef<HTMLElement>(null);
@@ -42,6 +44,7 @@ export function Layout() {
       <a href="#main" className="skip-link">
         Skip to content
       </a>
+      {!administration && <>
       <div className="announcement">
         {shop.tagline} <span>FREETOWN / SIERRA LEONE</span>
       </div>
@@ -71,13 +74,14 @@ export function Layout() {
           </NavLink>
         </nav>
       </header>
+      </>}
       <main id="main" ref={main} tabIndex={-1}>
-        {status === "loading" && <p className="wrap" role="status">Loading your Bag…</p>}
-        {status === "saving" && <p className="wrap" role="status">Saving your Bag…</p>}
-        {error && <div className="wrap" role="alert">{error} <button onClick={retry}>Retry saved Bag</button></div>}
+        {!administration && status === "loading" && <p className="wrap" role="status">Loading your Bag…</p>}
+        {!administration && status === "saving" && <p className="wrap" role="status">Saving your Bag…</p>}
+        {!administration && error && <div className="wrap" role="alert">{error} <button onClick={retry}>Retry saved Bag</button></div>}
         <Outlet />
       </main>
-      <SiteFooter />
+      {!administration && <SiteFooter />}
     </>
   );
 }

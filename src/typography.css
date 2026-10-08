@@ -1,0 +1,55 @@
+/* Responsive role tokens; rem respects the user's root font preference. */
+:root {
+  --type-hero: 2.75rem;
+  --type-h1: 2rem;
+  --type-h2: 1.625rem;
+  --type-h3: 1.3125rem;
+  --type-body: 1rem;
+  --type-functional: 1rem;
+  --type-name: 1.0625rem;
+  --type-meta: .875rem;
+  --type-eyebrow: .875rem;
+  --type-footer: .9375rem;
+  --type-tertiary: .875rem;
+}
+@media (min-width: 700px) { :root { --type-hero: 3.75rem; --type-h1: 2.375rem; --type-h2: 1.875rem; --type-h3: 1.375rem; } }
+@media (min-width: 1000px) { :root { --type-hero: 4.75rem; --type-h1: 2.75rem; --type-h2: 2.125rem; --type-h3: 1.5rem; --type-body: 1.0625rem; --type-name: 1.125rem; --type-meta: .9375rem; --type-footer: 1rem; } }
+body { font-size: var(--type-body); line-height: 1.6; }
+.product-search label, .product-search input, .choice-group label { font-size: var(--type-functional); line-height: 1.5; }
+.field-error { font-size: var(--type-meta); line-height: 1.6; }
+/* Role selectors intentionally replace small legacy declarations, not logos/art. */
+main h1, .page-section h1, .product-details h1, .order-page > h1, .sign-in-copy h1, .empty-state h1, .admin-page-heading h1, .admin-access h1 { font-size: var(--type-h1); line-height: 1.2; letter-spacing: -.035em; overflow-wrap: anywhere; }
+.hero h1, .about-opening h1 { font-size: var(--type-hero); line-height: 1.1; }
+main h2, .section-heading h2, .content-page h2, .about-page h2, .edit-copy h2, .collection-links h2, .account-page h2, .summary > h2, .admin-screen h2, .order-snapshot h2 { font-size: var(--type-h2); line-height: 1.2; }
+main h3, .about-values-grid h3, .admin-screen h3, .admin-screen h4, .order-snapshot h3 { font-size: var(--type-h3); line-height: 1.25; }
+.site-header { height: auto; min-height: 100px; padding-block: 1rem; gap: 1rem; flex-wrap: wrap; }
+.site-header nav { flex-wrap: wrap; min-width: 0; }
+.site-header nav a, .admin-nav-title, .admin-storefront-link, .admin-sign-out { font-size: var(--type-functional); min-height: 44px; }
+.site-header nav a { display: inline-flex; align-items: center; }
+.button, .add-button, .filters button, .remove-button, .text-link, .back-link, .collection-links a, .form-grid label, .form-grid input, .form-grid select, .form-grid textarea, .admin-screen label, .admin-screen input, .admin-screen select, .admin-screen textarea, .admin-screen button { font-size: var(--type-functional); line-height: 1.5; }
+.filters button, .remove-button, .back-link, .text-link { min-height: 44px; }
+.quantity-control button { width: 44px; height: auto; min-height: 44px; }
+.quantity-control input { min-height: 44px; font-size: var(--type-functional); }
+.product-card h3, .cart-row h2, .summary-items h3, .order-reference strong, .order-items strong, .admin-order-link, .admin-product-name { font-size: var(--type-name); line-height: 1.35; overflow-wrap: anywhere; }
+.product-card h3 { min-width: 0; }
+.product-card .price, .line-price { font-size: var(--type-name); white-space: normal; overflow-wrap: anywhere; }
+.hero-description, .product-description, .product-details-description, .edit-copy > p:not(.eyebrow), .empty-state p, .checkout-notice, .account-intro, .content-heading > p:last-child, .about-intro, .detail-group p, .cart-row-detail > p:not(.product-category), .totals > div, .admin-page, .admin-page-description, .admin-order-list dd { font-size: var(--type-body); line-height: 1.6; }
+.eyebrow, .page-section .eyebrow, .order-reference .eyebrow, .detail-group .eyebrow, .admin-page .eyebrow, .admin-masthead-label, .admin-sidebar-label, .admin-account-label { font-size: var(--type-eyebrow); letter-spacing: .025em; }
+.announcement, .announcement span, .product-category, .product-badge, .product-index, .currency-note, .section-heading > p, .muted, .account-email, .order-date, .status-pill, .order-snapshot .status-pill, .order-items span, .summary-items span, .variant-option-price, .order-item-options, .feedback, .edit-pieces figcaption, .admin-nav-summary, .admin-sidebar-note, .admin-account-email, .admin-order-identity time, .admin-order-list dt, .admin-screen .status-pill, .admin-screen .order-date, .admin-screen .order-item-options, .order-activity time, .order-activity-note { font-size: var(--type-meta); line-height: 1.6; overflow-wrap: anywhere; }
+.announcement span { opacity: 1; letter-spacing: .025em; }
+.product-category, .product-description, .currency-note, .hero-note, .account-email, .order-date, .admin-order-list dt, .admin-order-identity time { color: #4c574a; }
+.hero-note, .small-note, .email-information .small-note, .admin-screen .small-note, .account-note > p:not(.eyebrow), .footer-bottom, .footer-staff-access p { font-size: var(--type-tertiary); line-height: 1.6; }
+.commerce-footer p { font-size: var(--type-tertiary); line-height: 1.6; }
+.footer-links a, .footer-brand > a:not(.brand) { font-size: var(--type-footer); }
+.footer-links h2 { font-size: var(--type-eyebrow); line-height: 1.4; letter-spacing: .025em; }
+.footer-staff-access a { font-size: var(--type-functional); }
+.admin-screen .order-snapshot h3 { font-size: var(--type-h3); }
+.order-snapshot p, .order-activity p { line-height: 1.6; }
+.order-information, .order-detail-content, .cart-row-detail, .summary-items li > div { min-width: 0; }
+.order-reference, .order-total, .summary-items li { overflow-wrap: anywhere; }
+.section-heading > p, .currency-note, .summary-items li > span { white-space: normal; }
+.cart-row { flex-wrap: wrap; }
+.cart-row-detail { flex: 1 1 10rem; }
+.totals > div { flex-wrap: wrap; }
+.totals dd { margin-left: 0; overflow-wrap: anywhere; }
+@media (max-width: 540px) { .site-header nav { width: 100%; justify-content: space-between; gap: .5rem; } .hero-copy { padding-inline: 1.25rem; } .section-heading { flex-wrap: wrap; } .summary-items li { flex-wrap: wrap; } }
