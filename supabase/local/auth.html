@@ -1,0 +1,14 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Local Auth QA helper</title><body><main><h1>LOCAL Auth QA helper</h1><p>This development-only helper signs into synthetic local Supabase users. Production login remains Google OAuth. Synthetic identities are created for this helper session.</p><label for="role">Local identity</label><select id="role"><option value="customer-a">Customer A</option><option value="customer-b">Customer B</option><option value="admin-a">Admin A</option><option value="admin-b">Admin B</option></select><button id="login">Sign into local app</button><p id="status" role="status"></p></main><script type="module">
+import {getSupabaseClient} from '/src/lib/supabase/client.ts';
+const status=document.querySelector('#status');
+document.querySelector('#login').addEventListener('click',async()=>{
+ try {
+  if(location.origin!=='http://127.0.0.1:5188'||!import.meta.env.DEV)throw new Error();
+  status.textContent='Authenticating with local Supabase...';
+  const response=await fetch('http://127.0.0.1:5190/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role:document.querySelector('#role').value})});
+  if(!response.ok)throw new Error();const session=await response.json();
+  const result=await getSupabaseClient().auth.setSession(session);if(result.error)throw new Error();
+  location.assign('/account');
+ }catch {status.textContent='Local sign-in unavailable. Check the local QA helper process.';}
+});
+</script></body></html>

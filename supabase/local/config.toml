@@ -1,0 +1,41 @@
+# Exclusively for the generated, unlinked local workspace.
+project_id = "lume-house"
+[api]
+enabled = true
+port = 54321
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+[studio]
+enabled = true
+port = 54323
+[local_smtp]
+enabled = true
+port = 54324
+[auth]
+site_url = "http://127.0.0.1:5188"
+additional_redirect_urls = ["http://127.0.0.1:5188/auth/callback"]
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+[storage]
+enabled = false
+[realtime]
+enabled = false
+[analytics]
+enabled = false
+[db.pooler]
+enabled = false
+[edge_runtime]
+enabled = false
+inspector_port = 8083
+[functions.place-order]
+verify_jwt = false
+import_map = "./functions/deno.json"
+[functions.order-email]
+verify_jwt = false
+import_map = "./functions/deno.json"

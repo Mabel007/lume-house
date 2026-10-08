@@ -1,0 +1,11 @@
+import {spawn} from 'node:child_process';
+import {writeFileSync} from 'node:fs';
+import {startDockerGuard} from './docker-guard.mjs';
+const guard=await startDockerGuard('lume-house');
+writeFileSync('.codex/local-stack/local-functions.env','ALLOWED_ORIGINS=http://127.0.0.1:5188\nRESEND_API_KEY=\n');
+const args=['functions','serve','--workdir','.codex/local-stack','--env-file','.codex/local-stack/local-functions.env'];
+const env={...process.env,DOCKER_HOST:guard.url.replace('http:','tcp:'),DOCKER_CONTEXT:'',SUPABASE_ACCESS_TOKEN:'',RESEND_API_KEY:''};
+const child=process.env.LOCAL_SUPABASE_CLI?spawn(process.env.LOCAL_SUPABASE_CLI,args,{env,windowsHide:true}):spawn('npx.cmd',['--yes','supabase@2.120.0',...args],{env,windowsHide:true,shell:true});
+child.stdout.on('data',()=>{});
+child.stderr.on('data',chunk=>{const text=String(chunk);if(!/eyJ|sb_|postgresql:/.test(text))process.stderr.write(text);});
+child.on('exit',async code=>{await guard.close();process.exitCode=code;});
