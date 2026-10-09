@@ -31,11 +31,11 @@ export function renderConfirmation(order: EmailOrder) {
   return { subject: `Lumé House — ${order.order_reference} received`, html, text };
 }
 
-export async function sendResend(apiKey: string, sender: string, order: EmailOrder, request: typeof fetch = fetch) {
+export async function sendResend(apiKey: string, sender: string, order: EmailOrder, request: typeof fetch = fetch, replyTo?: string) {
   const response = await request('https://api.resend.com/emails', {
     method: 'POST', signal: AbortSignal.timeout(15000),
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': `lume-order-confirmation-v1-${order.id}` },
-    body: JSON.stringify({ from: sender, to: [order.customer_email], ...renderConfirmation(order) }),
+    body: JSON.stringify({ from: sender, to: [order.customer_email], ...(replyTo ? { reply_to: replyTo } : {}), ...renderConfirmation(order) }),
   });
   if (!response.ok) throw new Error(`resend_http_${response.status}`);
   const data: unknown = await response.json();

@@ -4,6 +4,7 @@ export async function deliverConfirmation(admin: SupabaseClient, orderId: string
   const apiKey = Deno.env.get('RESEND_API_KEY');
   if (!apiKey) return 'queued'; // No claim/send attempt without server configuration.
   const sender = Deno.env.get('RESEND_FROM') || 'LumÃ© House <onboarding@resend.dev>';
+  const replyTo = Deno.env.get('RESEND_REPLY_TO')?.trim() || undefined;
   const claim = await admin.rpc('claim_order_confirmation', { p_order_id: orderId, p_sender: sender });
   if (claim.error) return 'queued';
   if (!claim.data) {
@@ -17,7 +18,7 @@ export async function deliverConfirmation(admin: SupabaseClient, orderId: string
     const loaded = await admin.from('orders').select('id,order_reference,full_name,customer_email,fulfilment_method,delivery_street_address,delivery_area,delivery_city,delivery_zone_label,delivery_instructions,pickup_location,subtotal_cents,delivery_fee_cents,total_cents,payment_provider,order_items(product_name,quantity,unit_price_cents,variant_options)').eq('id',orderId).single();
     if (loaded.error) throw new Error('order_snapshot_unavailable');
     loaded.data.order_items.sort((a,b) => a.product_name.localeCompare(b.product_name));
-    providerId = await sendResend(apiKey, claim.data.sender, loaded.data as EmailOrder);
+    providerId = await sendResend(apiKey, claim.data.sender, loaded.data as EmailOrder, fetch, replyTo);
   } catch (error) {
     // Store only a constrained operational code, never raw errors/PII/keys.
     errorCode = error instanceof Error && /^resend_http_\d{3}$/.test(error.message) ? error.message : 'send_failed';

@@ -69,6 +69,11 @@ test('Resend recipient comes from persisted snapshot, stable dedup key and hones
  const request=async(url,init)=>{captured={url,init};return new Response(JSON.stringify({id:'mock-message'}),{status:200})};
  assert.equal(await sendResend('unit-test-only','Lumé House <onboarding@resend.dev>',orderFixture,request),'mock-message');
  const payload=JSON.parse(captured.init.body);assert.deepEqual(payload.to,[orderFixture.customer_email]);
+ assert.deepEqual(payload,{from:'Lumé House <onboarding@resend.dev>',to:[orderFixture.customer_email],...renderConfirmation(orderFixture)});
+ assert.equal('reply_to' in payload,false);
+ await sendResend('unit-test-only','Lumé House <orders@send.najbuilds.com>',orderFixture,request,'contact@najbuilds.com');
+ assert.deepEqual(JSON.parse(captured.init.body),{from:'Lumé House <orders@send.najbuilds.com>',to:[orderFixture.customer_email],reply_to:'contact@najbuilds.com',...renderConfirmation(orderFixture)});
+ assert.equal(captured.url,'https://api.resend.com/emails');
  assert.equal(captured.init.headers['Idempotency-Key'],`lume-order-confirmation-v1-${orderFixture.id}`);
  await assert.rejects(sendResend('unit-test-only','sender',orderFixture,async()=>new Response('{}',{status:403})),/resend_http_403/);
 });
@@ -128,6 +133,23 @@ test('trusted handler authenticates JWT, rejects invalid auth, and strips owners
   assert.equal((await handler(new Request('https://edge.example.invalid',{method:'POST',headers:{Authorization:'Bearer synthetic-test-jwt','Content-Type':'application/json'},body:JSON.stringify({...payload,cart_version:3})}))).status,400);
   globalThis.fetch=async()=>new Response(JSON.stringify({msg:'invalid JWT'}),{status:401});
   assert.equal((await handler(new Request('https://edge.example.invalid',{method:'POST',headers:{Authorization:'Bearer invalid-test-jwt'},body:'{}'}))).status,401);
+ }finally{globalThis.fetch=previousFetch;if(previousDeno===undefined)delete globalThis.Deno;else globalThis.Deno=previousDeno;}
+});
+test('confirmation forwards optional runtime Reply-To while preserving claimed sender and job completion',async()=>{
+ const previousFetch=globalThis.fetch;const previousDeno=globalThis.Deno;
+ const sender='Lumé House <orders@send.najbuilds.com>';
+ try {
+  for(const configured of [undefined,'','   ',' contact@najbuilds.com ']){
+   const calls=[];let captured;
+   globalThis.Deno={env:{get:name=>({RESEND_API_KEY:'unit-test-only',RESEND_FROM:sender,RESEND_REPLY_TO:configured})[name]}};
+   globalThis.fetch=async(url,init)=>{captured={url,init};return new Response(JSON.stringify({id:'mock-message'}),{status:200})};
+   const admin={rpc:async(name,args)=>{calls.push({name,args});return name==='claim_order_confirmation'?{data:{claim_token:orderFixture.id,sender},error:null}:{data:true,error:null}},from:table=>{assert.equal(table,'orders');return {select(){return this},eq(){return this},single:async()=>({data:structuredClone(orderFixture),error:null})}}};
+   assert.equal(await deliverConfirmation(admin,orderFixture.id),'sent');
+   assert.deepEqual(calls[0],{name:'claim_order_confirmation',args:{p_order_id:orderFixture.id,p_sender:sender}});
+   assert.deepEqual(JSON.parse(captured.init.body),{from:sender,to:[orderFixture.customer_email],...(configured?.trim()?{reply_to:'contact@najbuilds.com'}:{}),...renderConfirmation(orderFixture)});
+   assert.equal(captured.init.headers['Idempotency-Key'],`lume-order-confirmation-v1-${orderFixture.id}`);
+   assert.deepEqual(calls[1],{name:'finish_order_confirmation',args:{p_order_id:orderFixture.id,p_claim_token:orderFixture.id,p_provider_id:'mock-message',p_error_code:null}});
+  }
  }finally{globalThis.fetch=previousFetch;if(previousDeno===undefined)delete globalThis.Deno;else globalThis.Deno=previousDeno;}
 });
 test('email failure is durably recorded without deleting or undoing committed orders',async()=>{
