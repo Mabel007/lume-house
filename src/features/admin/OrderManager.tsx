@@ -1,5 +1,8 @@
+import {AdminCsvExport} from './AdminCsvExport';
 import {AdminReadState} from './AdminReadState';
-import {parseAdminRows} from './adminValidation';
+import {useAdminPage} from './useAdminPage';
+import {AdminPagination} from './PaginationControls';
+const orderKey = (row: AdminOrderListItem) => row.id;
 import { AdminForm } from './AdminForm';
 import { useAdminReturnFocus, type AdminErrorKind } from './adminFormBehavior';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
@@ -10,7 +13,7 @@ import {Link,useLocation,useParams,useSearchParams} from 'react-router-dom';
 import {AdminOrderReadError,loadAdminOrder,confirmOrderTransition,parseAdminOrderList,orderFilters,orderListUrl,orderDetailUrl,type AdminOrderListItem} from './adminOrders';
 import {CancellationRequest} from '../orders/CancellationRequest';
 import {OrderSnapshot} from '../orders/OrderSnapshot';
-import {adminRpc,adminErrorKind,adminReadFailure} from './adminRepository';
+import {adminRpc,adminErrorKind} from './adminRepository';
 import {nextOperationalStatuses,orderTransitionConfirmation} from './orderOperations';
 import { AdminOrderTimeline } from './OrderTimeline';
 
@@ -65,11 +68,11 @@ export function AdminOrderList({orders,search}:{orders:AdminOrderListItem[];sear
 }
 export function OrderManager({token}:{token:string}) {
   const [params,setParams]=useSearchParams();const search=params.toString();const {query,status}=orderFilters(search);
-  const [orders,setOrders]=useState<AdminOrderListItem[]>([]);const [revision,setRevision]=useState(0);const [error,setError]=useState('');const [loading,setLoading]=useState(true);
-  useEffect(()=>{let active=true;async function load(){setLoading(true);setError('');try{const data=await adminRpc(getSupabaseClient(),token,'admin_list_orders',{p_query:query,p_status:status});const parsed=parseAdminRows(data,parseAdminOrderList,row=>row.id,200);if(active){setOrders(parsed);setLoading(false);}}catch(cause){if(active){setOrders([]);setError(adminReadFailure(cause,'Orders'));setLoading(false);}}}void load();return()=>{active=false;};},[token,query,status,revision]);
-  return <section><h2>Order list</h2><p>Showing up to 200 matching orders. Customer and fulfilment details are private business information.</p>
+  const pagination=useAdminPage(token,'admin_orders_page_v1',{p_query:query,p_status:status},parseAdminOrderList,orderKey);
+  const {rows:orders,error,loading}=pagination;
+  return <section><h2>Order list</h2><p>Search and status filters apply to all authorized orders. Customer and fulfilment details are private business information.</p>
     <form className="admin-order-filters" key={`${query}:${status}`} onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);const next=new URLSearchParams();const q=String(data.get('query'));const s=String(data.get('status'));if(q)next.set('query',q);if(s)next.set('status',s);setParams(next);}}><label>Search reference, customer name or email<input name="query" type="search" maxLength={200} defaultValue={query}/></label><label>Order status<select name="status" defaultValue={status}><option value="">All statuses</option>{orderStates.map(s=><option key={s} value={s}>{orderLabel(s)}</option>)}</select></label><button className="button">Apply filters</button></form>
-    <AdminReadState loading={loading} message={loading?(orders.length?'Refreshing orders…':'Loading orders…'):error} retry={()=>setRevision(r=>r+1)} retryLabel="Retry loading orders"/>{!loading&&!error&&!orders.length&&<p>No matching orders.</p>}
-    {!loading&&!error&&<AdminOrderList orders={orders} search={search}/>}
+    <AdminCsvExport token={token} kind="orders" query={query} status={status} disabled={loading||Boolean(error)}/><AdminReadState loading={loading} message={loading?(orders.length?'Refreshing orders…':'Loading orders…'):error} retry={pagination.refresh} retryLabel="Retry loading orders"/>{!loading&&!error&&!orders.length&&<p>No matching orders.</p>}
+    {!loading&&!error&&<><AdminOrderList orders={orders} search={search}/><AdminPagination {...pagination}/></>}
   </section>;
 }

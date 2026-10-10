@@ -1,10 +1,13 @@
+import {AdminCsvExport} from './AdminCsvExport';
 import {AdminReadState} from './AdminReadState';
-import {parseAdminRows} from './adminValidation';
+import {useAdminPage} from './useAdminPage';
+import {AdminPagination} from './PaginationControls';
+const productKey = (row: AdminProduct) => row.id;
 import { AdminForm } from './AdminForm';
 import { useAdminReturnFocus, type AdminErrorKind } from './adminFormBehavior';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { getSupabaseClient } from '../../lib/supabase/client';
-import { adminRpc, adminErrorKind, adminReadFailure, parseAdminProduct, type AdminProduct } from './adminRepository';
+import { adminErrorKind, parseAdminProduct, type AdminProduct } from './adminRepository';
 import { ProductMedia } from './ProductMedia';
 import { ReviewedMediaPicker } from './ReviewedMediaPicker';
 import { canSaveReviewedImage, useReviewedAssets, type ImagePreview } from './reviewedMedia';
@@ -14,7 +17,7 @@ import {categorySuggestions,confirmedProductSave,isLocalProductImage,productSave
 
 export function ProductCategory({value,categories}:{value:string;categories:ReturnType<typeof categorySuggestions>}) {
   const [category,setCategory]=useState(value);
-  return <><label>Category<input name="category" required maxLength={100} list="product-category-options" aria-describedby="product-category-help" value={category} onChange={event=>setCategory(event.target.value)}/></label><datalist id="product-category-options">{categories.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</datalist><p id="product-category-help" className="admin-field-help">{!categories.length ? 'No existing categories in the loaded catalogue. Enter a category name.' : category.trim() && !categories.some(item=>item.value === category) ? 'This is a new category in the loaded catalogue; it will be saved with this product.' : 'Choose an existing category, or type a new one.'} Suggestions cover the loaded products only.</p></>;
+  return <><label>Category<input name="category" required maxLength={100} list="product-category-options" aria-describedby="product-category-help" value={category} onChange={event=>setCategory(event.target.value)}/></label><datalist id="product-category-options">{categories.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</datalist><p id="product-category-help" className="admin-field-help">{!categories.length ? 'No category suggestions on this page. Enter a category name.' : category.trim() && !categories.some(item=>item.value === category) ? 'This category is not on the current page; it will be saved with this product.' : 'Choose an existing category, or type a new one.'} Suggestions cover the current page only, not the complete catalogue.</p></>;
 }
 export function ProductImagePreview({path}:{path:string}) {
   const [broken,setBroken]=useState(false);
@@ -81,8 +84,8 @@ export function CatalogueList({products,select}:{products:AdminProduct[];select:
 }
 
 export function ProductManager({ token }: { token: string }) {
-  const [products, setProducts] = useState<AdminProduct[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
-  const [revision, setRevision] = useState(0); const [selected, setSelected] = useState<AdminProduct | null | undefined>(); const [query, setQuery] = useState('');
+
+  const [selected, setSelected] = useState<AdminProduct | null | undefined>(); const [query, setQuery] = useState('');
   const noticeTarget=useRef<HTMLParagraphElement>(null);
   const [editorDenied,setEditorDenied]=useState(false);const [variantsDenied,setVariantsDenied]=useState(false);const [mediaDenied,setMediaDenied]=useState(false);const blocked=editorDenied||variantsDenied||mediaDenied;
   const [dirty,setDirty]=useState(false);const [saving,setSaving]=useState(false);const [notice,setNotice]=useState('');
@@ -92,21 +95,15 @@ export function ProductManager({ token }: { token: string }) {
     if(selected!==undefined && !window.confirm('Leave this product workspace? Unsaved drafts will be discarded. An unconfirmed save may already have succeeded; review the catalogue before starting another creation.'))return;
     setDirty(false);setSelected(product);setNotice(product===undefined?'Returned to catalogue. Review any unconfirmed save before starting another creation.':'');
   }
-  function saved(message:string){setDirty(false);setSelected(undefined);setRevision(value=>value+1);setNotice(message);}
-  useEffect(() => { let active = true;
-    async function load() { setLoading(true); setError(''); try {
-      const data = await adminRpc(getSupabaseClient(), token, 'admin_list_products');
-      const parsed = parseAdminRows(data,parseAdminProduct,row=>row.id,200); if (active) { setProducts(parsed); setLoading(false); }
-    } catch (cause) { if (active) { setProducts([]); setSelected(undefined); setError(adminReadFailure(cause,'Products')); setLoading(false); } } }
-    void load();
-    return () => { active = false; };
-  }, [token, revision]);
-  const visible = products.filter(p => `${p.name} ${p.category}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
-  return <section><h2>Products</h2><p>Showing up to 200 products, including archived products. Search matches names and categories in this loaded set, not the complete catalogue.</p>
+  function saved(message:string){setDirty(false);setSelected(undefined);pagination.refresh();setNotice(message);}
+  const pagination = useAdminPage(token,'admin_products_page_v1',{p_query:query},parseAdminProduct,productKey);
+  const {rows: products,error,loading}=pagination;
+  const visible=products;
+  return <section><h2>Products</h2><p>Search matches names and categories across the complete authorized catalogue, including archived products.</p>
     {notice&&<p role="status" className="admin-save-notice" ref={noticeTarget} tabIndex={-1}>{notice}</p>}
-    {selected===undefined && <><label>Search loaded products<input value={query} onChange={e => setQuery(e.target.value)} type="search" /></label><button className="button" disabled={blocked||loading||Boolean(error)} onClick={() => choose(null)}>Create product</button></>}
-    <AdminReadState loading={loading} message={loading?(products.length?'Refreshing products…':'Loading products…'):error} retry={()=>setRevision(r=>r+1)} retryLabel="Retry loading products" disabled={saving}/>{!loading && !error && selected===undefined && !visible.length && <p>No products match.</p>}
-    {!blocked && !loading && !error && selected===undefined && <CatalogueList products={visible} select={choose}/>}
+    {selected===undefined && <><label>Search products<input maxLength={200} value={query} onChange={e => setQuery(e.target.value)} type="search" /></label><button className="button" disabled={blocked||loading||Boolean(error)} onClick={() => choose(null)}>Create product</button></>}
+    <AdminCsvExport token={token} kind="products" query={query} disabled={blocked||loading||Boolean(error)||selected!==undefined}/><AdminReadState loading={loading} message={loading?(products.length?'Refreshing products…':'Loading products…'):error} retry={pagination.refresh} retryLabel="Retry loading products" disabled={saving}/>{!loading && !error && selected===undefined && !visible.length && <p>No products match.</p>}
+    {!blocked && !loading && !error && selected===undefined && <><CatalogueList products={visible} select={choose}/><AdminPagination {...pagination}/></>}
     {!loading && !error && selected!==undefined && <div className="admin-product-workspace" onChange={()=>setDirty(true)}>
       <button disabled={saving||blocked} onClick={()=>choose(undefined)}>Back to catalogue / Cancel</button>
       <p className="admin-field-help">{dirty?'Unsaved draft changes. ':''}Work on one section at a time. Product or media saves return to the catalogue; other drafts are discarded.</p>

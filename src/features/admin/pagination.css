@@ -1,0 +1,6 @@
+.admin-pagination { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; margin-block: 1.5rem; }
+.admin-pagination label { display: grid; gap: .5rem; }
+.admin-pagination p { flex: 1 1 12rem; margin: 0; overflow-wrap: anywhere; }
+.admin-pagination button, .admin-pagination select { min-height: 44px; max-width: 100%; padding: .65rem 1rem; }
+.admin-pagination button:focus-visible, .admin-pagination select:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+@media (max-width: 700px) { .admin-pagination > * { flex: 1 1 100%; } }
