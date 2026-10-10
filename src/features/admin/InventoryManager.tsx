@@ -1,3 +1,4 @@
+import {AdminCsvExport} from './AdminCsvExport';
 import {AdminReadState} from './AdminReadState';
 import {parseAdminRows} from './adminValidation';
 import {useAdminPage} from './useAdminPage';
@@ -58,7 +59,7 @@ export function InventoryManager({token}:{token:string}){
  const visible=rows;
  return <section><h2>Inventory</h2>{notice&&<p role="status" ref={noticeTarget} tabIndex={-1}>{notice}</p>}<p>Search and tracking filters apply to the complete authorized inventory. Untracked items have no implied available stock count.</p><p className="admin-field-help">Variant state and catalogue availability are distinct from inventory tracking. Product active/archived state is not supplied by this inventory view.</p>
  <div className="admin-inventory-filters"><label>Search inventory<input type="search" maxLength={200} disabled={selected!==null} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Product name, SKU or options"/></label><label>Inventory tracking filter<select disabled={selected!==null} value={policy} onChange={event=>setPolicy(event.target.value)}><option value="">All tracking policies</option><option value="tracked">Tracked</option><option value="untracked">Untracked</option></select></label></div>
- <AdminReadState loading={loading} message={loading?(rows.length?'Refreshing inventory…':'Loading inventory…'):error} retry={pagination.refresh} retryLabel="Retry loading inventory"/>{!loading&&!error&&!visible.length&&<p>No matching variants.</p>}
+ <AdminCsvExport token={token} kind="inventory" query={query} policy={policy} disabled={loading||Boolean(error)||selected!==null}/><AdminReadState loading={loading} message={loading?(rows.length?'Refreshing inventory…':'Loading inventory…'):error} retry={pagination.refresh} retryLabel="Retry loading inventory"/>{!loading&&!error&&!visible.length&&<p>No matching variants.</p>}
  {!loading&&!error&&!selected&&<><InventoryWorklist rows={visible} select={row=>{setNotice('');setSelected(row);}}/><AdminPagination {...pagination}/></>}{!loading&&!error&&selected&&<><button type="button" data-admin-leave="true" onClick={()=>{if(window.confirm('Return to inventory? Unsaved changes will be discarded. Review any unconfirmed adjustment before retrying.'))setSelected(null);}}>Back to inventory</button><InventoryEditor key={selected.variant_id} row={selected} token={token} saved={()=>{setSelected(null);pagination.refresh();setNoticeSequence(value=>value+1);setNotice('Inventory change confirmed. Reloading authoritative balances.');}}/></>}
  </section>;
 }

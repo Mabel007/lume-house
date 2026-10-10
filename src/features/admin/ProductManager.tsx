@@ -1,3 +1,4 @@
+import {AdminCsvExport} from './AdminCsvExport';
 import {AdminReadState} from './AdminReadState';
 import {useAdminPage} from './useAdminPage';
 import {AdminPagination} from './PaginationControls';
@@ -101,7 +102,7 @@ export function ProductManager({ token }: { token: string }) {
   return <section><h2>Products</h2><p>Search matches names and categories across the complete authorized catalogue, including archived products.</p>
     {notice&&<p role="status" className="admin-save-notice" ref={noticeTarget} tabIndex={-1}>{notice}</p>}
     {selected===undefined && <><label>Search products<input maxLength={200} value={query} onChange={e => setQuery(e.target.value)} type="search" /></label><button className="button" disabled={blocked||loading||Boolean(error)} onClick={() => choose(null)}>Create product</button></>}
-    <AdminReadState loading={loading} message={loading?(products.length?'Refreshing products…':'Loading products…'):error} retry={pagination.refresh} retryLabel="Retry loading products" disabled={saving}/>{!loading && !error && selected===undefined && !visible.length && <p>No products match.</p>}
+    <AdminCsvExport token={token} kind="products" query={query} disabled={blocked||loading||Boolean(error)||selected!==undefined}/><AdminReadState loading={loading} message={loading?(products.length?'Refreshing products…':'Loading products…'):error} retry={pagination.refresh} retryLabel="Retry loading products" disabled={saving}/>{!loading && !error && selected===undefined && !visible.length && <p>No products match.</p>}
     {!blocked && !loading && !error && selected===undefined && <><CatalogueList products={visible} select={choose}/><AdminPagination {...pagination}/></>}
     {!loading && !error && selected!==undefined && <div className="admin-product-workspace" onChange={()=>setDirty(true)}>
       <button disabled={saving||blocked} onClick={()=>choose(undefined)}>Back to catalogue / Cancel</button>

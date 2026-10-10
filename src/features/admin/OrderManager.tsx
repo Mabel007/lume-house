@@ -1,3 +1,4 @@
+import {AdminCsvExport} from './AdminCsvExport';
 import {AdminReadState} from './AdminReadState';
 import {useAdminPage} from './useAdminPage';
 import {AdminPagination} from './PaginationControls';
@@ -71,7 +72,7 @@ export function OrderManager({token}:{token:string}) {
   const {rows:orders,error,loading}=pagination;
   return <section><h2>Order list</h2><p>Search and status filters apply to all authorized orders. Customer and fulfilment details are private business information.</p>
     <form className="admin-order-filters" key={`${query}:${status}`} onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);const next=new URLSearchParams();const q=String(data.get('query'));const s=String(data.get('status'));if(q)next.set('query',q);if(s)next.set('status',s);setParams(next);}}><label>Search reference, customer name or email<input name="query" type="search" maxLength={200} defaultValue={query}/></label><label>Order status<select name="status" defaultValue={status}><option value="">All statuses</option>{orderStates.map(s=><option key={s} value={s}>{orderLabel(s)}</option>)}</select></label><button className="button">Apply filters</button></form>
-    <AdminReadState loading={loading} message={loading?(orders.length?'Refreshing orders…':'Loading orders…'):error} retry={pagination.refresh} retryLabel="Retry loading orders"/>{!loading&&!error&&!orders.length&&<p>No matching orders.</p>}
+    <AdminCsvExport token={token} kind="orders" query={query} status={status} disabled={loading||Boolean(error)}/><AdminReadState loading={loading} message={loading?(orders.length?'Refreshing orders…':'Loading orders…'):error} retry={pagination.refresh} retryLabel="Retry loading orders"/>{!loading&&!error&&!orders.length&&<p>No matching orders.</p>}
     {!loading&&!error&&<><AdminOrderList orders={orders} search={search}/><AdminPagination {...pagination}/></>}
   </section>;
 }

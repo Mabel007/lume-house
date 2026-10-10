@@ -84,6 +84,32 @@ test('Orders pagination retains URL search/status behavior and forwards the comp
  await act(async()=>inputValue(host.querySelector('[name="query"]'),'customer'));await submit(host.querySelector('form'));assert.equal(calls.at(-1).p_query,'customer');assert.equal(calls.at(-1).p_page,0);
 });
 
+test('CSV serialization preserves typed numbers, quotes UTF-8 text and neutralizes spreadsheet formulas; incomplete/private responses fail',async()=>{
+ const {csvCell,exportCsv}=await module('features/admin/adminCsv.ts');
+ for(const value of ['=SUM(1,2)','+cmd','-cmd','@cmd','  =1','\t=1','\r\n+cmd','\u0001=1'])assert.ok(csvCell(value).startsWith('"\''));
+ assert.equal(csvCell(-3),'-3');assert.equal(csvCell(null),'');assert.equal(csvCell('Lumé, "House"\nText'),'"Lumé, ""House""\nText"');
+ const row={id:'local',name:'=Danger',category:'Ceramics',active:false,display_order:2};const result=exportCsv({items:[row],total_count:1},'products');assert.equal(result.count,1);assert.match(result.csv,/^\uFEFFid,name,category,visible,display_order\r\n/);assert.match(result.csv,/"'=Danger"/);
+ for(const value of [{items:[row],total_count:2},{items:[{...row,customer_email:'private'}],total_count:1},{items:[row,row],total_count:2},{items:[],total_count:10001}])assert.throws(()=>exportCsv(value,'products'));
+ const order={order_reference:'LH-0000000000000001',created_at:'2026-10-10T00:00:00Z',status:'placed',payment_status:'awaiting_payment',currency:'NLE',total_cents:12550};assert.match(exportCsv({items:[order],total_count:1},'orders').csv,/total_minor_units/);assert.match(exportCsv({items:[order],total_count:1},'orders').csv,/,12550\r\n/);
+});
+
+test('complete CSV downloads once; cancellation, switched identity, revoked access and partial failures download nothing',async()=>{
+ const {AdminCsvExport}=await module('features/admin/AdminCsvExport.tsx');let pending=deferred(),allowed=true;const calls=[];let downloads=0;const originalCreate=URL.createObjectURL,originalRevoke=URL.revokeObjectURL,originalClick=window.HTMLAnchorElement.prototype.click;
+ URL.createObjectURL=()=> 'blob:local-test';URL.revokeObjectURL=()=>{};window.HTMLAnchorElement.prototype.click=function(){assert.equal(this.download,'lume-house-products.csv');downloads++;};
+ const payload={items:[{id:'local',name:'Lumé piece',category:'Ceramics',active:true,display_order:0}],total_count:1};
+ fakeClient((name,args)=>{calls.push({name,args});if(name==='is_business_admin')return Promise.resolve({data:allowed,error:null});assert.equal(name,'admin_export_v1');return pending.promise;});
+ const view=(token='a',query='')=>React.createElement(AdminCsvExport,{token,kind:'products',query});
+ try{
+  await mount(view());await click(host.querySelector('button'));assert.equal(host.querySelector('button').disabled,true);assert.equal(calls[0].args.p_query,'');await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);assert.match(host.textContent,/Complete export downloaded: 1 records/);
+  pending=deferred();await click(host.querySelector('button'));await click(Array.from(host.querySelectorAll('button')).find(node=>node.textContent==='Cancel export'));await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);assert.match(host.textContent,/Export cancelled/);
+  pending=deferred();await click(host.querySelector('button'));await render(view('b','filtered'));await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);assert.doesNotMatch(host.textContent,/Complete export downloaded/);
+  allowed=false;pending=deferred();await click(host.querySelector('button'));await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);assert.match(host.textContent,/Export failed/);assert.equal(calls.at(-2).args.p_query,'filtered');
+  allowed=true;pending=deferred();await click(host.querySelector('button'));await act(async()=>pending.resolve({data:{...payload,total_count:2},error:null}));assert.equal(downloads,1);assert.match(host.textContent,/No partial file/);
+  pending=deferred();await click(host.querySelector('button'));await act(async()=>pending.resolve({data:null,error:{code:'54000'}}));assert.equal(downloads,1);assert.match(host.textContent,/10,000 records or 8 MiB/);
+  pending=deferred();await click(host.querySelector('button'));await render(null);await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);
+ }finally{URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke;window.HTMLAnchorElement.prototype.click=originalClick;}
+});
+
 test('mounted error descriptions follow added/removed controls and preserve help on cleanup without duplicate alerts',async()=>{
  const {AdminForm}=await module('features/admin/AdminForm.tsx');
  const view=(error,extra=false)=>React.createElement(AdminForm,{error,errorKind:'validation'},React.createElement('p',{id:'help'},'Existing help'),React.createElement('input',{name:'name','aria-describedby':'help',defaultValue:'retained'}),extra&&React.createElement('textarea',{name:'extra','aria-describedby':''}));
