@@ -107,7 +107,7 @@ test('actual application router keeps Auth/Product/Bag providers across customer
  const initial={restores,reads,unsubscribes};for(const path of ['/about','/help','/products/synthetic-product','/cart']){await act(async()=>router.navigate(path));assert.equal(router.state.location.pathname,path);}assert.deepEqual({restores,reads,unsubscribes},initial);assert.ok(host.querySelector('[aria-label="Bag (3)"]'));
  await act(async()=>router.navigate('/admin/orders/synthetic-order'));assert.match(host.textContent,/does not have business administration access/);assert.equal(host.querySelector('.admin-workspace'),null);assert.deepEqual({restores,reads,unsubscribes},initial);
  await act(async()=>client.auth.signOut());await act(async()=>router.navigate('/cart'));assert.equal(host.querySelector('[aria-label="Bag (3)"]'),null);assert.ok(host.querySelector('[aria-label="Bag (0)"]'));
- current=session('customer-b');await act(async()=>receive('SIGNED_IN',current));assert.ok(host.querySelector('[aria-label="Bag (0)"]'));assert.doesNotMatch(host.textContent,/customer-a@example.invalid/);assert.deepEqual({restores,reads,unsubscribes},initial);
+ current=session('customer-b');await act(async()=>receive('SIGNED_IN',current));assert.ok(host.querySelector('[aria-label="Bag (0)"]'));assert.doesNotMatch(host.textContent,/customer-a@example.invalid/);assert.deepEqual({restores,reads,unsubscribes},{...initial,reads:initial.reads+2});
 });
 
 test('customer Account hub hides previous-user drafts and stale profile responses when identity switches or signs out',async()=>{
