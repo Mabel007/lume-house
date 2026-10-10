@@ -84,7 +84,7 @@
 .admin-order-list dt { font-size: .75rem; color: #626c60; margin-bottom: .5rem; }
 .admin-order-list dd { margin: 0; font-size: .85rem; }
 .admin-order-detail > .back-link { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 1rem; }
-@media (max-width: 1100px) { .admin-order-list article { grid-template-columns: minmax(0, 1fr); gap: 1rem; } }
+@media (max-width: 1100px) { .admin-order-list article { grid-template-columns: minmax(0, 1fr); gap: 1rem; } .admin-order-list dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .admin-order-list dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* Readable admin scale, scoped away from customer storefront typography. */
@@ -157,6 +157,7 @@
 .admin-inventory-history li { padding-block: 1rem; border-top: 1px solid #d5cbbb; overflow-wrap: anywhere; }
 .admin-inventory-history time { display: block; margin-top: .35rem; }
 .admin-inventory-history a { display: inline-flex; align-items: center; min-height: 44px; }
+@media (max-width: 1100px) { .admin-inventory-worklist li { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 700px) { .admin-inventory-filters, .admin-inventory-worklist li, .admin-workspace .admin-inventory-row { grid-template-columns: minmax(0, 1fr); } }
 
 .admin-membership-list, .admin-membership-history { list-style: none; padding: 0; }
