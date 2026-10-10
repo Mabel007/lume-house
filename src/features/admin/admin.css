@@ -157,6 +157,7 @@
 .admin-inventory-history li { padding-block: 1rem; border-top: 1px solid #d5cbbb; overflow-wrap: anywhere; }
 .admin-inventory-history time { display: block; margin-top: .35rem; }
 .admin-inventory-history a { display: inline-flex; align-items: center; min-height: 44px; }
+@media (max-width: 1100px) { .admin-inventory-worklist li { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 700px) { .admin-inventory-filters, .admin-inventory-worklist li, .admin-workspace .admin-inventory-row { grid-template-columns: minmax(0, 1fr); } }
 
 .admin-membership-list, .admin-membership-history { list-style: none; padding: 0; }
