@@ -26,9 +26,47 @@ async function mount(element){root=createRoot(host);await act(async()=>root.rend
 async function render(element){await act(async()=>root.render(element));}
 async function click(node){assert.ok(node);await act(async()=>node.dispatchEvent(new window.MouseEvent('click',{bubbles:true,cancelable:true})));}
 async function submit(form){await act(async()=>form.dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true})));}
-function fakeClient(handler){const client={rpc(name,args){return {setHeader(key,value){clients.push({name,args,key,value});return handler(name,args,value);}};}};globalThis.__lumeFormTestClient=client;return client;}
+function fakeClient(handler){const client={rpc(name,args){return {setHeader(key,value){clients.push({name,args,key,value});return Promise.resolve(handler(name,args,value)).then(result => name.endsWith('_page_v1') && Array.isArray(result.data) ? {...result,data:{items:result.data,total_count:result.data.length,page:args.p_page,page_size:args.p_page_size}} : result);}};}};globalThis.__lumeFormTestClient=client;return client;}
 function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
 function inputValue(node,value){const prototype=node instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(prototype,'value').set.call(node,value);node.dispatchEvent(new window.Event('input',{bubbles:true}));}
+
+test('authorized pagination validates envelopes and presents accurate accessible first/middle/last/empty controls',async()=>{
+ const {parseAdminPage,lastPage}=await module('features/admin/adminPagination.ts');const {AdminPagination}=await module('features/admin/PaginationControls.tsx');
+ const parse=row=>{assert.equal(typeof row.id,'string');return {id:row.id};};const key=row=>row.id;
+ assert.equal(parseAdminPage({items:[{id:'a'}],total_count:21,page:2,page_size:10},parse,key,2,10).total_count,21);
+ for(const value of [{items:[],total_count:21,page:0,page_size:10},{items:[],total_count:-1,page:0,page_size:10},{items:[],total_count:0,page:1,page_size:10}])assert.throws(()=>parseAdminPage(value,parse,key,0,10));
+ assert.equal(lastPage(0,10),0);assert.equal(lastPage(101,50),2);
+ const view=(page,total,loading=false,error='')=>React.createElement(AdminPagination,{page,size:10,total,loading,error,changePage(){},changeSize(){}});
+ await mount(view(0,21));assert.match(host.textContent,/21 records · Page 1 of 3/);assert.equal(host.querySelectorAll('option').length,3);assert.equal(host.querySelector('button').disabled,true);assert.equal(host.querySelectorAll('button')[1].disabled,false);
+ await render(view(1,21));assert.ok(Array.from(host.querySelectorAll('button')).every(button=>!button.disabled));
+ await render(view(2,21));assert.equal(host.querySelectorAll('button')[1].disabled,true);
+ await render(view(0,0));assert.match(host.textContent,/Page 0 of 0/);assert.ok(Array.from(host.querySelectorAll('button')).every(button=>button.disabled));
+ await render(view(0,0,true));assert.equal(host.querySelector('nav').getAttribute('aria-busy'),'true');
+});
+
+test('page requests reset filters/sizes, clamp removed last pages, refresh mutations and discard stale identities/revocation',async()=>{
+ const {useAdminPage}=await module('features/admin/useAdminPage.ts');const {AdminPagination}=await module('features/admin/PaginationControls.tsx');
+ const calls=[];const parse=row=>({id:row.id});const key=row=>row.id;let control;
+ fakeClient((name,args,authorization)=>{const response=deferred();calls.push({name,args,authorization,response});return response.promise;});
+ function Harness({token,query=''}){control=useAdminPage(token,'admin_products_page_v1',{p_query:query},parse,key);return React.createElement('section',null,React.createElement(AdminPagination,control),React.createElement('div',null,control.rows.map(row=>React.createElement('p',{key:row.id},row.id))),React.createElement('p',null,control.error));}
+ const view=(token='a',query='')=>React.createElement(Harness,{token,query});
+ const resolve=async(call,total,prefix)=>act(async()=>call.response.resolve({data:{items:Array.from({length:Math.min(call.args.p_page_size,Math.max(0,total-call.args.p_page*call.args.p_page_size))},(_,i)=>({id:`${prefix}-${i}`})),total_count:total,page:call.args.p_page,page_size:call.args.p_page_size},error:null}));
+ await mount(view());await resolve(calls.at(-1),21,'initial');assert.match(host.textContent,/21 records/);
+ await act(async()=>control.changePage(2));assert.doesNotMatch(host.textContent,/initial-0/);await resolve(calls.at(-1),11,'removed');assert.equal(calls.at(-1).args.p_page,1);await resolve(calls.at(-1),11,'clamped');assert.match(host.textContent,/Page 2 of 2/);
+ await act(async()=>control.changeSize(50));assert.equal(calls.at(-1).args.p_page,0);assert.equal(calls.at(-1).args.p_page_size,50);const old=calls.at(-1);
+ await render(view('b','new'));assert.equal(calls.at(-1).args.p_query,'new');assert.equal(calls.at(-1).args.p_page,0);assert.equal(calls.at(-1).authorization,'Bearer b');await resolve(old,1,'private-a');assert.doesNotMatch(host.textContent,/private-a/);
+ await resolve(calls.at(-1),1,'private-b');assert.match(host.textContent,/private-b/);
+ await act(async()=>control.refresh());assert.doesNotMatch(host.textContent,/private-b/);await act(async()=>calls.at(-1).response.resolve({data:null,error:{code:'42501'}}));assert.match(host.textContent,/access was denied/);assert.doesNotMatch(host.textContent,/private-b/);
+ await act(async()=>control.refresh());await resolve(calls.at(-1),0,'empty');assert.match(host.textContent,/0 records/);
+});
+
+test('Product manager sends server search and page sizes while category suggestions identify current-page scope',async()=>{
+ const {ProductManager}=await module('features/admin/ProductManager.tsx');const calls=[];
+ fakeClient((name,args)=>{assert.equal(name,'admin_products_page_v1');calls.push(args);return Promise.resolve({data:{items:[],total_count:0,page:args.p_page,page_size:args.p_page_size},error:null});});
+ await mount(React.createElement(ProductManager,{token:'local'}));assert.match(host.textContent,/0 records · Page 0 of 0/);
+ await act(async()=>inputValue(host.querySelector('input[type="search"]'),'Archived ceramics'));assert.equal(calls.at(-1).p_query,'Archived ceramics');assert.equal(calls.at(-1).p_page,0);
+ await act(async()=>{host.querySelector('.admin-pagination select').value='100';host.querySelector('.admin-pagination select').dispatchEvent(new window.Event('change',{bubbles:true}));});assert.equal(calls.at(-1).p_page_size,100);
+});
 
 test('mounted error descriptions follow added/removed controls and preserve help on cleanup without duplicate alerts',async()=>{
  const {AdminForm}=await module('features/admin/AdminForm.tsx');
@@ -209,14 +247,14 @@ test('reviewed media selection after an uncertain save keeps the review warning 
 });
 
 test('real product-workspace Cancel confirmation retains edited draft on decline and returns focus to catalogue notice on acceptance',async()=>{
- const {ProductManager}=await module('features/admin/ProductManager.tsx');const mutations=[];fakeClient((name,args)=>{if(name==='admin_list_products')return Promise.resolve({data:[],error:null});if(name==='admin_media_assets')return Promise.resolve({data:['/images/mug.svg'],error:null});mutations.push({name,args});throw new Error('Unexpected mutation');});
+ const {ProductManager}=await module('features/admin/ProductManager.tsx');const mutations=[];fakeClient((name,args)=>{if(name==='admin_products_page_v1')return Promise.resolve({data:[],error:null});if(name==='admin_media_assets')return Promise.resolve({data:['/images/mug.svg'],error:null});mutations.push({name,args});throw new Error('Unexpected mutation');});
  await mount(React.createElement(ProductManager,{token:'synthetic-token'}));await click(Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Create product'));await act(async()=>inputValue(host.querySelector('[name="name"]'),'LOCAL TEST retained draft'));
  window.confirm=()=>false;await click(Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Cancel'));assert.equal(host.querySelector('[name="name"]').value,'LOCAL TEST retained draft');assert.equal(mutations.length,0);
  window.confirm=()=>true;await click(Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Cancel'));assert.equal(host.querySelector('[name="name"]'),null);assert.equal(document.activeElement,host.querySelector('.admin-save-notice'));assert.match(host.textContent,/Returned to catalogue/);assert.equal(mutations.length,0);
 });
 
 test('products initial loading has one announcement; malformed/private response fails closed and read retry reaches empty without mutation',async()=>{
- const {ProductManager}=await module('features/admin/ProductManager.tsx');let read=deferred();const calls=[];fakeClient((name,args)=>{calls.push({name,args});assert.equal(name,'admin_list_products');return read.promise;});await mount(React.createElement(ProductManager,{token:'synthetic-token'}));assert.equal(host.querySelectorAll('[role="status"]').length,1);assert.match(host.textContent,/Loading products/);assert.equal(Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Create product').disabled,true);
+ const {ProductManager}=await module('features/admin/ProductManager.tsx');let read=deferred();const calls=[];fakeClient((name,args)=>{calls.push({name,args});assert.equal(name,'admin_products_page_v1');return read.promise;});await mount(React.createElement(ProductManager,{token:'synthetic-token'}));assert.equal(host.querySelectorAll('[role="status"]').length,1);assert.match(host.textContent,/Loading products/);assert.equal(Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Create product').disabled,true);
  await act(async()=>read.resolve({data:[{name:'synthetic-private-malformed'}],error:null}));assert.doesNotMatch(host.textContent,/synthetic-private-malformed/);assert.match(host.textContent,/could not be loaded or validated/);read=deferred();await click(Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Retry loading products'));assert.equal(calls.length,2);await act(async()=>read.resolve({data:[],error:null}));assert.match(host.textContent,/No products match/);assert.equal(Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Create product').disabled,false);
 });
 
@@ -253,7 +291,7 @@ test('null cancellation mutation result is uncertain rather than fabricated succ
 
 test('catalogue registry denial hides and disables the retained product form; validated read recovery preserves original creation receipt',async()=>{
  const {ProductManager}=await module('features/admin/ProductManager.tsx');let read=deferred(),write=deferred(),mediaReads=0;const writes=[];
- fakeClient((name,args)=>{if(name==='admin_list_products')return Promise.resolve({data:[],error:null});if(name==='admin_media_assets'){mediaReads++;return mediaReads===1?Promise.resolve({data:['/images/mug.svg'],error:null}):read.promise;}assert.equal(name,'admin_create_product');writes.push(args);return write.promise;});
+ fakeClient((name,args)=>{if(name==='admin_products_page_v1')return Promise.resolve({data:[],error:null});if(name==='admin_media_assets'){mediaReads++;return mediaReads===1?Promise.resolve({data:['/images/mug.svg'],error:null}):read.promise;}assert.equal(name,'admin_create_product');writes.push(args);return write.promise;});
  await mount(React.createElement(ProductManager,{token:'synthetic-token'}));await click(Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Create product'));await act(async()=>host.querySelector('.admin-media-preview').dispatchEvent(new window.Event('load')));
  for(const [name,value] of [['name','LOCAL TEST retained'],['description','LOCAL TEST description'],['initial_price','12.50']])host.querySelector(`[name="${name}"]`).value=value;await act(async()=>inputValue(host.querySelector('[name="category"]'),'LOCAL TEST'));
  const form=host.querySelector('form');await submit(form);const id=writes[0].p_operation_id;await act(async()=>write.resolve({data:null,error:{code:'transport'}}));await click(Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Reload reviewed images'));await act(async()=>read.resolve({data:null,error:{code:'42501',message:'private-provider'}}));assert.equal(form.hidden,true);assert.equal(form.querySelector('fieldset').disabled,true);await submit(form);assert.equal(writes.length,1);assert.doesNotMatch(host.textContent,/private-provider/);
