@@ -84,7 +84,7 @@
 .admin-order-list dt { font-size: .75rem; color: #626c60; margin-bottom: .5rem; }
 .admin-order-list dd { margin: 0; font-size: .85rem; }
 .admin-order-detail > .back-link { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 1rem; }
-@media (max-width: 1100px) { .admin-order-list article { grid-template-columns: minmax(0, 1fr); gap: 1rem; } }
+@media (max-width: 1100px) { .admin-order-list article { grid-template-columns: minmax(0, 1fr); gap: 1rem; } .admin-order-list dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .admin-order-list dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* Readable admin scale, scoped away from customer storefront typography. */
