@@ -298,6 +298,15 @@ test('membership rows identify current account and disable self unknown-identity
  const {MembershipRows}=await server.ssrLoadModule('/src/features/admin/MembershipManager.tsx');const id='11111111-1111-4111-8111-111111111111';const member={user_id:id,active:true,created_at:null,updated_at:'2026-10-08T12:00:00Z'};
  const render=(currentUserId,busy=false,active=true)=>renderToStaticMarkup(React.createElement(MembershipRows,{members:[{...member,active}],currentUserId,busy,revoke(){}}));const own=render(id);assert.match(own,/Your current account/);assert.match(own,/Self-revocation is disabled/);assert.match(own,/<fieldset disabled=""/);assert.match(own,/Not recorded — historic provisioning date unknown/);assert.match(own,/<time dateTime="2026-10-08T12:00:00Z"/);
  const other=render('22222222-2222-4222-8222-222222222222');assert.doesNotMatch(other,/<fieldset disabled/);assert.match(other,/textarea name="reason" required="" maxLength="500" aria-describedby=/);assert.match(other,/does not delete the Auth account/);assert.match(render(null),/Current Auth identity is unavailable/);assert.match(render(null),/<fieldset disabled/);assert.match(render('other',true),/<fieldset disabled/);assert.match(render(id,false,false),/Revoked/);assert.doesNotMatch(render(id,false,false),/<form/);assert.match(render(id,false,false),/Reactivation is a privileged service-only operation/);
+ for(const html of [own,render(null),other]){
+  const help=`membership-help-${id}`;
+  const group=html.match(new RegExp(`<fieldset[^>]*aria-describedby="${help}"`));
+  assert.ok(group);
+  assert.ok(html.indexOf(`<p id="${help}"`)<group.index);
+  assert.match(html,new RegExp(`<fieldset[^>]*aria-describedby="${help}"`));
+  assert.match(html,/<legend>Membership revocation<\/legend>/);
+  assert.match(html,new RegExp(`<button[^>]*aria-describedby="${help}"`));
+ }
 });
 test('membership audit preserves actual events unknown actor and capped empty history guidance',async()=>{
  const {MembershipHistory}=await server.ssrLoadModule('/src/features/admin/MembershipManager.tsx');const id='11111111-1111-4111-8111-111111111111';const render=history=>renderToStaticMarkup(React.createElement(MembershipHistory,{history,currentUserId:id}));const empty=render([]);assert.match(empty,/No recorded membership changes/);assert.match(empty,/100 recorded changes/);const html=render([{id:'local',user_id:id,actor_user_id:null,active:false,reason:'LOCAL TEST reason',created_at:'2026-10-08T12:00:00Z'}]);assert.match(html,/Business access revoked/);assert.match(html,/Actor account ID: Not recorded/);assert.match(html,/your current account/);assert.match(html,/LOCAL TEST reason/);assert.doesNotMatch(html,/Privileged service|Owner|staff@example|Invitation sent/);
