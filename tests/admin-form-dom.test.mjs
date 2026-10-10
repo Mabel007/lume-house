@@ -30,6 +30,18 @@ function fakeClient(handler){const client={rpc(name,args){return {setHeader(key,
 function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
 function inputValue(node,value){const prototype=node instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(prototype,'value').set.call(node,value);node.dispatchEvent(new window.Event('input',{bubbles:true}));}
 
+test('Admin Profile uses current authenticated identity, hides stale access reads and reuses trusted sign-out without permission/password controls',async()=>{
+ const {AdminProfile}=await module('features/admin/AdminProfile.tsx');const {AuthContext}=await module('features/auth/AuthContext.ts');let read=deferred(),signOuts=0;
+ fakeClient(name=>{assert.equal(name,'is_business_admin');return read.promise;});
+ const view=(id,provider='google')=>React.createElement(MemoryRouter,null,React.createElement(AuthContext.Provider,{value:{session:id?{access_token:`token-${id}`,user:{id,email:`${id}@example.invalid`,user_metadata:{full_name:`Current ${id}`},app_metadata:{provider}}}:null,loading:false,error:null,signOut:async()=>{signOuts++;},signIn:async()=>{}}},React.createElement(AdminProfile,{token:`token-${id}`})));
+ await mount(view('a'));assert.match(host.textContent,/Checking your administration access/);assert.doesNotMatch(host.textContent,/Current a/);const old=read;read=deferred();await render(view('b'));await act(async()=>old.resolve({data:true,error:null}));assert.doesNotMatch(host.textContent,/Current a|a@example.invalid/);
+ await act(async()=>read.resolve({data:true,error:null}));assert.match(host.textContent,/Current b|b@example.invalid/);assert.match(host.textContent,/Active business-admin membership/);assert.match(host.textContent,/Sign-in provider: Google/);assert.doesNotMatch(host.textContent,/token-b|Change Password|Owner|Manager/);assert.equal(host.querySelector('input'),null);
+ await click(host.querySelector('button'));assert.equal(signOuts,1);
+ read=deferred();await render(view('c','unknown'));await act(async()=>read.resolve({data:false,error:null}));assert.match(host.textContent,/access was denied/);assert.doesNotMatch(host.textContent,/Current b|Current c/);
+ read=deferred();await click(host.querySelector('button'));await act(async()=>read.resolve({data:true,error:null}));assert.match(host.textContent,/provider information unavailable/);assert.doesNotMatch(host.textContent,/Google manages/);
+ await render(view(null));assert.doesNotMatch(host.textContent,/Current c|Active business-admin/);assert.match(host.textContent,/Sign in to view/);
+});
+
 test('authorized pagination validates envelopes and presents accurate accessible first/middle/last/empty controls',async()=>{
  const {parseAdminPage,lastPage}=await module('features/admin/adminPagination.ts');const {AdminPagination}=await module('features/admin/PaginationControls.tsx');
  const parse=row=>{assert.equal(typeof row.id,'string');return {id:row.id};};const key=row=>row.id;

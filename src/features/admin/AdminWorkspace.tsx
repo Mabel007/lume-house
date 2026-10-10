@@ -8,6 +8,7 @@ import { ProductManager } from './ProductManager';
 import { InventoryManager } from './InventoryManager';
 import { OrderManager, AdminOrderDetailPage } from './OrderManager';
 import { MembershipManager } from './MembershipManager';
+import { AdminProfile } from './AdminProfile';
 
 export function AdminWorkspace({ token }: { token: string }) {
   const workspace=useRef<HTMLDivElement>(null);const routerContext=useContext(UNSAFE_DataRouterContext);useAdminDraftNavigation(workspace,Boolean(routerContext));
@@ -43,6 +44,7 @@ export function AdminWorkspace({ token }: { token: string }) {
           <Route path="orders" element={<OrderManager token={token} />} />
           <Route path="orders/:orderId" element={<AdminOrderDetailPage token={token} />} />
           <Route path="memberships" element={<MembershipManager token={token} />} />
+          <Route path="profile" element={<AdminProfile token={token} />} />
           <Route path="*" element={<section><h2>Choose another section</h2><p>This administration page does not exist.</p><Link className="text-link" to="/admin">Back to Overview</Link></section>} />
         </Routes>
       </div>
