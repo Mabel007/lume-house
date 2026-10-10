@@ -1,5 +1,9 @@
+import {AdminCsvExport} from './AdminCsvExport';
 import {AdminReadState} from './AdminReadState';
 import {parseAdminRows} from './adminValidation';
+import {useAdminPage} from './useAdminPage';
+import {AdminPagination} from './PaginationControls';
+const inventoryKey = (row: InventoryRow) => row.variant_id;
 import {parseAdminVariant} from './adminVariants';
 import { AdminForm } from './AdminForm';
 import { useAdminReturnFocus, type AdminErrorKind } from './adminFormBehavior';
@@ -7,7 +11,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { getSupabaseClient } from '../../lib/supabase/client';
 import { adminRpc, adminErrorKind, adminReadFailure, isAdminDenied } from './adminRepository';
-import { parseInventoryAdjustment, availableQuantity, adjustmentPreview, filterInventory, inventoryOptions, parseInventoryRow, parseInventoryHistory, inventoryEventLabels, type InventoryRow, type InventoryHistoryRow } from './inventoryPresentation';
+import { parseInventoryAdjustment, availableQuantity, adjustmentPreview,  inventoryOptions, parseInventoryRow, parseInventoryHistory, inventoryEventLabels, type InventoryRow, type InventoryHistoryRow } from './inventoryPresentation';
 export type {InventoryRow} from './inventoryPresentation';
 type HistoryState={status:'loading'|'ready'|'error';rows:InventoryHistoryRow[];message?:string};
 export function InventoryBalances({row}:{row:InventoryRow}) {
@@ -48,13 +52,14 @@ export function InventoryWorklist({rows,select}:{rows:InventoryRow[];select:(row
  return <ul className="admin-inventory-worklist">{rows.map(row=><li key={row.variant_id}><button type="button" className="admin-inventory-row" data-admin-leave="true" onClick={()=>select(row)}><span><strong>{row.product_name}</strong><span className="admin-inventory-identity">SKU: {row.sku}</span><span className="admin-inventory-identity">{inventoryOptions(row)}</span><span className="admin-inventory-identity">Variant state: {row.active?'Active':'Inactive'}</span><span className="admin-inventory-identity">Catalogue availability: {row.available?'Available':'Unavailable'}</span></span><span>Review stock and movements</span></button><InventoryBalances row={row}/></li>)}</ul>;
 }
 export function InventoryManager({token}:{token:string}){
- const [rows,setRows]=useState<InventoryRow[]>([]);const [selected,setSelected]=useState<InventoryRow|null>(null);const [revision,setRevision]=useState(0);const [error,setError]=useState('');const [loading,setLoading]=useState(true);const [query,setQuery]=useState('');const [policy,setPolicy]=useState('');
- useEffect(()=>{let active=true;async function load(){setLoading(true);setError('');try{const data=await adminRpc(getSupabaseClient(),token,'admin_list_inventory');const parsed=parseAdminRows(data,parseInventoryRow,row=>row.variant_id,500);if(active){setRows(parsed);setLoading(false);}}catch(cause){if(active){setRows([]);setSelected(null);setError(adminReadFailure(cause,'Inventory'));setLoading(false);}}}void load();return()=>{active=false;};},[token,revision]);
+ const [selected,setSelected]=useState<InventoryRow|null>(null);const [query,setQuery]=useState('');const [policy,setPolicy]=useState('');
+ const pagination=useAdminPage(token,'admin_inventory_page_v1',{p_query:query,p_policy:policy},parseInventoryRow,inventoryKey);
+ const {rows,error,loading}=pagination;
  const [notice,setNotice]=useState('');const [noticeSequence,setNoticeSequence]=useState(0);const noticeTarget=useRef<HTMLParagraphElement>(null);useAdminReturnFocus(notice,noticeTarget,noticeSequence);
- const visible=filterInventory(rows,query,policy);
- return <section><h2>Inventory</h2>{notice&&<p role="status" ref={noticeTarget} tabIndex={-1}>{notice}</p>}<p>Up to 500 variants. Search and tracking filters apply only to this loaded set, not the complete catalogue. Untracked items have no implied available stock count.</p><p className="admin-field-help">Variant state and catalogue availability are distinct from inventory tracking. Product active/archived state is not supplied by this inventory view.</p>
- <div className="admin-inventory-filters"><label>Search loaded inventory<input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Product name, SKU or options"/></label><label>Inventory tracking filter<select value={policy} onChange={event=>setPolicy(event.target.value)}><option value="">All tracking policies</option><option value="tracked">Tracked</option><option value="untracked">Untracked</option></select></label></div>
- <AdminReadState loading={loading} message={loading?(rows.length?'Refreshing inventory…':'Loading inventory…'):error} retry={()=>setRevision(value=>value+1)} retryLabel="Retry loading inventory"/>{!loading&&!error&&!visible.length&&<p>{rows.length?'No variants match the loaded-set filters.':'No variants found.'}</p>}
- {!loading&&!error&&<InventoryWorklist rows={visible} select={row=>{setNotice('');setSelected(row);}}/>}{!loading&&!error&&selected&&<InventoryEditor key={selected.variant_id} row={selected} token={token} saved={()=>{setSelected(null);setRevision(value=>value+1);setNoticeSequence(value=>value+1);setNotice('Inventory change confirmed. Reloading authoritative balances.');}}/>}
+ const visible=rows;
+ return <section><h2>Inventory</h2>{notice&&<p role="status" ref={noticeTarget} tabIndex={-1}>{notice}</p>}<p>Search and tracking filters apply to the complete authorized inventory. Untracked items have no implied available stock count.</p><p className="admin-field-help">Variant state and catalogue availability are distinct from inventory tracking. Product active/archived state is not supplied by this inventory view.</p>
+ <div className="admin-inventory-filters"><label>Search inventory<input type="search" maxLength={200} disabled={selected!==null} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Product name, SKU or options"/></label><label>Inventory tracking filter<select disabled={selected!==null} value={policy} onChange={event=>setPolicy(event.target.value)}><option value="">All tracking policies</option><option value="tracked">Tracked</option><option value="untracked">Untracked</option></select></label></div>
+ <AdminCsvExport token={token} kind="inventory" query={query} policy={policy} disabled={loading||Boolean(error)||selected!==null}/><AdminReadState loading={loading} message={loading?(rows.length?'Refreshing inventory…':'Loading inventory…'):error} retry={pagination.refresh} retryLabel="Retry loading inventory"/>{!loading&&!error&&!visible.length&&<p>No matching variants.</p>}
+ {!loading&&!error&&!selected&&<><InventoryWorklist rows={visible} select={row=>{setNotice('');setSelected(row);}}/><AdminPagination {...pagination}/></>}{!loading&&!error&&selected&&<><button type="button" data-admin-leave="true" onClick={()=>{if(window.confirm('Return to inventory? Unsaved changes will be discarded. Review any unconfirmed adjustment before retrying.'))setSelected(null);}}>Back to inventory</button><InventoryEditor key={selected.variant_id} row={selected} token={token} saved={()=>{setSelected(null);pagination.refresh();setNoticeSequence(value=>value+1);setNotice('Inventory change confirmed. Reloading authoritative balances.');}}/></>}
  </section>;
 }
