@@ -76,6 +76,14 @@ test('Inventory manager passes all-term and tracking filters to server rather th
  assert.equal(calls.at(-1).p_query,'warm SKU Large');assert.equal(calls.at(-1).p_policy,'tracked');assert.match(host.textContent,/0 records/);
 });
 
+test('Orders pagination retains URL search/status behavior and forwards the complete filter to authorized RPC',async()=>{
+ const {OrderManager}=await module('features/admin/OrderManager.tsx');const calls=[];
+ fakeClient((name,args)=>{assert.equal(name,'admin_orders_page_v1');calls.push(args);return Promise.resolve({data:{items:[],total_count:0,page:args.p_page,page_size:args.p_page_size},error:null});});
+ await mount(React.createElement(MemoryRouter,{initialEntries:['/admin/orders?query=LH-&status=placed']},React.createElement(OrderManager,{token:'local'})));
+ assert.equal(calls.at(-1).p_query,'LH-');assert.equal(calls.at(-1).p_status,'placed');assert.match(host.textContent,/0 records/);
+ await act(async()=>inputValue(host.querySelector('[name="query"]'),'customer'));await submit(host.querySelector('form'));assert.equal(calls.at(-1).p_query,'customer');assert.equal(calls.at(-1).p_page,0);
+});
+
 test('mounted error descriptions follow added/removed controls and preserve help on cleanup without duplicate alerts',async()=>{
  const {AdminForm}=await module('features/admin/AdminForm.tsx');
  const view=(error,extra=false)=>React.createElement(AdminForm,{error,errorKind:'validation'},React.createElement('p',{id:'help'},'Existing help'),React.createElement('input',{name:'name','aria-describedby':'help',defaultValue:'retained'}),extra&&React.createElement('textarea',{name:'extra','aria-describedby':''}));
@@ -223,7 +231,7 @@ test('product create Cancel has no mutation; duplicate submit and uncertain repl
 
 test('actual protected order deep link mounts on fresh router and preserves provider continuity through return and POP',async()=>{
  const {testRouter}=await module('main.tsx');let subscriptions=0,restores=0;
- const client=fakeClient(name=>{if(name==='is_business_admin')return Promise.resolve({data:true,error:null});if(name==='load_variant_cart')return Promise.resolve({data:{id:'synthetic-cart',items:[]},error:null});if(name==='admin_get_order')return Promise.resolve({data:null,error:null});if(name==='admin_list_orders')return Promise.resolve({data:[],error:null});throw new Error(`Unexpected RPC ${name}`);});
+ const client=fakeClient(name=>{if(name==='is_business_admin')return Promise.resolve({data:true,error:null});if(name==='load_variant_cart')return Promise.resolve({data:{id:'synthetic-cart',items:[]},error:null});if(name==='admin_get_order')return Promise.resolve({data:null,error:null});if(name==='admin_orders_page_v1')return Promise.resolve({data:[],error:null});throw new Error(`Unexpected RPC ${name}`);});
  client.auth={onAuthStateChange(){subscriptions++;return {data:{subscription:{unsubscribe(){}}}};},async getSession(){restores++;return {data:{session:{user:{id:'synthetic-admin',email:'admin@example.invalid'},access_token:'synthetic-admin-token'}},error:null};}};
  client.from=()=>{const query={select(){return query;},eq(){return query;},order(){return query;},abortSignal(){return Promise.resolve({data:[],error:null});}};return query;};
  router=createMemoryRouter(testRouter.routes,{initialEntries:['/admin/orders/missing?status=placed']});await mount(React.createElement(RouterProvider,{router}));assert.ok(host.querySelector('.admin-workspace'));assert.match(host.textContent,/Order not found/);assert.equal(host.querySelector('footer'),null);
