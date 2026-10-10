@@ -28,5 +28,6 @@ export function AccountPage() {
     catch (error) { setStatus(error instanceof Error ? error.message : "Your profile could not be saved."); }
     finally { setBusy(false); }
   }
-  return <AccountExperience profile={profile} savedName={savedName} email={auth.session?.user.email} ready={ready} busy={busy} status={status} error={auth.error} onChange={(key, value) => setProfile(previous => ({ ...previous, [key]: value }))} onSave={event => void save(event)} onSignOut={() => void auth.signOut()} />;
+  const metadataName: unknown = auth.session?.user.user_metadata?.full_name ?? auth.session?.user.user_metadata?.name;
+  return <AccountExperience profile={profile} savedName={savedName} authenticatedName={typeof metadataName === "string" ? metadataName : undefined} email={auth.session?.user.email} ready={ready} busy={busy} status={status} error={auth.error} onChange={(key, value) => setProfile(previous => ({ ...previous, [key]: value }))} onSave={event => void save(event)} onSignOut={() => void auth.signOut()} />;
 }

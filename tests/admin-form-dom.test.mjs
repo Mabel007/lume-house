@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import React,{act,useRef} from 'react';
 import {JSDOM} from 'jsdom';
 import {createServer} from 'vite';
-import {createMemoryRouter,RouterProvider,Link,Outlet} from 'react-router-dom';
+import {createMemoryRouter,RouterProvider,Link,Outlet,MemoryRouter} from 'react-router-dom';
 
 // DOM/component evidence only. Supabase is replaced at the module boundary;
 // no environment credential or endpoint is read, and no network call is permitted.
@@ -108,6 +108,20 @@ test('actual application router keeps Auth/Product/Bag providers across customer
  await act(async()=>router.navigate('/admin/orders/synthetic-order'));assert.match(host.textContent,/does not have business administration access/);assert.equal(host.querySelector('.admin-workspace'),null);assert.deepEqual({restores,reads,unsubscribes},initial);
  await act(async()=>client.auth.signOut());await act(async()=>router.navigate('/cart'));assert.equal(host.querySelector('[aria-label="Bag (3)"]'),null);assert.ok(host.querySelector('[aria-label="Bag (0)"]'));
  current=session('customer-b');await act(async()=>receive('SIGNED_IN',current));assert.ok(host.querySelector('[aria-label="Bag (0)"]'));assert.doesNotMatch(host.textContent,/customer-a@example.invalid/);assert.deepEqual({restores,reads,unsubscribes},initial);
+});
+
+test('customer Account hub hides previous-user drafts and stale profile responses when identity switches or signs out',async()=>{
+ const {AuthContext}=await module('features/auth/AuthContext.ts');const {CustomerAccount}=await module('features/auth/CustomerRoutes.tsx');
+ const pendingA=deferred(),pendingB=deferred();let identity;
+ globalThis.__lumeFormTestClient={from(table){assert.equal(table,'profiles');const query={select(){return query;},eq(key,id){assert.equal(key,'id');identity=id;return query;},maybeSingle(){return identity==='a'?pendingA.promise:pendingB.promise;}};return query;}};
+ const session=id=>({user:{id,email:`${id}@example.invalid`,user_metadata:{full_name:`Current ${id}`}}});
+ const view=id=>React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(AuthContext.Provider,{value:{session:id?session(id):null,loading:false,error:null,signIn:async()=>{},signOut:async()=>{}}},React.createElement(CustomerAccount)));
+ await mount(view('a'));assert.match(host.textContent,/Current a/);assert.equal(host.querySelector('[name="full_name"]').disabled,true);
+ await render(view('b'));assert.match(host.textContent,/Current b/);assert.doesNotMatch(host.textContent,/Current a|a@example.invalid/);
+ await act(async()=>pendingA.resolve({data:{full_name:'Previous customer',phone:'+23276521208'},error:null}));assert.doesNotMatch(host.textContent,/Previous customer/);assert.equal(host.querySelector('[name="full_name"]').value,'');
+ await act(async()=>pendingB.resolve({data:{full_name:'New customer',phone:'+23276521209'},error:null}));assert.equal(host.querySelector('[name="full_name"]').value,'New customer');assert.match(host.textContent,/New customer/);
+ await act(async()=>inputValue(host.querySelector('[name="full_name"]'),'Unsaved private draft'));
+ await render(view(null));assert.equal(host.querySelector('.account-navigation'),null);assert.equal(host.querySelector('.profile-surface'),null);assert.doesNotMatch(host.textContent,/New customer|Unsaved private draft|b@example.invalid/);assert.match(host.textContent,/Sign in with Google/);
 });
 
 test('customer cancellation form locks duplicates and retains original reason after recoverable failure and read retry',async()=>{

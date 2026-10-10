@@ -329,8 +329,8 @@ test("Account separates saved identity, grouped defaults, orders and Google secu
   const html = renderAccount();
   assert.match(html, /aria-hidden="true">SN/);
   assert.match(html, /class="account-name">Saved Name/);
-  assert.match(html, /<legend>Profile<\/legend>/);
-  assert.match(html, /<legend>Delivery Details<\/legend>/);
+  assert.match(html, /<legend[^>]*>Personal Information<\/legend>/);
+  assert.match(html, /<legend[^>]*>Delivery Details<\/legend>/);
   assert.match(html, /Signed in with Google/);
   assert.match(html, /does not manage a password for this account/);
   assert.match(html, /href="\/account\/orders"[^>]*>My Orders/);
@@ -343,6 +343,16 @@ test("Account separates saved identity, grouped defaults, orders and Google secu
     assert.ok(input.includes(`name="${name}"`));
     assert.ok(input.includes(`autoComplete="${token}"`));
   }
+});
+
+test("Account hub links to existing destinations and uses only available current identity", () => {
+  const html = renderAccount();
+  assert.match(html, /aria-label="Account sections"/);
+  for (const destination of ["/account#personal-information", "/account#delivery-details", "/account/orders", "/account#account-security", "/account#account-help", "/help#contact", "/help/delivery-pickup", "/help/returns-refunds"]) assert.ok(html.includes(`href="${destination}"`));
+  assert.equal((html.match(/<form\b/g) ?? []).length, 1);
+  assert.match(renderAccount({ savedName: "", authenticatedName: "Current Customer" }), /class="account-name">Current Customer/);
+  assert.match(renderAccount({ savedName: "", authenticatedName: "Current Customer" }), /aria-hidden="true">CC/);
+  assert.match(renderAccount({ authenticatedName: "Google Name" }), /class="account-name">Saved Name/);
 });
 
 test("Account loading/error states keep saving disabled and empty identity has a safe fallback", () => {
