@@ -68,6 +68,14 @@ test('Product manager sends server search and page sizes while category suggesti
  await act(async()=>{host.querySelector('.admin-pagination select').value='100';host.querySelector('.admin-pagination select').dispatchEvent(new window.Event('change',{bubbles:true}));});assert.equal(calls.at(-1).p_page_size,100);
 });
 
+test('Inventory manager passes all-term and tracking filters to server rather than filtering a capped array',async()=>{
+ const {InventoryManager}=await module('features/admin/InventoryManager.tsx');const calls=[];
+ fakeClient((name,args)=>{assert.equal(name,'admin_inventory_page_v1');calls.push(args);return Promise.resolve({data:{items:[],total_count:0,page:args.p_page,page_size:args.p_page_size},error:null});});
+ await mount(React.createElement(InventoryManager,{token:'local'}));await act(async()=>inputValue(host.querySelector('input[type="search"]'),'warm SKU Large'));
+ await act(async()=>{host.querySelector('.admin-inventory-filters select').value='tracked';host.querySelector('.admin-inventory-filters select').dispatchEvent(new window.Event('change',{bubbles:true}));});
+ assert.equal(calls.at(-1).p_query,'warm SKU Large');assert.equal(calls.at(-1).p_policy,'tracked');assert.match(host.textContent,/0 records/);
+});
+
 test('mounted error descriptions follow added/removed controls and preserve help on cleanup without duplicate alerts',async()=>{
  const {AdminForm}=await module('features/admin/AdminForm.tsx');
  const view=(error,extra=false)=>React.createElement(AdminForm,{error,errorKind:'validation'},React.createElement('p',{id:'help'},'Existing help'),React.createElement('input',{name:'name','aria-describedby':'help',defaultValue:'retained'}),extra&&React.createElement('textarea',{name:'extra','aria-describedby':''}));
