@@ -15,5 +15,11 @@
 .account-help { margin-top: 1.25rem; }
 .account-help ul { list-style: none; margin: 0; padding: 0; }
 .account-page [id] { scroll-margin-top: 1.5rem; }
+.account-email-field { grid-column: 1 / -1; }
+.account-fieldset > .small-note { margin-bottom: 1rem; }
+.account-page .account-fieldset + .account-fieldset { padding-top: 1.5rem; border-top: 1px solid var(--surface-border); }
+.account-cancel { min-height: 44px; padding: .75rem 1.5rem; border: 1px solid #817d70; color: var(--color-ink); background: transparent; }
+.account-cancel:hover:not(:disabled) { background: #eaeade; }
+.profile-actions .feedback { flex-basis: 100%; margin: 0; }
 @media (max-width: 1000px) { .account-navigation ul { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .account-navigation ul { grid-template-columns: minmax(0, 1fr); } .account-help { margin-top: 0; } }

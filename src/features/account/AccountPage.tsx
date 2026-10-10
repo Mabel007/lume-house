@@ -11,23 +11,29 @@ export function AccountPage() {
   const [status, setStatus] = useState("Loading profile…");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
-  const [savedName, setSavedName] = useState("");
+  const [savedProfile, setSavedProfile] = useState<Profile>({ ...emptyProfile });
   const id = auth.session?.user.id;
   useEffect(() => {
     let active = true;
-    if (id) void loadProfile(getSupabaseClient(), id).then(value => { if (active) { setProfile(value || { ...emptyProfile }); setSavedName(value?.full_name || ""); setStatus(""); setReady(true); } }).catch(() => { if (active) setStatus("Your profile could not be loaded. Reload to try again."); });
+    if (id) void loadProfile(getSupabaseClient(), id).then(value => { if (active) { const loaded = value || { ...emptyProfile }; setProfile(loaded); setSavedProfile({ ...loaded }); setStatus(""); setReady(true); } }).catch(() => { if (active) setStatus("Your profile could not be loaded. Reload to try again."); });
     return () => { active = false; };
   }, [id]);
   if (auth.loading) return <section className="wrap page-section"><h1>Your account.</h1><p role="status">Restoring your session…</p></section>;
   if (!id) return <section className="wrap page-section sign-in-page motion-enter"><div className="sign-in-copy"><p className="eyebrow">YOUR LUMÉ HOUSE</p><h1>Welcome to<br/>Lumé House.</h1><p className="account-intro">A considered home begins with the pieces you love.</p><p>Sign in to save your profile and Bag, and keep your orders in one place.</p><button className="button google-sign-in" onClick={() => void auth.signIn()}><span aria-hidden="true" className="google-mark">G</span>Sign in with Google</button><p className="small-note">Your profile defaults stay separate from each order’s delivery details.</p><p className="feedback" role="alert">{auth.error || (pathname === "/auth/callback" ? "Sign-in was not completed. Please try again." : "")}</p><Link className="text-link" to="/">Explore the collection →</Link></div><figure className="sign-in-image"><img src="/images/a-place-for-the-everyday.webp" alt="A warm living room with vases and candles on a wooden tray"/><figcaption>Beautiful things live here.</figcaption></figure></section>;
   if (pathname === "/auth/callback") return <Navigate to="/account" replace />;
   async function save(event: React.FormEvent) {
-    event.preventDefault(); if (!id || !ready) return;
+    event.preventDefault(); if (!id || !ready || busy) return;
+    const submittedProfile = { ...profile };
     setBusy(true);
-    try { await saveProfile(getSupabaseClient(), id, profile); setSavedName(profile.full_name.trim()); setStatus("Your profile has been saved."); }
+    try { await saveProfile(getSupabaseClient(), id, submittedProfile); setSavedProfile(submittedProfile); setStatus("Your profile has been saved."); }
     catch (error) { setStatus(error instanceof Error ? error.message : "Your profile could not be saved."); }
     finally { setBusy(false); }
   }
+  function cancel() {
+    if (!ready || busy) return;
+    setProfile({ ...savedProfile });
+    setStatus("Unsaved changes discarded.");
+  }
   const metadataName: unknown = auth.session?.user.user_metadata?.full_name ?? auth.session?.user.user_metadata?.name;
-  return <AccountExperience profile={profile} savedName={savedName} authenticatedName={typeof metadataName === "string" ? metadataName : undefined} email={auth.session?.user.email} ready={ready} busy={busy} status={status} error={auth.error} onChange={(key, value) => setProfile(previous => ({ ...previous, [key]: value }))} onSave={event => void save(event)} onSignOut={() => void auth.signOut()} />;
+  return <AccountExperience profile={profile} savedName={savedProfile.full_name} authenticatedName={typeof metadataName === "string" ? metadataName : undefined} email={auth.session?.user.email} ready={ready} busy={busy} status={status} error={auth.error} onChange={(key, value) => setProfile(previous => ({ ...previous, [key]: value }))} onSave={event => void save(event)} onCancel={cancel} onSignOut={() => void auth.signOut()} />;
 }

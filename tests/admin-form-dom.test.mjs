@@ -124,6 +124,26 @@ test('customer Account hub hides previous-user drafts and stale profile response
  await render(view(null));assert.equal(host.querySelector('.account-navigation'),null);assert.equal(host.querySelector('.profile-surface'),null);assert.doesNotMatch(host.textContent,/New customer|Unsaved private draft|b@example.invalid/);assert.match(host.textContent,/Sign in with Google/);
 });
 
+test('Account section navigation retains drafts and focus; Cancel restores loaded and successful saves while failures retain input',async()=>{
+ const {AuthContext}=await module('features/auth/AuthContext.ts');const {CustomerAccount}=await module('features/auth/CustomerRoutes.tsx');
+ const loaded={full_name:'Loaded customer',phone:'+23276521208',default_street_address:'Loaded address',default_area:'Lumley',default_city:'Freetown'};let pending=deferred();const writes=[];
+ globalThis.__lumeFormTestClient={from(table){assert.equal(table,'profiles');let update;const query={select(){return query;},update(values){update=values;return query;},eq(key,id){assert.equal(key,'id');assert.equal(id,'customer');if(update){writes.push(update);return pending.promise;}return query;},maybeSingle(){return Promise.resolve({data:loaded,error:null});}};return query;}};
+ let signOuts=0;const value={session:{user:{id:'customer',email:'owner@example.invalid',user_metadata:{full_name:'Google customer'}}},loading:false,error:null,signIn:async()=>{},signOut:async()=>{signOuts++;}};
+ router=createMemoryRouter([{path:'/account',element:React.createElement(AuthContext.Provider,{value},React.createElement(CustomerAccount))}],{initialEntries:['/account']});await mount(React.createElement(RouterProvider,{router}));
+ const form=host.querySelector('form');const field=name=>host.querySelector(`[name="${name}"]`);const cancel=()=>Array.from(host.querySelectorAll('button')).find(node=>node.textContent==='Cancel');const signOut=()=>Array.from(host.querySelectorAll('button')).find(node=>node.textContent==='Sign Out');
+ const email=host.querySelector('#account-auth-email');assert.equal(email.readOnly,true);assert.equal(email.value,'owner@example.invalid');assert.equal(email.hasAttribute('name'),false);
+ await act(async()=>{inputValue(field('full_name'),'Draft customer');inputValue(field('default_street_address'),'Draft address');});
+ await click(host.querySelector('a[href="/account#delivery-details"]'));await act(async()=>new Promise(resolve=>setTimeout(resolve,10)));
+ assert.equal(host.querySelector('form'),form);assert.equal(field('full_name').value,'Draft customer');assert.equal(field('default_street_address').value,'Draft address');assert.equal(document.activeElement.id,'delivery-details');
+ await click(cancel());for(const [name,expected] of Object.entries(loaded))assert.equal(field(name).value,expected);assert.equal(writes.length,0);
+ await act(async()=>inputValue(field('phone'),'invalid phone'));await submit(form);assert.equal(writes.length,0);assert.match(host.textContent,/Enter a Sierra Leone phone number/);assert.equal(field('phone').value,'invalid phone');await click(cancel());
+ await act(async()=>inputValue(field('full_name'),'Failed draft'));await submit(form);assert.equal(writes.length,1);assert.equal(cancel().disabled,true);assert.equal(signOut().disabled,true);
+ await act(async()=>pending.resolve({error:{code:'transport'}}));assert.equal(field('full_name').value,'Failed draft');assert.match(host.textContent,/Your profile could not be saved/);assert.equal(host.querySelector('.account-name').textContent,'Loaded customer');await click(cancel());assert.equal(field('full_name').value,'Loaded customer');
+ pending=deferred();await act(async()=>{inputValue(field('full_name'),'Saved customer');inputValue(field('default_street_address'),'Saved address');});await submit(form);await act(async()=>pending.resolve({error:null}));assert.equal(writes.length,2);assert.equal(writes[1].full_name,'Saved customer');assert.equal(writes[1].default_street_address,'Saved address');assert.equal(Object.hasOwn(writes[1],'email'),false);assert.equal(host.querySelector('.account-name').textContent,'Saved customer');
+ await act(async()=>{inputValue(field('full_name'),'Discarded customer');inputValue(field('default_street_address'),'Discarded address');});await click(cancel());assert.equal(field('full_name').value,'Saved customer');assert.equal(field('default_street_address').value,'Saved address');assert.equal(writes.length,2);
+ await click(signOut());assert.equal(signOuts,1);
+});
+
 test('customer cancellation form locks duplicates and retains original reason after recoverable failure and read retry',async()=>{
  const {CancellationRequest}=await module('features/orders/CancellationRequest.tsx');let pending=deferred();const calls=[];
  fakeClient((name,args)=>{if(name==='customer_get_cancellation_request')return Promise.resolve({data:null,error:null});calls.push({name,args});return pending.promise;});
