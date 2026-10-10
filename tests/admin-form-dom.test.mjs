@@ -30,6 +30,35 @@ function fakeClient(handler){const client={rpc(name,args){return {setHeader(key,
 function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
 function inputValue(node,value){const prototype=node instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(prototype,'value').set.call(node,value);node.dispatchEvent(new window.Event('input',{bubbles:true}));}
 
+function dashboardFixture(){return {active_products:2,total_variants:3,tracked_variants:2,out_of_stock:1,unconfigured_stock:0,total_orders:2,orders_placed:1,awaiting_payment:2,by_status:{placed:1,confirmed:0,processing:0,ready_for_pickup:0,out_for_delivery:0,completed:1,cancelled:0},recent_orders:[{id:'40000000-aaaa-4000-8000-000000000001',order_reference:'LH-0000000000000001',created_at:'2026-10-10T00:00:00Z',status:'placed',payment_status:'awaiting_payment',customer_email:'private@example.invalid'}],stock_attention:[{variant_id:'local-stock',product_name:'Local stock piece',sku:'LOCAL-STOCK',available_quantity:0}]};}
+
+test('dashboard parser validates aggregate/status parity, exact bounded previews and projects no customer contacts',async()=>{
+ const {parseDashboard}=await module('features/admin/dashboardContract.ts');const data=dashboardFixture();const parsed=parseDashboard(data);assert.equal(parsed.total_orders,2);assert.equal(parsed.recent_orders[0].customer_email,undefined);
+ for(const invalid of [{...data,total_orders:3},{...data,orders_placed:0},{...data,awaiting_payment:3},{...data,tracked_variants:0},{...data,out_of_stock:-1},{...data,by_status:{placed:2}},{...data,recent_orders:[{...data.recent_orders[0],status:'completed'}]},{...data,stock_attention:[{...data.stock_attention[0],available_quantity:1}]},{...data,recent_orders:[]}])assert.throws(()=>parseDashboard(invalid));
+});
+
+test('dashboard reads are server aggregates; loading/error/retry, identity changes and revocation hide stale/private information',async()=>{
+ const {AdminDashboard}=await module('features/admin/AdminDashboard.tsx');let pending=deferred();const calls=[];
+ fakeClient((name,args,authorization)=>{assert.equal(name,'admin_dashboard_v1');calls.push({name,args,authorization});return pending.promise;});
+ await mount(React.createElement(MemoryRouter,null,React.createElement(AdminDashboard,{token:'a'})));assert.match(host.textContent,/Loading overview metrics/);await act(async()=>pending.resolve({data:dashboardFixture(),error:null}));assert.match(host.textContent,/Local stock piece/);assert.doesNotMatch(host.textContent,/private@example.invalid/);assert.ok(host.querySelector('a[href="/admin/orders?status=placed"]'));assert.ok(host.querySelector('a[href="/admin/orders/40000000-aaaa-4000-8000-000000000001"]'));
+ pending=deferred();await click(host.querySelector('button'));assert.doesNotMatch(host.textContent,/Local stock piece/);const previous=pending;pending=deferred();await render(React.createElement(MemoryRouter,null,React.createElement(AdminDashboard,{token:'b'})));await act(async()=>previous.resolve({data:dashboardFixture(),error:null}));assert.doesNotMatch(host.textContent,/Local stock piece/);assert.equal(calls.at(-1).authorization,'Bearer b');
+ await act(async()=>pending.resolve({data:null,error:{code:'42501',message:'private provider detail'}}));assert.match(host.textContent,/access was denied/);assert.doesNotMatch(host.textContent,/Local stock piece|private provider/);
+ pending=deferred();await click(host.querySelector('button'));await act(async()=>pending.resolve({data:{private:'malformed'},error:null}));assert.match(host.textContent,/could not be loaded or validated/);
+ pending=deferred();await click(host.querySelector('button'));const empty={active_products:0,total_variants:0,tracked_variants:0,out_of_stock:0,unconfigured_stock:0,total_orders:0,orders_placed:0,awaiting_payment:0,by_status:{placed:0,confirmed:0,processing:0,ready_for_pickup:0,out_for_delivery:0,completed:0,cancelled:0},recent_orders:[],stock_attention:[]};await act(async()=>pending.resolve({data:empty,error:null}));assert.match(host.textContent,/No orders have been placed/);assert.match(host.textContent,/No active tracked variants have known zero/);assert.match(host.textContent,/Low-stock reporting is deferred/);assert.doesNotMatch(host.textContent,/recognized revenue/);
+});
+
+test('Admin Profile uses current authenticated identity, hides stale access reads and reuses trusted sign-out without permission/password controls',async()=>{
+ const {AdminProfile}=await module('features/admin/AdminProfile.tsx');const {AuthContext}=await module('features/auth/AuthContext.ts');let read=deferred(),signOuts=0;
+ fakeClient(name=>{assert.equal(name,'is_business_admin');return read.promise;});
+ const view=(id,provider='google')=>React.createElement(MemoryRouter,null,React.createElement(AuthContext.Provider,{value:{session:id?{access_token:`token-${id}`,user:{id,email:`${id}@example.invalid`,user_metadata:{full_name:`Current ${id}`},app_metadata:{provider}}}:null,loading:false,error:null,signOut:async()=>{signOuts++;},signIn:async()=>{}}},React.createElement(AdminProfile,{token:`token-${id}`})));
+ await mount(view('a'));assert.match(host.textContent,/Checking your administration access/);assert.doesNotMatch(host.textContent,/Current a/);const old=read;read=deferred();await render(view('b'));await act(async()=>old.resolve({data:true,error:null}));assert.doesNotMatch(host.textContent,/Current a|a@example.invalid/);
+ await act(async()=>read.resolve({data:true,error:null}));assert.match(host.textContent,/Current b|b@example.invalid/);assert.match(host.textContent,/Active business-admin membership/);assert.match(host.textContent,/Sign-in provider: Google/);assert.doesNotMatch(host.textContent,/token-b|Change Password|Owner|Manager/);assert.equal(host.querySelector('input'),null);
+ await click(host.querySelector('button'));assert.equal(signOuts,1);
+ read=deferred();await render(view('c','unknown'));await act(async()=>read.resolve({data:false,error:null}));assert.match(host.textContent,/access was denied/);assert.doesNotMatch(host.textContent,/Current b|Current c/);
+ read=deferred();await click(host.querySelector('button'));await act(async()=>read.resolve({data:true,error:null}));assert.match(host.textContent,/provider information unavailable/);assert.doesNotMatch(host.textContent,/Google manages/);
+ await render(view(null));assert.doesNotMatch(host.textContent,/Current c|Active business-admin/);assert.match(host.textContent,/Sign in to view/);
+});
+
 test('authorized pagination validates envelopes and presents accurate accessible first/middle/last/empty controls',async()=>{
  const {parseAdminPage,lastPage}=await module('features/admin/adminPagination.ts');const {AdminPagination}=await module('features/admin/PaginationControls.tsx');
  const parse=row=>{assert.equal(typeof row.id,'string');return {id:row.id};};const key=row=>row.id;

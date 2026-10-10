@@ -1,0 +1,8 @@
+.admin-profile-identity { display: flex; align-items: center; gap: 1.5rem; padding-block: 1rem 2rem; }
+.admin-profile-identity > div { min-width: 0; overflow-wrap: anywhere; }
+.admin-profile-avatar { display: grid; place-items: center; width: 72px; height: 72px; flex-shrink: 0; border-radius: 50%; background: #e8e4d7; color: #283b2a; font-size: 1.5rem; }
+.admin-profile-sections { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1.5rem; }
+.admin-profile-card { padding: 1.5rem; border: 1px solid var(--surface-border); background: #faf8f3; overflow-wrap: anywhere; }
+.admin-profile-card button, .admin-profile-card a { min-height: 44px; display: inline-flex; align-items: center; }
+@media (max-width: 1100px) { .admin-profile-sections { grid-template-columns: minmax(0,1fr); } }
+@media (max-width: 700px) { .admin-profile-identity { align-items: flex-start; gap: 1rem; } }

@@ -92,6 +92,8 @@ $guard$;
   Run-Sql 'additive admin pagination contracts' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010001900_admin_pagination.sql'))
   Run-Sql 'atomic bounded admin exports' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010002000_admin_exports.sql'))
   Run-Sql 'admin pagination authorization and volume' (Read-Sql (Join-Path $testRoot 'admin-pagination.sql'))
+  Run-Sql 'dashboard aggregate migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010002100_admin_dashboard.sql'))
+  Run-Sql 'dashboard counts and authorization' (Read-Sql (Join-Path $testRoot 'admin-dashboard.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin

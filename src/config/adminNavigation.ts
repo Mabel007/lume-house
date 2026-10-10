@@ -4,6 +4,7 @@ export const adminNavigation = [
   { path: '/admin/products', title: 'Catalogue', summary: 'Products and variants', description: 'Manage products, variants and reviewed imagery for the storefront.' },
   { path: '/admin/inventory', title: 'Inventory', summary: 'Stock and adjustments', description: 'Review stock and record actual inventory changes.' },
   { path: '/admin/memberships', title: 'Access', summary: 'Admin memberships', description: 'Review administration memberships and their recorded history.' },
+  { path: '/admin/profile', title: 'Profile', summary: 'Your admin account', description: 'Review your sign-in identity, administration access and account security.' },
 ] as const;
 
 export function isAdminRoute(pathname: string): boolean {

@@ -107,7 +107,7 @@ test('scoped workspace preserves routes, contextual headings and one active navi
   assert.match(html,new RegExp(`<h1>${item.title}</h1>`));
   assert.equal((html.match(/<h1[ >]/g)??[]).length,1);
   const nav=html.match(/<nav[^>]*aria-label="Business administration"[^>]*>(.*?)<\/nav>/s)[1];
-  assert.equal((nav.match(/<a /g)??[]).length,5);
+  assert.equal((nav.match(/<a /g)??[]).length,6);
   const active=nav.match(/<a[^>]*aria-current="page"[^>]*>/g)??[];
   assert.equal(active.length,1);assert.ok(active[0].includes(`href="${item.path}"`));
   assert.equal(routeTitle(item.path),`${item.title} | Administration`);
