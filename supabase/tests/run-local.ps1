@@ -94,6 +94,11 @@ $guard$;
   Run-Sql 'admin pagination authorization and volume' (Read-Sql (Join-Path $testRoot 'admin-pagination.sql'))
   Run-Sql 'dashboard aggregate migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010002100_admin_dashboard.sql'))
   Run-Sql 'dashboard counts and authorization' (Read-Sql (Join-Path $testRoot 'admin-dashboard.sql'))
+  Run-Sql 'additive product gallery migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010002200_product_galleries.sql'))
+  Run-Sql 'product gallery security and ordering' (Read-Sql (Join-Path $testRoot 'product-gallery.sql'))
+  Run-Sql 'disposable Storage policy model' (Read-Sql (Join-Path $testRoot 'storage-media-bootstrap.sql'))
+  Run-Sql 'private product Storage migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010002300_product_media_storage.sql'))
+  Run-Sql 'Storage policy denial model' (Read-Sql (Join-Path $testRoot 'storage-media.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin
