@@ -89,6 +89,8 @@ $guard$;
   Run-Sql 'membership authorization and revocation' (Read-Sql (Join-Path $testRoot 'memberships.sql'))
   Run-Sql 'customer cancellation requests' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001800_cancellation_requests.sql'))
   Run-Sql 'cancellation request security and stock boundary' (Read-Sql (Join-Path $testRoot 'cancellation-requests.sql'))
+  Run-Sql 'additive admin pagination contracts' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010001900_admin_pagination.sql'))
+  Run-Sql 'admin pagination authorization and volume' (Read-Sql (Join-Path $testRoot 'admin-pagination.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin
