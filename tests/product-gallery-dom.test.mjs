@@ -1,0 +1,24 @@
+import {test,before,after,afterEach} from 'node:test';
+import assert from 'node:assert/strict';
+import React,{act} from 'react';
+import {JSDOM} from 'jsdom';
+import {createServer} from 'vite';
+const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/'});
+const {document}=dom.window;
+for(const name of ['window','document','HTMLElement','Element'])Object.defineProperty(globalThis,name,{configurable:true,value:dom.window[name]});
+globalThis.IS_REACT_ACT_ENVIRONMENT=true;
+dom.window.confirm=()=>true;
+const {createRoot}=await import('react-dom/client');const host=document.getElementById('root');let server,root,Editor;
+const product={id:'fixture',name:'Test piece',image_path:'/images/mug.svg'};
+const images=[{source:'static',path:'/images/mug.svg',position:0},{source:'static',path:'/images/arch-vase.webp',position:1}];
+before(async()=>{server=await createServer({configFile:false,envDir:false,server:{middlewareMode:true,hmr:false},plugins:[{name:'isolated-media-client',enforce:'pre',load(id){if(id.replaceAll('\\','/').endsWith('/src/lib/supabase/client.ts'))return 'export function getSupabaseClient(){return globalThis.__mediaClient;}';}}]});({ProductGalleryEditor:Editor}=await server.ssrLoadModule('/src/features/admin/ProductGalleryEditor.tsx'));});
+afterEach(async()=>{if(root)await act(async()=>root.unmount());root=null;host.replaceChildren();delete globalThis.__mediaClient;});
+after(async()=>{await server.close();dom.window.close();});
+function mock({fail=false,pending}={}){const state={fail,saves:[],loads:0};globalThis.__mediaClient={rpc(name,args){const result=name==='admin_product_gallery_v1'?(state.loads++===0&&pending?pending:Promise.resolve({data:{items:images,updated_at:'2026-10-10T00:00:00Z'},error:null})):(state.saves.push(args),Promise.resolve({data:state.fail?null:{items:args.p_items.map((row,position)=>({...row,position}))},error:state.fail?{code:'40001'}:null}));return {setHeader(){return result;}};}};return state;}
+const props=token=>({product,token,blocked:false,assets:{status:'ready',paths:['/images/mug.svg','/images/arch-vase.webp']},saved:()=>{}});
+async function mount(token='first'){root=createRoot(host);await act(async()=>root.render(React.createElement(Editor,props(token))));}
+async function click(button){await act(async()=>button.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true})));}
+test('mounted gallery reorders primary and confirms exact submitted ordering',async()=>{const state=mock();await mount();const buttons=[...host.querySelectorAll('button')];await click(buttons.filter(button=>button.textContent==='Make primary')[1]);await click([...host.querySelectorAll('button')].find(button=>button.textContent==='Save gallery'));assert.equal(state.saves[0].p_items[0].path,'/images/arch-vase.webp');assert.equal(state.saves[0].p_items[1].path,'/images/mug.svg');});
+test('mounted gallery surfaces stale failure and permits deliberate reload/retry',async()=>{const state=mock({fail:true});await mount();await click([...host.querySelectorAll('button')].find(button=>button.textContent==='Save gallery'));assert.match(host.querySelector('[role="alert"]').textContent,/changed/);await click([...host.querySelectorAll('button')].find(button=>button.textContent==='Reload gallery / Retry'));assert.equal(state.loads,2);assert.equal(host.querySelector('[role="alert"]'),null);assert.match(host.textContent,/Primary/);});
+test('account switch discards stale gallery response without cross-user display',async()=>{let resolve;const pending=new Promise(done=>resolve=done);mock({pending});await mount('first');await act(async()=>root.render(React.createElement(Editor,props('second'))));await act(async()=>resolve({data:{items:[{source:'static',path:'/images/previous-user.png',position:0}],updated_at:'2026-10-10T00:00:00Z'},error:null}));assert.doesNotMatch(host.textContent,/previous-user/);assert.match(host.textContent,/mug.svg/);});
+test('mounted upload keeps a failed file for explicit retry and appends confirmed private media',async()=>{mock();let attempts=0;globalThis.__mediaClient.functions={invoke:async()=>++attempts===1?{error:{code:'fixture'},data:null}:{error:null,data:{source:'storage',path:'10000000-0000-4000-8000-000000000001.png'}}};await mount();const input=host.querySelector('input[type="file"]');Object.defineProperty(input,'files',{value:[new File([new Uint8Array([1])],'not-used.png',{type:'image/png'})]});await act(async()=>input.dispatchEvent(new dom.window.Event('change',{bubbles:true})));let button=[...host.querySelectorAll('button')].find(item=>item.textContent==='Upload PNG / Retry upload');await click(button);assert.match(host.querySelector('[role="alert"]').textContent,/not confirmed/);assert.equal(button.disabled,false);await click(button);assert.equal(attempts,2);assert.match(host.textContent,/Save gallery to publish/);assert.match(host.textContent,/Uploaded PNG/);assert.equal(host.querySelectorAll('li').length,3);});

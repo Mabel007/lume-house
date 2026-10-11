@@ -6,8 +6,9 @@ import { adminRpc, adminErrorKind, parseAdminProduct, type AdminProduct } from '
 import { getSupabaseClient } from '../../lib/supabase/client';
 import { ReviewedMediaPicker } from './ReviewedMediaPicker';
 import { canSaveReviewedImage, useReviewedAssets, type ImagePreview } from './reviewedMedia';
+import {ProductGalleryEditor} from './ProductGalleryEditor';
 
-export function ProductMedia({product, token, saved, busyChanged,blocked=false,accessChanged}: {product: AdminProduct; token: string; saved: () => void; busyChanged?: (busy:boolean)=>void;blocked?:boolean;accessChanged?:(denied:boolean)=>void}) {
+export function ProductMedia({product, token, saved, busyChanged,blocked=false,accessChanged}: {product: AdminProduct; token: string; saved: (message?:string) => void; busyChanged?: (busy:boolean)=>void;blocked?:boolean;accessChanged?:(denied:boolean)=>void}) {
   const {assets, reload} = useReviewedAssets(token,accessChanged);
   const [error, setError] = useState('');const [errorKind,setErrorKind]=useState<AdminErrorKind>('validation');const [uncertain,setUncertain]=useState(false); const [busy, setBusy] = useState(false); const submitting = useRef(false);
   const [path, setPath] = useState(product.image_path); const [preview, setPreview] = useState<ImagePreview>({path, status: 'loading'});
@@ -22,13 +23,14 @@ export function ProductMedia({product, token, saved, busyChanged,blocked=false,a
     catch (cause) { const kind=adminErrorKind(cause,true);setErrorKind(kind);if(kind==='uncertain')setUncertain(true);setError(cause instanceof Error ? cause.message : 'Media could not be saved.'); }
     finally { submitting.current = false; setBusy(false); busyChanged?.(false); }
   }
-  return <section><h3>Product media</h3><p>Select a reviewed existing asset for the primary image. Uploads and galleries are not available yet. Existing order snapshots are unchanged.</p>
+  return <section><h3>Product media</h3><p>Select a reviewed existing asset for the legacy primary image. A saved gallery takes precedence on updated storefronts; this selection remains the compatibility fallback. Existing order snapshots are unchanged.</p>
     {blocked&&assets.status==='error'&&<AdminReadState message={assets.message} retry={reload} retryLabel="Reload media" disabled={busy}/>}
     <AdminForm hidden={blocked} blocked={blocked} className="admin-form" onSubmit={submit} busy={busy} error={error} errorKind={errorKind} uncertain={uncertain}>
       <ReviewedMediaPicker assets={assets} value={path} change={value => {setPath(value); setPreview({path: value, status: 'loading'}); setError('');}} preview={preview} previewChanged={setPreview} reload={retry} disabled={busy}/>
-      <p>The storefront uses the product name as its image description. Select imagery that represents this product accurately. This save applies only to the primary image.</p>
+      <p>The storefront uses the product name as its image description. Select imagery that represents this product accurately. This save updates the legacy fallback; gallery primary selection is saved separately.</p>
 
-      <button className="button" disabled={busy || !canSaveReviewedImage(assets, path, preview)}>{busy ? 'Saving…' : 'Save primary image'}</button>
+      <button className="button" disabled={busy || !canSaveReviewedImage(assets, path, preview)}>{busy ? 'Saving…' : 'Save legacy image'}</button>
     </AdminForm>
+    <ProductGalleryEditor product={product} token={token} saved={()=>saved('Product gallery saved. The first image is primary on updated storefronts.')} busyChanged={busyChanged} blocked={blocked} accessChanged={accessChanged} assets={assets}/>
   </section>;
 }

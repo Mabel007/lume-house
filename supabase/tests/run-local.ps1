@@ -98,6 +98,11 @@ $guard$;
   Run-Sql 'manual fulfilment authorization and preservation' (Read-Sql (Join-Path $testRoot 'fulfilment.sql'))
   node (Join-Path $testRoot 'fulfilment-concurrency.mjs') $containerName
   if ($LASTEXITCODE -ne 0) { throw 'Fulfilment two-session concurrency checks failed' }
+  Run-Sql 'additive product gallery migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010002200_product_galleries.sql'))
+  Run-Sql 'product gallery security and ordering' (Read-Sql (Join-Path $testRoot 'product-gallery.sql'))
+  Run-Sql 'disposable Storage policy model' (Read-Sql (Join-Path $testRoot 'storage-media-bootstrap.sql'))
+  Run-Sql 'private product Storage migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010002300_product_media_storage.sql'))
+  Run-Sql 'Storage policy denial model' (Read-Sql (Join-Path $testRoot 'storage-media.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin

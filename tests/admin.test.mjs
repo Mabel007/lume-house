@@ -76,10 +76,10 @@ test('structured existing options have labeled controls and removal',async()=>{
  assert.match(html,/Option 1 name/);assert.match(html,/value="Cream"/);assert.match(html,/Remove option 2/);assert.doesNotMatch(html,/textarea/);
 });
 
-test('media foundation states its actual capability without pretending uploads',async()=>{
+test('media foundation preserves reviewed images and exposes additive gallery loading',async()=>{
  const {ProductMedia}=await server.ssrLoadModule('/src/features/admin/ProductMedia.tsx');
  const html=renderToStaticMarkup(React.createElement(ProductMedia,{product:{id:'local',name:'Local',image_path:'/images/mug.svg'},token:'local',saved:()=>{}}));
- assert.match(html,/Product media/);assert.match(html,/Uploads and galleries are not available yet/);assert.match(html,/Loading reviewed media/);assert.doesNotMatch(html,/type="file"/);
+ assert.match(html,/Product media/);assert.match(html,/compatibility fallback/);assert.match(html,/Loading reviewed media/);assert.match(html,/Loading gallery/);assert.match(html,/Gallery and uploads/);
 });
 
 test('membership UI preserves service bootstrap boundary',async()=>{

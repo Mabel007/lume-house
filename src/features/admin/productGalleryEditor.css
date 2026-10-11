@@ -1,0 +1,7 @@
+.admin-gallery { margin-block: 1.5rem; min-width: 0; }
+.admin-gallery ol { padding-inline-start: 1.5rem; }
+.admin-gallery li { margin-block: 1rem; overflow-wrap: anywhere; }
+.admin-gallery-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: .5rem; }
+.admin-gallery-actions button, .admin-gallery > button { min-height: 44px; }
+.admin-gallery input[type="file"] { max-width: 100%; }
+.admin-gallery-preview { display: block; width: 100px; height: 100px; object-fit: contain; margin-block: .5rem; }
