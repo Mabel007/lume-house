@@ -15,6 +15,7 @@ import { AboutPage } from "./features/content/AboutPage";
 import { HelpPage } from "./features/content/HelpPage";
 import { DeliveryPickupPage, ReturnsRefundsPage, PrivacyPage, TermsPage } from "./features/content/PolicyPages";
 import "./typography.css";
+import "./refinement.css";
 
 const router = createBrowserRouter(createRoutesFromElements(
             <Route element={<AuthProvider><ProductProvider><CartProvider><Layout /></CartProvider></ProductProvider></AuthProvider>}>
