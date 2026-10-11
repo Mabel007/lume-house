@@ -15,3 +15,4 @@
 .admin-filter-chips span { border-radius: 20px; padding: .35rem .65rem; background: #e9eee8; }
 @media(max-width:390px){.admin-range-fields{grid-template-columns:minmax(0,1fr)}.admin-filter-drawer header{align-items:flex-start;flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){.admin-filter-drawer{animation:none;transition:none}}
+.admin-sort-button { border: 0; padding: .3rem 0; background: transparent; color: inherit; text-align: inherit; min-height: 44px; font: inherit; font-weight: 600; cursor: pointer; }

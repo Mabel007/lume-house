@@ -1,0 +1,1 @@
+﻿export function columnSort(current:string,direction:string,onSort:((key:string)=>void)|undefined,key:string):{onSort?:()=>void;sortDirection?:'ascending'|'descending'} {return {onSort:onSort?()=>onSort(key):undefined,sortDirection:current===key?(direction==='desc'?'descending':'ascending'):undefined};}

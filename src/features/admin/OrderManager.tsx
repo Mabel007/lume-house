@@ -1,3 +1,8 @@
+import {columnSort} from './filters/columnSort';
+import {RecordFilterControls} from './filters/RecordFilterControls';
+import {recordPageRequest} from './filters/recordPageRequest';
+import type {RecordFilters} from './filters/recordFilters';
+import {filtersFromSearch,filterSearch} from './filters/recordFilters';
 import {AdminCsvExport} from './AdminCsvExport';
 import {RecordTime} from '../../components/RecordTime';
 import {ManualFulfilment} from './ManualFulfilment';
@@ -62,25 +67,26 @@ export function AdminOrderDetailPage({token}:{token:string}) {
   const {orderId=''}=useParams();const {search}=useLocation();
   return <section className="admin-order-detail"><Link className="back-link" to={orderListUrl(search)}>Back to orders</Link><AdminOrderDetail key={`${orderId}:${token}`} id={orderId} token={token}/></section>;
 }
-export function AdminOrderList({orders,search}:{orders:AdminOrderListItem[];search:string}) {
+export function AdminOrderList({orders,search,sortBy='created_at',direction='desc',onSort}:{orders:AdminOrderListItem[];search:string;sortBy?:string;direction?:string;onSort?:(key:string)=>void}) {
   return <AdminTable caption="Customer orders" className="admin-order-list" rows={orders} rowKey={order=>order.id} columns={[
-    {key:'reference',heading:'Reference / customer',rowHeader:true,render:order=><div className="admin-order-identity"><Link className="admin-order-link" to={orderDetailUrl(order.id,search)}>{order.order_reference}</Link><span>{order.full_name}</span></div>},
-    {key:'date',heading:'Placed (UTC)',render:order=><RecordTime value={order.created_at}/>},
+    {...columnSort(sortBy,direction,onSort,'reference'),key:'reference',heading:'Reference / customer',rowHeader:true,render:order=><div className="admin-order-identity"><Link className="admin-order-link" to={orderDetailUrl(order.id,search)}>{order.order_reference}</Link><span>{order.full_name}</span></div>},
+    {...columnSort(sortBy,direction,onSort,'created_at'),key:'date',heading:'Placed (UTC)',render:order=><RecordTime value={order.created_at}/>},
     {key:'fulfilment',heading:'Fulfilment',render:order=>order.fulfilment_method==='pickup'?'Pickup':'Delivery'},
-    {key:'status',heading:'Operational status',render:order=><span className="status-pill">{orderLabel(order.status)}</span>},
+    {...columnSort(sortBy,direction,onSort,'status'),key:'status',heading:'Operational status',render:order=><span className="status-pill">{orderLabel(order.status)}</span>},
     {key:'payment',heading:'Payment status',render:order=><span className="status-pill payment-pill">{orderLabel(order.payment_status)}</span>},
-    {key:'total',heading:'Total',numeric:true,render:order=>formatMoney(order.total_cents)},
+    {...columnSort(sortBy,direction,onSort,'total'),key:'total',heading:'Total',numeric:true,render:order=>formatMoney(order.total_cents)},
     {key:'actions',heading:'Details',render:order=><Link className="ui-detail-action" aria-label={`View details for ${order.order_reference}`} to={orderDetailUrl(order.id,search)}><EyeIcon/>View details</Link>},
   ]}/>;
 }
 export function OrderManager({token}:{token:string}) {
   const [params,setParams]=useSearchParams();const search=params.toString();const {query,status}=orderFilters(search);
-  const pagination=useAdminPage(token,'admin_orders_page_v1',{p_query:query,p_status:status},parseAdminOrderList,orderKey);
+  let applied:RecordFilters;let filterError='';try{applied=filtersFromSearch('orders',search);}catch{applied={query,status};filterError='The saved URL contains invalid filters. Clear or correct the filters before reviewing results.';}const request=recordPageRequest('orders',applied);
+  const pagination=useAdminPage(token,request.rpc,request.args,parseAdminOrderList,orderKey);
   const {rows:orders,error,loading}=pagination;
   return <section><h2>Order list</h2><p>Search and status filters apply to all authorized orders. Customer and fulfilment details are private business information.</p>
-    <form className="admin-order-filters" key={`${query}:${status}`} onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);const next=new URLSearchParams();const q=String(data.get('query'));const s=String(data.get('status'));if(q)next.set('query',q);if(s)next.set('status',s);setParams(next);}}><label>Search reference, customer name or email<input name="query" type="search" maxLength={200} defaultValue={query}/></label><label>Order status<select name="status" defaultValue={status}><option value="">All statuses</option>{orderStates.map(s=><option key={s} value={s}>{orderLabel(s)}</option>)}</select></label><div className="admin-filter-actions"><button className="button">Apply filters</button><button type="button" className="button secondary" onClick={()=>setParams(new URLSearchParams())}>Clear filters</button></div></form>
-    <AdminCsvExport token={token} kind="orders" query={query} status={status} disabled={loading||Boolean(error)}/><AdminReadState loading={loading} message={loading?(orders.length?'Refreshing orders…':'Loading orders…'):error} retry={pagination.refresh} retryLabel="Retry loading orders"/>{!loading&&!error&&!orders.length&&<p>No matching orders.</p>}
-    {!loading&&!error&&<><AdminOrderList orders={orders} search={search}/><AdminPagination {...pagination}/></>}
+    <form className="admin-order-filters" key={`${query}:${status}`} onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);const next=new URLSearchParams(applied);next.delete('query');next.delete('status');const q=String(data.get('query'));const s=String(data.get('status'));if(q)next.set('query',q);if(s)next.set('status',s);setParams(next);}}><label>Search reference, customer name or email<input name="query" type="search" maxLength={200} defaultValue={query}/></label><label>Order status<select name="status" defaultValue={status}><option value="">All statuses</option>{orderStates.map(s=><option key={s} value={s}>{orderLabel(s)}</option>)}</select></label><div className="admin-filter-actions"><button className="button">Apply filters</button><button type="button" className="button secondary" onClick={()=>setParams(new URLSearchParams())}>Clear filters</button></div></form>
+    <RecordFilterControls kind="orders" applied={applied} onApply={filters=>setParams(filterSearch(filters))}/><AdminCsvExport token={token} kind="orders" query={query} filters={request.rpc.endsWith('_v2')?applied:undefined} status={status} disabled={loading||Boolean(error)||Boolean(filterError)}/><AdminReadState loading={loading&&!filterError} message={filterError||(loading?(orders.length?'Refreshing orders…':'Loading orders…'):error)} retry={pagination.refresh} retryLabel="Retry loading orders"/>{!loading&&!error&&!filterError&&!orders.length&&<p>No matching orders.</p>}
+    {!loading&&!error&&!filterError&&<><AdminOrderList orders={orders} search={search} sortBy={applied.sort||'created_at'} direction={applied.direction||'desc'} onSort={sort=>setParams(filterSearch({...applied,sort,direction:(applied.sort||'created_at')===sort&&(applied.direction||'desc')==='asc'?'desc':'asc'}))}/><AdminPagination {...pagination}/></>}
   </section>;
 }
 import { AdminTable } from './AdminTable';

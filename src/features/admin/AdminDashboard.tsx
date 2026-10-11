@@ -1,3 +1,4 @@
+import {AdminOrderAnalytics} from './AdminOrderAnalytics';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getSupabaseClient } from '../../lib/supabase/client';
@@ -35,5 +36,5 @@ export function AdminDashboard({ token }: { token: string }) {
   return () => { active = false; };
  }, [token, scope]);
  const current = state?.scope === scope ? state : undefined;
- return <section className="admin-dashboard"><h2>Operational overview</h2><p>Server-derived business counts and current operational queues.</p><AdminReadState loading={!current} message={!current ? 'Loading overview metrics…' : current.error} retry={() => setRevision(value => value + 1)} retryLabel="Retry overview metrics"/>{current?.data && <><button type="button" className="button" onClick={() => setRevision(value => value + 1)}>Refresh overview</button><DashboardContent data={current.data}/></>}</section>;
+ return <section className="admin-dashboard"><h2>Operational overview</h2><p>Server-derived business counts and current operational queues.</p><AdminReadState loading={!current} message={!current ? 'Loading overview metrics…' : current.error} retry={() => setRevision(value => value + 1)} retryLabel="Retry overview metrics"/>{current?.data && <><button type="button" className="button" onClick={() => setRevision(value => value + 1)}>Refresh overview</button><DashboardContent data={current.data}/><AdminOrderAnalytics token={token}/></>}</section>;
 }

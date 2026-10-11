@@ -1,3 +1,7 @@
+import {columnSort} from './filters/columnSort';
+import {RecordFilterControls} from './filters/RecordFilterControls';
+import {recordPageRequest} from './filters/recordPageRequest';
+import type {RecordFilters} from './filters/recordFilters';
 import {AdminCsvExport} from './AdminCsvExport';
 import {AdminReadState} from './AdminReadState';
 import {parseAdminRows} from './adminValidation';
@@ -48,26 +52,26 @@ export function InventoryEditor({row,token,saved}:{row:InventoryRow;token:string
  <InventoryHistory state={history} retry={()=>{setHistory({status:'loading',rows:[]});setRevision(value=>value+1);}}/>
  </section>;
 }
-export function InventoryWorklist({rows,select}:{rows:InventoryRow[];select:(row:InventoryRow)=>void}){
+export function InventoryWorklist({rows,select,sortBy='product_name',direction='asc',onSort}:{rows:InventoryRow[];select:(row:InventoryRow)=>void;sortBy?:string;direction?:string;onSort?:(key:string)=>void}){
  return <AdminTable caption="Inventory variants" rows={rows} rowKey={row=>row.variant_id} columns={[
-  {key:'variant',heading:'Product / variant',rowHeader:true,render:row=><><strong>{row.product_name}</strong><span className="admin-inventory-identity">SKU: {row.sku}</span><span className="admin-inventory-identity">{inventoryOptions(row)}</span><span className="admin-inventory-identity">Variant state: {row.active?'Active':'Inactive'}</span><span className="admin-inventory-identity">Catalogue availability: {row.available?'Available':'Unavailable'}</span></>},
+  {...columnSort(sortBy,direction,onSort,'product_name'),key:'variant',heading:'Product / variant',rowHeader:true,render:row=><><strong>{row.product_name}</strong><span className="admin-inventory-identity">SKU: {row.sku}</span><span className="admin-inventory-identity">{inventoryOptions(row)}</span><span className="admin-inventory-identity">Variant state: {row.active?'Active':'Inactive'}</span><span className="admin-inventory-identity">Catalogue availability: {row.available?'Available':'Unavailable'}</span></>},
   {key:'policy',heading:'Tracking',render:row=>row.inventory_policy==='tracked'?'Tracked':'Untracked'},
   {key:'on-hand',heading:'On hand',numeric:true,render:row=>row.on_hand??'Not configured'},
   {key:'allocated',heading:'Allocated',numeric:true,render:row=>row.allocated??'Not configured'},
-  {key:'available',heading:'Available',numeric:true,render:row=>availableQuantity(row)??(row.inventory_policy==='untracked'?'Untracked':'Not configured')},
+  {...columnSort(sortBy,direction,onSort,'available_quantity'),key:'available',heading:'Available',numeric:true,render:row=>availableQuantity(row)??(row.inventory_policy==='untracked'?'Untracked':'Not configured')},
   {key:'actions',heading:'Details',render:row=><button className="ui-detail-action" type="button" data-admin-leave="true" aria-label={`View stock and movements for ${row.sku}`} onClick={()=>select(row)}><EyeIcon/>View details</button>},
  ]}/>;
 }
 export function InventoryManager({token}:{token:string}){
- const [selected,setSelected]=useState<InventoryRow|null>(null);const [query,setQuery]=useState('');const [policy,setPolicy]=useState('');
- const pagination=useAdminPage(token,'admin_inventory_page_v1',{p_query:query,p_policy:policy},parseInventoryRow,inventoryKey);
+ const [selected,setSelected]=useState<InventoryRow|null>(null);const [query,setQuery]=useState('');const [policy,setPolicy]=useState('');const [advanced,setAdvanced]=useState<RecordFilters>({});const applied={...advanced,...(query?{query}:{}),...(policy?{policy}:{})};const request=recordPageRequest('inventory',applied);
+ const pagination=useAdminPage(token,request.rpc,request.args,parseInventoryRow,inventoryKey);
  const {rows,error,loading}=pagination;
  const [notice,setNotice]=useState('');const [noticeSequence,setNoticeSequence]=useState(0);const noticeTarget=useRef<HTMLParagraphElement>(null);useAdminReturnFocus(notice,noticeTarget,noticeSequence);
  const visible=rows;
  return <section><h2>Inventory</h2>{notice&&<p role="status" ref={noticeTarget} tabIndex={-1}>{notice}</p>}<p>Search and tracking filters apply to the complete authorized inventory. Untracked items have no implied available stock count.</p><p className="admin-field-help">Variant state and catalogue availability are distinct from inventory tracking. Product active/archived state is not supplied by this inventory view.</p>
  <div className="admin-inventory-filters"><label>Search inventory<input type="search" maxLength={200} disabled={selected!==null} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Product name, SKU or options"/></label><label>Inventory tracking filter<select disabled={selected!==null} value={policy} onChange={event=>setPolicy(event.target.value)}><option value="">All tracking policies</option><option value="tracked">Tracked</option><option value="untracked">Untracked</option></select></label></div>
- <AdminCsvExport token={token} kind="inventory" query={query} policy={policy} disabled={loading||Boolean(error)||selected!==null}/><AdminReadState loading={loading} message={loading?(rows.length?'Refreshing inventory…':'Loading inventory…'):error} retry={pagination.refresh} retryLabel="Retry loading inventory"/>{!loading&&!error&&!visible.length&&<p>No matching variants.</p>}
- {!loading&&!error&&!selected&&<><InventoryWorklist rows={visible} select={row=>{setNotice('');setSelected(row);}}/><AdminPagination {...pagination}/></>}{!loading&&!error&&selected&&<><button type="button" data-admin-leave="true" onClick={()=>{if(window.confirm('Return to inventory? Unsaved changes will be discarded. Review any unconfirmed adjustment before retrying.'))setSelected(null);}}>Back to inventory</button><InventoryEditor key={selected.variant_id} row={selected} token={token} saved={()=>{setSelected(null);pagination.refresh();setNoticeSequence(value=>value+1);setNotice('Inventory change confirmed. Reloading authoritative balances.');}}/></>}
+ <RecordFilterControls kind="inventory" applied={applied} disabled={selected!==null} onApply={filters=>{const {query,policy,...rest}=filters;setQuery(query||'');setPolicy(policy||'');setAdvanced(rest);}}/><AdminCsvExport token={token} kind="inventory" query={query} filters={Object.keys(advanced).length?applied:undefined} policy={policy} disabled={loading||Boolean(error)||selected!==null}/><AdminReadState loading={loading} message={loading?(rows.length?'Refreshing inventory…':'Loading inventory…'):error} retry={pagination.refresh} retryLabel="Retry loading inventory"/>{!loading&&!error&&!visible.length&&<p>No matching variants.</p>}
+ {!loading&&!error&&!selected&&<><InventoryWorklist rows={visible} sortBy={advanced.sort||'product_name'} direction={advanced.direction||'asc'} onSort={sort=>setAdvanced({...advanced,sort,direction:(advanced.sort||'product_name')===sort&&(advanced.direction||'asc')==='asc'?'desc':'asc'})} select={row=>{setNotice('');setSelected(row);}}/><AdminPagination {...pagination}/></>}{!loading&&!error&&selected&&<><button type="button" data-admin-leave="true" onClick={()=>{if(window.confirm('Return to inventory? Unsaved changes will be discarded. Review any unconfirmed adjustment before retrying.'))setSelected(null);}}>Back to inventory</button><InventoryEditor key={selected.variant_id} row={selected} token={token} saved={()=>{setSelected(null);pagination.refresh();setNoticeSequence(value=>value+1);setNotice('Inventory change confirmed. Reloading authoritative balances.');}}/></>}
  </section>;
 }
 import { AdminTable } from './AdminTable';

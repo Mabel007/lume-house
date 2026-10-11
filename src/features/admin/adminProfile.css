@@ -6,3 +6,4 @@
 .admin-profile-card button, .admin-profile-card a { min-height: 44px; display: inline-flex; align-items: center; }
 @media (max-width: 1100px) { .admin-profile-sections { grid-template-columns: minmax(0,1fr); } }
 @media (max-width: 700px) { .admin-profile-identity { align-items: flex-start; gap: 1rem; } }
+.admin-profile-links { display: flex; flex-wrap: wrap; gap: 1rem; margin-block: 1rem; } .admin-profile-links a { display: inline-flex; align-items: center; min-height: 44px; } .admin-profile-card dd { margin-inline-start: 0; margin-bottom: 1rem; overflow-wrap: anywhere; }

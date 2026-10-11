@@ -3,7 +3,7 @@ import { getSupabaseClient } from '../../lib/supabase/client';
 import { adminReadFailure, adminRpc } from './adminRepository';
 import { lastPage, parseAdminPage, type AdminPage, type PageSize } from './adminPagination';
 
-export function useAdminPage<T>(token: string, rpc: string, filters: Record<string, string>, parse: (value: unknown) => T, key: (row: T) => string) {
+export function useAdminPage<T>(token: string, rpc: string, filters: Record<string, unknown>, parse: (value: unknown) => T, key: (row: T) => string) {
  const filterKey = JSON.stringify(filters);
  const [request, setRequest] = useState({ scope: `${token}:${filterKey}`, page: 0, size: 10 as PageSize });
  const scope = `${token}:${filterKey}`;
