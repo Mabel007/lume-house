@@ -7,6 +7,7 @@ import { checkAdmin } from './adminRepository';
 import { checkBusinessAccess, type BusinessAccess } from './businessAccess';
 import { AdminReadState } from './AdminReadState';
 import './adminProfile.css';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 function displayName(value: unknown): string { return typeof value === 'string' && value.trim().length <= 200 ? value.trim() : ''; }
 export function AdminProfile({ token, role='legacy' }: { token: string; role?: BusinessAccess }) {
@@ -17,6 +18,7 @@ export function AdminProfile({ token, role='legacy' }: { token: string; role?: B
  const [access, setAccess] = useState<{ scope: string; revision: number; status: 'ready' | 'denied' | 'error' }>();
  const [busy, setBusy] = useState(false);
  const [error, setError] = useState('');
+ const [confirmOut, setConfirmOut] = useState(false);
  useEffect(() => {
   if (!id) return;
   let active = true;
@@ -38,6 +40,6 @@ export function AdminProfile({ token, role='legacy' }: { token: string; role?: B
  return <section className="admin-profile"><h2>Admin Profile</h2>
   <header className="admin-profile-identity"><span className="admin-profile-avatar" aria-hidden="true">{accountInitials(name === 'Your admin account' ? '' : name)}</span><div><h3>{name}</h3><p>{user.email || 'Email information unavailable'}</p><p>Sign-in provider: {provider}</p></div></header>
   <div className="admin-profile-sections"><section className="admin-profile-card" aria-labelledby="admin-profile-access"><h3 id="admin-profile-access">Business access</h3>{role==='legacy'&&<p>Active business-admin membership</p>}<p>{role==='staff'?'Staff: read-only operational summaries and your own profile.':role==='owner'?'Owner: full business administration access.':'Your current authenticated account has administration access. All active business admins use the same permissions.'}</p>{role!=='staff'&&<Link to="/admin/memberships">View admin access</Link>}</section>
-  <section className="admin-profile-card" aria-labelledby="admin-profile-security"><h3 id="admin-profile-security">Account &amp; Security</h3><p>Your name, email and sign-in identity are read-only here.</p>{provider === 'Google' && <p>Google manages your sign-in. Lumé House does not provide a password editor for this account.</p>}<button type="button" className="button" data-admin-leave="true" disabled={busy} onClick={() => void leave()}>{busy ? 'Signing out…' : 'Sign Out'}</button>{(error || auth.error) && <p role="alert">{error || auth.error}</p>}</section></div>
- </section>;
+  <section className="admin-profile-card" aria-labelledby="admin-profile-security"><h3 id="admin-profile-security">Account &amp; Security</h3><p>Your name, email and sign-in identity are read-only here.</p>{provider === 'Google' && <p>Google manages your sign-in. Lumé House does not provide a password editor for this account.</p>}<button type="button" className="button" data-admin-leave="true" disabled={busy} onClick={() => setConfirmOut(true)}>{busy ? 'Signing out…' : 'Sign Out'}</button>{(error || auth.error) && <p role="alert">{error || auth.error}</p>}</section></div>
+ {confirmOut && <ConfirmDialog title="Sign out?" description="End your current session on this device." confirmLabel="Sign out" onCancel={()=>setConfirmOut(false)} onConfirm={()=>{setConfirmOut(false);void leave();}}/>}</section>;
 }
