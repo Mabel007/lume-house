@@ -60,10 +60,17 @@ end;$$;
 select * from pg_temp.staff_rpc_denials();
 reset role;
 select set_config('request.jwt.claim.sub','80000000-0000-4000-8000-000000000001',true);
+insert into public.orders(id,user_id,full_name,customer_email,customer_phone,fulfilment_method,delivery_street_address,delivery_area,delivery_city,delivery_zone_id,delivery_zone_label,payment_provider,payment_status,currency,subtotal_cents,delivery_fee_cents,total_cents)
+values('80000000-2222-4000-8000-000000000002','80000000-0000-4000-8000-000000000004','Isolated delivery','fixture@example.invalid','+23276521208','delivery','Fixture street','Lumley','Freetown','zone-1','Zone 1','orange','awaiting_payment','NLE',100,4000,4100);
+insert into public.order_items(order_id,product_id,product_name,quantity,unit_price_cents) values('80000000-2222-4000-8000-000000000002','table-lamp','Fixture item',1,100);
 set local role authenticated;
 select pg_temp.assert(public.is_business_admin() and public.business_access_v1()='owner','explicit owner retains unrestricted authority');
 select pg_temp.assert(public.admin_dashboard_v1() is not null and public.admin_get_order('80000000-2222-4000-8000-000000000001')->>'customer_email'='private@example.invalid','owner retains full admin projections');
 select pg_temp.assert(jsonb_array_length(public.admin_business_roles_v1()->'history')=3,'owner can read immutable role history');
+select pg_temp.assert(public.admin_get_fulfilment_v1('80000000-2222-4000-8000-000000000002')->'current'->>'version'='0','owner retains fulfilment read after role activation');
+select pg_temp.assert(public.admin_save_fulfilment_v1('80000000-2222-4000-8000-000000000002',0,'Fixture carrier','REF-1','Owner cross-batch test','80000000-5555-4000-8000-000000000001')->>'version'='1','owner retains fulfilment write after role activation');
+select pg_temp.assert(jsonb_array_length(public.admin_save_product_gallery_v1('amber-candle',(public.admin_product_gallery_v1('amber-candle')->>'updated_at')::timestamptz,'[{"source":"static","path":"/images/mug.svg"}]'::jsonb)->'items')=1,'owner retains gallery read/write after role activation');
+select pg_temp.assert(public.admin_get_order('80000000-2222-4000-8000-000000000002')->>'payment_status'='awaiting_payment','integrated metadata/gallery writes never confirm payment');
 select pg_temp.error('select public.admin_set_business_role_v1(''80000000-0000-4000-8000-000000000003'',''staff'',0,''Staff fixture'',''80000000-1111-4000-8000-000000000003'')','22023','different actor/kind cannot reuse service role receipt');
 select public.admin_set_business_role_v1('80000000-0000-4000-8000-000000000002','staff',1,'Approved fixture demotion','80000000-3333-4000-8000-000000000001') as receipt \gset
 select pg_temp.assert(public.admin_set_business_role_v1('80000000-0000-4000-8000-000000000002','staff',1,'Approved fixture demotion','80000000-3333-4000-8000-000000000001')=:'receipt'::jsonb,'same actor normalized operation replays exact immutable role receipt');

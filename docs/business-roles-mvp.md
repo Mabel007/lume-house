@@ -73,10 +73,10 @@ superuser operations remain a trusted operational boundary.
 
 Disposable tests cover default-disabled compatibility, projections, every
 baseline/pending admin RPC denial, private grants, Owner access, role receipts,
-last Owner, and real concurrent demotions/revocations/replays. Pending compatibility
-can be checked with the optional `CompatibilityMigrations` harness parameter for
-the two reviewed 02150/02200 files, only inside its network-disabled disposable
-container. This is not genuine JWT/PostgREST/Storage acceptance.
+last Owner, and real concurrent demotions/revocations/replays. The integrated
+harness applies 02150, 02200, a disposable Storage schema model, 02300 and 02400
+in order, inside its network-disabled disposable container. This is not genuine
+JWT/PostgREST/Storage acceptance.
 
 Manual QA remains required: real Owner/Staff/customer/revoked sessions; narrow
 response keys at API level; old clients/direct RPC/Edge upload denial; pagination,
