@@ -122,6 +122,14 @@ test('CSV serialization preserves typed numbers, quotes UTF-8 text and neutraliz
  const order={order_reference:'LH-0000000000000001',created_at:'2026-10-10T00:00:00Z',status:'placed',payment_status:'awaiting_payment',currency:'NLE',total_cents:12550};assert.match(exportCsv({items:[order],total_count:1},'orders').csv,/total_minor_units/);assert.match(exportCsv({items:[order],total_count:1},'orders').csv,/,12550\r\n/);
 });
 
+test('order filter reset requests only supported server filters and keeps CSV scoped to them',async()=>{
+ const {OrderManager}=await module('features/admin/OrderManager.tsx');const calls=[];
+ fakeClient((name,args)=>{assert.equal(name,'admin_orders_page_v1');calls.push(args);return Promise.resolve({data:{items:[],total_count:0,page:args.p_page,page_size:args.p_page_size},error:null});});
+ await mount(React.createElement(MemoryRouter,{initialEntries:['/admin/orders?query=fixture&status=placed']},React.createElement(OrderManager,{token:'local'})));
+ assert.equal(calls[0].p_query,'fixture');assert.equal(calls[0].p_status,'placed');assert.ok(host.querySelector('[aria-label="Export filtered orders CSV"]'));
+ const clear=Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Clear filters');await click(clear);assert.equal(calls.at(-1).p_query,'');assert.equal(calls.at(-1).p_status,'');assert.equal(host.querySelector('input[type=datetime-local]'),null);
+});
+
 test('complete CSV downloads once; cancellation, empty results, switched identity, revoked access and partial failures download nothing',async()=>{
  const {AdminCsvExport}=await module('features/admin/AdminCsvExport.tsx');let pending=deferred(),allowed=true;const calls=[];let downloads=0;const originalCreate=URL.createObjectURL,originalRevoke=URL.revokeObjectURL,originalClick=window.HTMLAnchorElement.prototype.click;
  URL.createObjectURL=()=> 'blob:local-test';URL.revokeObjectURL=()=>{};window.HTMLAnchorElement.prototype.click=function(){assert.equal(this.download,'lume-house-products.csv');downloads++;};

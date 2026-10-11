@@ -1,4 +1,5 @@
 import {AdminCsvExport} from './AdminCsvExport';
+import {RecordTime} from '../../components/RecordTime';
 import {ManualFulfilment} from './ManualFulfilment';
 import {AdminReadState} from './AdminReadState';
 import {useAdminPage} from './useAdminPage';
@@ -64,7 +65,7 @@ export function AdminOrderDetailPage({token}:{token:string}) {
 export function AdminOrderList({orders,search}:{orders:AdminOrderListItem[];search:string}) {
   return <AdminTable caption="Customer orders" className="admin-order-list" rows={orders} rowKey={order=>order.id} columns={[
     {key:'reference',heading:'Reference / customer',rowHeader:true,render:order=><div className="admin-order-identity"><Link className="admin-order-link" to={orderDetailUrl(order.id,search)}>{order.order_reference}</Link><span>{order.full_name}</span></div>},
-    {key:'date',heading:'Placed',render:order=><time dateTime={order.created_at}>{new Date(order.created_at).toLocaleString('en-GB')}</time>},
+    {key:'date',heading:'Placed (UTC)',render:order=><RecordTime value={order.created_at}/>},
     {key:'fulfilment',heading:'Fulfilment',render:order=>order.fulfilment_method==='pickup'?'Pickup':'Delivery'},
     {key:'status',heading:'Operational status',render:order=><span className="status-pill">{orderLabel(order.status)}</span>},
     {key:'payment',heading:'Payment status',render:order=><span className="status-pill payment-pill">{orderLabel(order.payment_status)}</span>},
@@ -77,7 +78,7 @@ export function OrderManager({token}:{token:string}) {
   const pagination=useAdminPage(token,'admin_orders_page_v1',{p_query:query,p_status:status},parseAdminOrderList,orderKey);
   const {rows:orders,error,loading}=pagination;
   return <section><h2>Order list</h2><p>Search and status filters apply to all authorized orders. Customer and fulfilment details are private business information.</p>
-    <form className="admin-order-filters" key={`${query}:${status}`} onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);const next=new URLSearchParams();const q=String(data.get('query'));const s=String(data.get('status'));if(q)next.set('query',q);if(s)next.set('status',s);setParams(next);}}><label>Search reference, customer name or email<input name="query" type="search" maxLength={200} defaultValue={query}/></label><label>Order status<select name="status" defaultValue={status}><option value="">All statuses</option>{orderStates.map(s=><option key={s} value={s}>{orderLabel(s)}</option>)}</select></label><button className="button">Apply filters</button></form>
+    <form className="admin-order-filters" key={`${query}:${status}`} onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);const next=new URLSearchParams();const q=String(data.get('query'));const s=String(data.get('status'));if(q)next.set('query',q);if(s)next.set('status',s);setParams(next);}}><label>Search reference, customer name or email<input name="query" type="search" maxLength={200} defaultValue={query}/></label><label>Order status<select name="status" defaultValue={status}><option value="">All statuses</option>{orderStates.map(s=><option key={s} value={s}>{orderLabel(s)}</option>)}</select></label><div className="admin-filter-actions"><button className="button">Apply filters</button><button type="button" className="button secondary" onClick={()=>setParams(new URLSearchParams())}>Clear filters</button></div></form>
     <AdminCsvExport token={token} kind="orders" query={query} status={status} disabled={loading||Boolean(error)}/><AdminReadState loading={loading} message={loading?(orders.length?'Refreshing orders…':'Loading orders…'):error} retry={pagination.refresh} retryLabel="Retry loading orders"/>{!loading&&!error&&!orders.length&&<p>No matching orders.</p>}
     {!loading&&!error&&<><AdminOrderList orders={orders} search={search}/><AdminPagination {...pagination}/></>}
   </section>;

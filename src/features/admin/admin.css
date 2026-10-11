@@ -212,3 +212,7 @@
 .admin-visible-range { font-size: .875rem; color: #56614f; }
 .admin-access .button { margin-block: .75rem; }
 .admin-access .text-link { margin-left: .75rem; }
+.admin-order-filters, .admin-inventory-filters { padding: 1rem; border: 1px solid #dcded3; border-radius: .5rem; background: #f4f6ed; }
+.admin-filter-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.admin-filter-actions .button { min-width: 8rem; }
+@media (max-width: 850px) { .admin-filter-actions { width: 100%; } .admin-filter-actions .button { flex: 1; } }

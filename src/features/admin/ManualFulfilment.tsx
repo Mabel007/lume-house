@@ -49,6 +49,7 @@ function FulfilmentEditor({orderId,token,blocked=false,accessChanged}:Props){
    <button className="button" disabled={busy}>Save delivery details</button><button type="button" disabled={busy||hasPending} onClick={event=>discard(event.currentTarget.closest('form'))}>Cancel delivery edits</button>
   </AdminForm>}
   {error&&(!read||hidden)&&<p role="alert">{error} Your draft is retained. Reload before saving again.</p>}
-  {read&&!hidden&&<><h4>Recent delivery changes</h4>{read.history.length?<ol>{read.history.map(item=><li key={item.operation_id}><time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString('en-GB')}</time> — revision {item.version}: {item.carrier_label??'No carrier'} / {item.tracking_reference??'No reference'}. {item.reason}</li>)}</ol>:<p>No manual delivery changes recorded.</p>}<p>Latest 50 changes shown. The full audit is retained server-side.</p></>}
+  {read&&!hidden&&<><h4>Recent delivery changes</h4>{read.history.length?<ol>{read.history.map(item=><li key={item.operation_id}><RecordTime value={item.created_at}/> — revision {item.version}: {item.carrier_label??'No carrier'} / {item.tracking_reference??'No reference'}. {item.reason}</li>)}</ol>:<p>No manual delivery changes recorded.</p>}<p>Latest 50 changes shown. The full audit is retained server-side.</p></>}
  </section>;
 }
+import {RecordTime} from '../../components/RecordTime';
