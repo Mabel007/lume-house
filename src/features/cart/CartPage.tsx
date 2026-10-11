@@ -9,13 +9,15 @@ import { EmptyCart } from "../../components/EmptyCart";
 import { variantLabel } from "../products/variants";
 import { OrderSummary } from "../checkout/OrderSummary";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader } from '../../components/PageHeader';
+import { UiStatus } from '../../components/UiStatus';
 
 export function CartPage() {
   const { items, dispatch, status } = useCart();
   const auth = useAuth();
   const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
   const { state, refresh } = useProducts();
-  if (status === "loading" || status === "error" || status === "checking-out") return <section className="wrap page-section"><h1>Your Bag.</h1><p>Your saved Bag is not ready yet.</p></section>;
+  if (status === "loading" || status === "error" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind={status==='error'?'error':'loading'}>Your saved Bag is not ready yet.</UiStatus></section>;
   if (!items.length) return <EmptyCart />;
   if (state.status !== "ready")
     return (
@@ -36,7 +38,7 @@ export function CartPage() {
         ← Continue shopping
       </Link>
       <p className="eyebrow">YOUR EVERYDAY FINDS</p>
-      <h1>Your Bag.</h1>
+      <PageHeader title="Your Bag." description="Review your pieces before checkout."/>
       <p className="muted mb-8">
         {auth.session ? items.some(item=>!item.variantId) ? "Available selections are saved to your account. Unavailable guest items are retained in this browser until removed." : "Your Bag is saved to your account." : "Sign in to save your Bag across visits. Guest items are kept only in this browser tab."}
       </p>
