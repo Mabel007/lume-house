@@ -62,10 +62,15 @@ export function AdminOrderDetailPage({token}:{token:string}) {
   return <section className="admin-order-detail"><Link className="back-link" to={orderListUrl(search)}>Back to orders</Link><AdminOrderDetail key={`${orderId}:${token}`} id={orderId} token={token}/></section>;
 }
 export function AdminOrderList({orders,search}:{orders:AdminOrderListItem[];search:string}) {
-  return <ul className="admin-order-list">{orders.map(order=><li key={order.id}><article>
-    <div className="admin-order-identity"><Link className="admin-order-link" to={orderDetailUrl(order.id,search)}>{order.order_reference}</Link><time dateTime={order.created_at}>{new Date(order.created_at).toLocaleString('en-GB')}</time><span>{order.full_name}</span></div>
-    <dl><div><dt>Fulfilment</dt><dd>{order.fulfilment_method==='pickup'?'Pickup':'Delivery'}</dd></div><div><dt>Operational status</dt><dd className="status-pill">{orderLabel(order.status)}</dd></div><div><dt>Payment status</dt><dd className="status-pill payment-pill">{orderLabel(order.payment_status)}</dd></div><div><dt>Total</dt><dd>{formatMoney(order.total_cents)}</dd></div></dl>
-  </article></li>)}</ul>;
+  return <AdminTable caption="Customer orders" className="admin-order-list" rows={orders} rowKey={order=>order.id} columns={[
+    {key:'reference',heading:'Reference / customer',rowHeader:true,render:order=><div className="admin-order-identity"><Link className="admin-order-link" to={orderDetailUrl(order.id,search)}>{order.order_reference}</Link><span>{order.full_name}</span></div>},
+    {key:'date',heading:'Placed',render:order=><time dateTime={order.created_at}>{new Date(order.created_at).toLocaleString('en-GB')}</time>},
+    {key:'fulfilment',heading:'Fulfilment',render:order=>order.fulfilment_method==='pickup'?'Pickup':'Delivery'},
+    {key:'status',heading:'Operational status',render:order=><span className="status-pill">{orderLabel(order.status)}</span>},
+    {key:'payment',heading:'Payment status',render:order=><span className="status-pill payment-pill">{orderLabel(order.payment_status)}</span>},
+    {key:'total',heading:'Total',numeric:true,render:order=>formatMoney(order.total_cents)},
+    {key:'actions',heading:'Details',render:order=><Link className="ui-detail-action" aria-label={`View details for ${order.order_reference}`} to={orderDetailUrl(order.id,search)}><EyeIcon/>View details</Link>},
+  ]}/>;
 }
 export function OrderManager({token}:{token:string}) {
   const [params,setParams]=useSearchParams();const search=params.toString();const {query,status}=orderFilters(search);
@@ -77,3 +82,5 @@ export function OrderManager({token}:{token:string}) {
     {!loading&&!error&&<><AdminOrderList orders={orders} search={search}/><AdminPagination {...pagination}/></>}
   </section>;
 }
+import { AdminTable } from './AdminTable';
+import { EyeIcon } from '../../components/EyeIcon';

@@ -49,7 +49,14 @@ export function InventoryEditor({row,token,saved}:{row:InventoryRow;token:string
  </section>;
 }
 export function InventoryWorklist({rows,select}:{rows:InventoryRow[];select:(row:InventoryRow)=>void}){
- return <ul className="admin-inventory-worklist">{rows.map(row=><li key={row.variant_id}><button type="button" className="admin-inventory-row" data-admin-leave="true" onClick={()=>select(row)}><span><strong>{row.product_name}</strong><span className="admin-inventory-identity">SKU: {row.sku}</span><span className="admin-inventory-identity">{inventoryOptions(row)}</span><span className="admin-inventory-identity">Variant state: {row.active?'Active':'Inactive'}</span><span className="admin-inventory-identity">Catalogue availability: {row.available?'Available':'Unavailable'}</span></span><span>Review stock and movements</span></button><InventoryBalances row={row}/></li>)}</ul>;
+ return <AdminTable caption="Inventory variants" rows={rows} rowKey={row=>row.variant_id} columns={[
+  {key:'variant',heading:'Product / variant',rowHeader:true,render:row=><><strong>{row.product_name}</strong><span className="admin-inventory-identity">SKU: {row.sku}</span><span className="admin-inventory-identity">{inventoryOptions(row)}</span><span className="admin-inventory-identity">Variant state: {row.active?'Active':'Inactive'}</span><span className="admin-inventory-identity">Catalogue availability: {row.available?'Available':'Unavailable'}</span></>},
+  {key:'policy',heading:'Tracking',render:row=>row.inventory_policy==='tracked'?'Tracked':'Untracked'},
+  {key:'on-hand',heading:'On hand',numeric:true,render:row=>row.on_hand??'Not configured'},
+  {key:'allocated',heading:'Allocated',numeric:true,render:row=>row.allocated??'Not configured'},
+  {key:'available',heading:'Available',numeric:true,render:row=>availableQuantity(row)??(row.inventory_policy==='untracked'?'Untracked':'Not configured')},
+  {key:'actions',heading:'Details',render:row=><button className="ui-detail-action" type="button" data-admin-leave="true" aria-label={`View stock and movements for ${row.sku}`} onClick={()=>select(row)}><EyeIcon/>View details</button>},
+ ]}/>;
 }
 export function InventoryManager({token}:{token:string}){
  const [selected,setSelected]=useState<InventoryRow|null>(null);const [query,setQuery]=useState('');const [policy,setPolicy]=useState('');
@@ -63,3 +70,5 @@ export function InventoryManager({token}:{token:string}){
  {!loading&&!error&&!selected&&<><InventoryWorklist rows={visible} select={row=>{setNotice('');setSelected(row);}}/><AdminPagination {...pagination}/></>}{!loading&&!error&&selected&&<><button type="button" data-admin-leave="true" onClick={()=>{if(window.confirm('Return to inventory? Unsaved changes will be discarded. Review any unconfirmed adjustment before retrying.'))setSelected(null);}}>Back to inventory</button><InventoryEditor key={selected.variant_id} row={selected} token={token} saved={()=>{setSelected(null);pagination.refresh();setNoticeSequence(value=>value+1);setNotice('Inventory change confirmed. Reloading authoritative balances.');}}/></>}
  </section>;
 }
+import { AdminTable } from './AdminTable';
+import { EyeIcon } from '../../components/EyeIcon';

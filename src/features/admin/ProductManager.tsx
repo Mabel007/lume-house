@@ -80,7 +80,12 @@ function ProductThumbnail({product}:{product:AdminProduct}) {
   return broken ? <span className="admin-product-thumbnail" aria-label="Image unavailable">No image</span> : <img className="admin-product-thumbnail" src={product.image_path} alt="" loading="lazy" onError={()=>setBroken(true)}/>;
 }
 export function CatalogueList({products,select}:{products:AdminProduct[];select:(product:AdminProduct)=>void}) {
-  return <ul className="admin-catalogue-list">{products.map(product=><li key={product.id}><button className="admin-product-row" onClick={()=>select(product)}><ProductThumbnail key={`${product.id}:${product.image_path}`} product={product}/><span className="admin-product-summary"><strong className="admin-product-name">{product.name}</strong><span>{product.category}</span><span>Open editorial fields, variants and reviewed media</span></span><span className="status-pill">{product.active?'Active':'Archived'}</span></button></li>)}</ul>;
+  return <AdminTable caption="Catalogue products" className="admin-catalogue-list" rows={products} rowKey={product=>product.id} columns={[
+    {key:'product',heading:'Product',rowHeader:true,render:product=><div className="admin-table-product"><ProductThumbnail key={`${product.id}:${product.image_path}`} product={product}/><span className="admin-product-name">{product.name}</span></div>},
+    {key:'category',heading:'Collection',render:product=>product.category},
+    {key:'state',heading:'Publication',render:product=><span className="status-pill">{product.active?'Active':'Archived'}</span>},
+    {key:'actions',heading:'Details',render:product=><button type="button" className="ui-detail-action" aria-label={`View details for ${product.name}`} onClick={()=>select(product)}><EyeIcon/>View details<span className="sr-only">: editorial fields, variants and reviewed media</span></button>},
+  ]}/>;
 }
 
 export function ProductManager({ token }: { token: string }) {
@@ -115,3 +120,5 @@ export function ProductManager({ token }: { token: string }) {
     </div>}
   </section>;
 }
+import { AdminTable } from './AdminTable';
+import { EyeIcon } from '../../components/EyeIcon';

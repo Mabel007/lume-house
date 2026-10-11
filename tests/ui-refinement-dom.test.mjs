@@ -29,3 +29,8 @@ test('confirmation labels its dialog, starts on cancel and restores invoking con
  await act(async()=>host.querySelectorAll('button')[1].click());assert.equal(confirmed,1);
  await act(async()=>root.unmount());root=undefined;assert.equal(document.activeElement,opener);
 });
+test('record table has labelled scroll region, real column/row headers and an actionable detail control',async()=>{
+ const {AdminTable}=await server.ssrLoadModule('/src/features/admin/AdminTable.tsx');let selected='';
+ await mount(React.createElement(AdminTable,{caption:'Inventory',rows:[{id:'fixture',name:'Reviewed piece'}],rowKey:r=>r.id,columns:[{key:'name',heading:'Product',rowHeader:true,render:r=>r.name},{key:'action',heading:'Details',render:r=>React.createElement('button',{type:'button',onClick:()=>selected=r.id},'View details')}]}));
+ const region=host.querySelector('[role=region]');assert.equal(region.tabIndex,0);assert.equal(region.getAttribute('aria-label'),'Inventory table');assert.equal(host.querySelector('caption').textContent,'Inventory');assert.equal(host.querySelector('[scope=col]').textContent,'Product');assert.equal(host.querySelector('[scope=row]').textContent,'Reviewed piece');await act(async()=>host.querySelector('button').click());assert.equal(selected,'fixture');assert.equal(host.querySelector('[aria-sort]'),null);
+});

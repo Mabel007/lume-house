@@ -122,7 +122,7 @@ test('CSV serialization preserves typed numbers, quotes UTF-8 text and neutraliz
  const order={order_reference:'LH-0000000000000001',created_at:'2026-10-10T00:00:00Z',status:'placed',payment_status:'awaiting_payment',currency:'NLE',total_cents:12550};assert.match(exportCsv({items:[order],total_count:1},'orders').csv,/total_minor_units/);assert.match(exportCsv({items:[order],total_count:1},'orders').csv,/,12550\r\n/);
 });
 
-test('complete CSV downloads once; cancellation, switched identity, revoked access and partial failures download nothing',async()=>{
+test('complete CSV downloads once; cancellation, empty results, switched identity, revoked access and partial failures download nothing',async()=>{
  const {AdminCsvExport}=await module('features/admin/AdminCsvExport.tsx');let pending=deferred(),allowed=true;const calls=[];let downloads=0;const originalCreate=URL.createObjectURL,originalRevoke=URL.revokeObjectURL,originalClick=window.HTMLAnchorElement.prototype.click;
  URL.createObjectURL=()=> 'blob:local-test';URL.revokeObjectURL=()=>{};window.HTMLAnchorElement.prototype.click=function(){assert.equal(this.download,'lume-house-products.csv');downloads++;};
  const payload={items:[{id:'local',name:'Lumé piece',category:'Ceramics',active:true,display_order:0}],total_count:1};
@@ -130,6 +130,7 @@ test('complete CSV downloads once; cancellation, switched identity, revoked acce
  const view=(token='a',query='')=>React.createElement(AdminCsvExport,{token,kind:'products',query});
  try{
   await mount(view());await click(host.querySelector('button'));assert.equal(host.querySelector('button').disabled,true);assert.equal(calls[0].args.p_query,'');await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);assert.match(host.textContent,/Complete export downloaded: 1 records/);
+  pending=deferred();await click(host.querySelector('button'));await act(async()=>pending.resolve({data:{items:[],total_count:0},error:null}));assert.equal(downloads,1);assert.match(host.textContent,/No records match these filters/);
   pending=deferred();await click(host.querySelector('button'));await click(Array.from(host.querySelectorAll('button')).find(node=>node.textContent==='Cancel export'));await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);assert.match(host.textContent,/Export cancelled/);
   pending=deferred();await click(host.querySelector('button'));await render(view('b','filtered'));await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);assert.doesNotMatch(host.textContent,/Complete export downloaded/);
   allowed=false;pending=deferred();await click(host.querySelector('button'));await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);assert.match(host.textContent,/Export failed/);assert.equal(calls.at(-2).args.p_query,'filtered');

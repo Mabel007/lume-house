@@ -32,11 +32,12 @@ export function AdminCsvExport({ token, kind, query, status = '', policy = '', d
    // Recheck membership immediately before download; never retain a private export in UI state.
    if (!await checkAdmin(getSupabaseClient(), token)) throw new Error('Export access was denied.');
    if (!current()) return;
+   if(count===0){setState({scope,busy:false,message:'No records match these filters. No CSV file was downloaded.'});return;}
    downloadCsv(csv, kind);
    setState({ scope, busy: false, message: `Complete export downloaded: ${count} records.` });
   } catch {
    if (current()) setState({ scope, busy: false, message: 'Export failed. Check your administration access and narrow the filters if the result exceeds 10,000 records or 8 MiB. No partial file was downloaded.' });
   } finally { if (ticket === generation.current) running.current = false; }
  }
- return <div className="admin-pagination"><button type="button" disabled={busy || disabled} onClick={() => void run()}>Export filtered {kind} CSV</button>{busy && <button type="button" onClick={() => { generation.current++; running.current = false; setState({ scope, busy: false, message: 'Export cancelled. No file was downloaded.' }); }}>Cancel export</button>}{state.scope === scope && state.message && <p role="status">{state.message}</p>}</div>;
+ return <div className="admin-export" aria-busy={busy}><button className="button secondary" type="button" aria-label={`Export filtered ${kind} CSV`} disabled={busy || disabled} onClick={() => void run()}>{busy?'Preparing CSV…':'Export CSV'}</button>{busy && <button type="button" className="text-link" onClick={() => { generation.current++; running.current = false; setState({ scope, busy: false, message: 'Export cancelled. No file was downloaded.' }); }}>Cancel export</button>}{state.scope === scope && state.message && <p role="status">{state.message}</p>}</div>;
 }
