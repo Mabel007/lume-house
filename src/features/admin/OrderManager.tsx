@@ -1,4 +1,5 @@
 import {AdminCsvExport} from './AdminCsvExport';
+import {ManualFulfilment} from './ManualFulfilment';
 import {AdminReadState} from './AdminReadState';
 import {useAdminPage} from './useAdminPage';
 import {AdminPagination} from './PaginationControls';
@@ -35,13 +36,13 @@ export function OrderOperations({order,token,saved,blocked=false}:{order:Order;t
 }
 type DetailState = { status: 'loading' } | { status: 'missing' } | { status: 'denied' } | { status: 'error' } | { status: 'ready'; order: Order };
 export function AdminOrderDetailState({state,token,saved,retry}:{state:DetailState;token:string;saved:()=>void;retry:()=>void}) {
-  const [historyDenied,setHistoryDenied]=useState(false);const [requestDenied,setRequestDenied]=useState(false);const blocked=historyDenied||requestDenied;
+  const [historyDenied,setHistoryDenied]=useState(false);const [requestDenied,setRequestDenied]=useState(false);const [fulfilmentDenied,setFulfilmentDenied]=useState(false);const blocked=historyDenied||requestDenied||fulfilmentDenied;
   if (state.status === 'loading') return <p role="status">Loading order details…</p>;
   if (state.status === 'missing') return <p role="status">Order not found. Check the link or return to the order list.</p>;
   if (state.status === 'denied') return <AdminReadState message="Administration access was denied. Private data and actions are hidden." retry={retry} retryLabel="Retry loading order"/>;
   if (state.status === 'error') return <p role="alert">Order details could not be loaded. <button onClick={retry}>Retry loading order</button></p>;
   const {order} = state;
-  return <>{!blocked&&<><h2>{order.order_reference}</h2><OrderSnapshot order={order} context="admin"/></>}<CancellationRequest key={`${order.id}:${order.status}:request`} orderId={order.id} status={order.status} token={token} admin blocked={blocked} accessChanged={setRequestDenied}/><OrderOperations key={`${order.id}:${order.status}`} order={order} token={token} saved={saved} blocked={blocked}/><AdminOrderTimeline id={order.id} token={token} accessChanged={setHistoryDenied} blocked={blocked}/></>;
+  return <>{!blocked&&<><h2>{order.order_reference}</h2><OrderSnapshot order={order} context="admin"/></>}<CancellationRequest key={`${order.id}:${order.status}:request`} orderId={order.id} status={order.status} token={token} admin blocked={blocked} accessChanged={setRequestDenied}/><OrderOperations key={`${order.id}:${order.status}`} order={order} token={token} saved={saved} blocked={blocked}/>{order.fulfilment_method==='delivery'?<ManualFulfilment orderId={order.id} token={token} blocked={blocked} accessChanged={setFulfilmentDenied}/>:!blocked&&<p>Courier and tracking fields apply only to delivery orders.</p>}<AdminOrderTimeline id={order.id} token={token} accessChanged={setHistoryDenied} blocked={blocked}/></>;
 }
 function AdminOrderDetail({id,token}:{id:string;token:string}) {
   const [state,setState]=useState<DetailState>({status:'loading'});
