@@ -63,3 +63,14 @@ input[aria-invalid=true], textarea[aria-invalid=true], select[aria-invalid=true]
   .profile-actions { align-items: stretch; }
   .profile-actions .button { width: 100%; }
 }
+/* Keep controls reachable at the smallest supported viewport. */
+.admin-profile-card, .admin-screen, .ui-status-copy { min-width: 0; overflow-wrap: anywhere; }
+.admin-profile-card .button { max-width: 100%; white-space: normal; }
+.admin-metric-card dd { margin-inline-start: 0; }
+input[aria-invalid="true"] { border-color: #9b4037; }
+@media (max-width: 390px) {
+ .main-nav { flex-wrap: wrap; gap: .4rem; }
+ .ui-confirm-dialog .ui-dialog-actions { flex-wrap: wrap; }
+ .ui-confirm-dialog button { min-height: 44px; }
+ .admin-workspace-header { align-items: flex-start; flex-wrap: wrap; }
+}
