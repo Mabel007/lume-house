@@ -94,6 +94,10 @@ $guard$;
   Run-Sql 'admin pagination authorization and volume' (Read-Sql (Join-Path $testRoot 'admin-pagination.sql'))
   Run-Sql 'dashboard aggregate migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010002100_admin_dashboard.sql'))
   Run-Sql 'dashboard counts and authorization' (Read-Sql (Join-Path $testRoot 'admin-dashboard.sql'))
+  Run-Sql 'manual fulfilment additive contract' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010002150_manual_fulfilment.sql'))
+  Run-Sql 'manual fulfilment authorization and preservation' (Read-Sql (Join-Path $testRoot 'fulfilment.sql'))
+  node (Join-Path $testRoot 'fulfilment-concurrency.mjs') $containerName
+  if ($LASTEXITCODE -ne 0) { throw 'Fulfilment two-session concurrency checks failed' }
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin
@@ -104,6 +108,8 @@ begin
     or exists(select 1 from public.business_admin_history)
     or exists(select 1 from public.order_cancellation_requests)
     or exists(select 1 from public.business_order_operations)
+    or exists(select 1 from public.business_order_fulfilment)
+    or exists(select 1 from public.business_fulfilment_operations)
     or exists(select 1 from public.business_product_creations)
     or exists(select 1 from public.variant_inventory)
     or exists(select 1 from public.inventory_ledger)
