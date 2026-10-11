@@ -112,6 +112,10 @@ $guard$;
   Run-Sql 'owner/staff isolation and legacy bypass' (Read-Sql (Join-Path $testRoot 'business-roles.sql'))
   node (Join-Path $testRoot 'business-roles-concurrency.mjs') $containerName
   if ($LASTEXITCODE -ne 0) { throw 'Role concurrency checks failed' }
+  Run-Sql 'additive filter/sort/analytics contracts' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261011002500_admin_filters_analytics.sql'))
+  Run-Sql 'filter/export/analytics authorization and correctness' (Read-Sql (Join-Path $testRoot 'admin-filter-analytics.sql'))
+  node (Join-Path $testRoot 'admin-filter-concurrency.mjs') $containerName
+  if ($LASTEXITCODE -ne 0) { throw 'Filter/analytics read concurrency failed' }
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin
