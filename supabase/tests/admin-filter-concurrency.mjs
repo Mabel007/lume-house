@@ -1,4 +1,4 @@
-﻿// Only clones the network-disabled disposable test database; never reads environment credentials.
+// Only clones the network-disabled disposable test database; never reads environment credentials.
 import assert from 'node:assert/strict';import {execFileSync,spawn} from 'node:child_process';
 const container=process.argv[2];assert.equal(container,'lume-foundation-sql-check');const info=JSON.parse(execFileSync('docker',['inspect',container],{encoding:'utf8'}))[0];assert.equal(info.HostConfig.NetworkMode,'none');assert.equal(info.HostConfig.AutoRemove,true);assert.equal(info.Config.Image,'postgres:14.1-alpine');
 const db='lume_filter_read_race',a='91000000-0000-4000-8000-000000000001',b='91000000-0000-4000-8000-000000000002';
@@ -18,4 +18,4 @@ try{
   sql(`select public.set_business_admin('${a}',true,'Restore disposable race fixture');`);
   console.log('PASS: v2 read holds access lock; revocation waits and subsequent read is denied');
  }
-}finally{reader?.stdin.end();if(created)execFileSync('docker',['exec',container,'dropdb','U','postgres','--maintenance-db=template1',db].map(value=>value==='U'?'-U':value),{stdio:'pipe'});}
+}finally{reader?.stdin.end();if(created)execFileSync('docker',['exec',container,'dropdb','-U','postgres','--maintenance-db=template1',db],{stdio:'pipe'});}

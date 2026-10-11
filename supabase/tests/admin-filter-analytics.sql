@@ -6,7 +6,7 @@ insert into auth.users(id) values('90000000-0000-4000-8000-000000000001'),('9000
 select public.set_business_admin('90000000-0000-4000-8000-000000000001',true,'Disposable filter admin');
 select public.set_business_admin('90000000-0000-4000-8000-000000000003',false,'Disposable inactive staff candidate');
 insert into public.products(id,name,description,price_cents,currency,image_path,category,display_order,active)
-select 'filter-'||lpad(n::text,3,'0'),'Filter piece '||lpad(n::text,3,'0'),'Local only',100,'NLE','/images/mug.svg','FilterFixture',n,false from generate_series(1,25)n;
+select 'filter-'||lpad(n::text,3,'0'),'Filter piece '||lpad((26-n)::text,3,'0'),'Local only',100,'NLE','/images/mug.svg','FilterFixture',n,false from generate_series(1,25)n;
 insert into public.orders(id,user_id,full_name,customer_email,customer_phone,fulfilment_method,pickup_location,payment_provider,currency,subtotal_cents,delivery_fee_cents,total_cents,created_at,status,payment_status)
 select ('90000000-aaaa-4000-8000-'||lpad(n::text,12,'0'))::uuid,'90000000-0000-4000-8000-000000000002','Filter customer','filter@example.invalid','+23276521208','pickup','Lumley, Freetown','orange','NLE',100*n,0,100*n,
  date_trunc('day',now())-interval '2 days'+case when n<=20 then (n-1)*interval '1 hour' when n=21 then interval '1 day' else -interval '1 second' end,case when n=20 then 'cancelled' else 'placed' end,'awaiting_payment' from generate_series(1,22)n;
@@ -39,9 +39,12 @@ select pg_temp.assert((public.admin_records_page_v2('orders',pg_temp.filters()||
 select pg_temp.assert((public.admin_export_v2('orders',pg_temp.filters())->>'total_count')::int=20,'export uses identical predicate');
 select pg_temp.assert((public.admin_export_v2('orders',pg_temp.filters())->'items'->0->>'total_cents')::int=100,'export uses same numeric sort');
 select pg_temp.assert(not (public.admin_export_v2('orders',pg_temp.filters())->'items'->0 ?| array['id','full_name','customer_email','customer_phone','fulfilment_method']),'export excludes customer fields');
-select pg_temp.assert((public.admin_records_page_v2('products','{"category":"FilterFixture","publication":"archived","sort":"name","direction":"desc"}')->'items'->0->>'id')='filter-025','catalogue category/publication and sorting');
+select pg_temp.assert((public.admin_records_page_v2('products','{"category":"FilterFixture","publication":"archived","sort":"name","direction":"desc"}')->'items'->0->>'id')='filter-001','catalogue category/publication and sorting');
 select pg_temp.assert((public.admin_records_page_v2('products','{"category":"FilterFixture","publication":"active"}')->>'total_count')::int=0,'publication state exact');
 select pg_temp.assert((public.admin_export_v2('products','{"category":"FilterFixture"}')->>'total_count')::int=25,'filtered product export');
+select pg_temp.assert((public.admin_records_page_v2('products','{"category":"FilterFixture"}')->'items'->0->>'id')='filter-001','v2 default preserves v1 display order rather than name sort');
+select pg_temp.assert(public.admin_products_page_v1(0,10,'FilterFixture')->'items'=public.admin_records_page_v2('products','{"category":"FilterFixture"}')->'items','v1/v2 default product page remains equivalent');
+select pg_temp.assert((public.admin_export_v2('products','{"category":"FilterFixture"}')->'items'->0->>'id')='filter-001','default listing/export sort parity');
 select pg_temp.assert(jsonb_array_length(public.admin_records_page_v2('inventory','{"policy":"untracked","sort":"available_quantity"}')->'items')<=10,'untracked availability null sort remains bounded');
 select pg_temp.assert((public.admin_export_v2('inventory')->'items'->0 ? 'product_id') and not (public.admin_export_v2('inventory')->'items'->0 ? 'options'),'inventory export exact projection');
 select pg_temp.error($q$select public.admin_records_page_v2('orders','{"sort":"created_at;drop table orders"}')$q$,'22023','invalid sort rejected');
@@ -56,6 +59,11 @@ select pg_temp.assert((public.admin_order_analytics_v1(date_trunc('day',now())-i
 select pg_temp.assert((public.admin_order_analytics_v1(date_trunc('day',now())-interval '2 days',date_trunc('day',now())-interval '1 day')->'series'->0->>'orders')::int=20,'UTC daily aggregation');
 select pg_temp.assert((public.admin_order_analytics_v1(date_trunc('day',now())-interval '2 days',date_trunc('day',now())-interval '1 day')->'by_status'->>'cancelled')::int=1,'cohort current cancellation status only');
 select pg_temp.error('select public.admin_order_analytics_v1(now()-interval ''367 days'',now())','22023','analytics series bounded');
+reset role;
+insert into public.products(id,name,description,price_cents,currency,image_path,category,active)
+select 'filter-large-'||n,'Large fixture','Local only',100,'NLE','/images/mug.svg','LargeFilterFixture',false from generate_series(1,10001)n;
+set local role authenticated;
+select pg_temp.error($q$select public.admin_export_v2('products','{"category":"LargeFilterFixture"}')$q$,'54000','v2 export refuses incomplete oversized result');
 reset role;
 select public.recovery_set_business_role_v1('90000000-0000-4000-8000-000000000001','owner',0,'Fixture','90000000-1111-4000-8000-000000000001','Disposable');
 select public.activate_business_roles_v1('Fixture cutover','Disposable');

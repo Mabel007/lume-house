@@ -9,7 +9,7 @@ begin
  keys:=case p_kind when 'orders' then array['query','status','fulfilment','payment','from','to','sort','direction'] when 'products' then array['query','category','publication','sort','direction'] else array['query','policy','attention','sort','direction'] end;
  if exists(select 1 from jsonb_each(p_filters) e where not e.key=any(keys) or jsonb_typeof(e.value)<>'string') then raise exception 'INVALID_RECORD_FILTERS' using errcode='22023'; end if;
  q:=coalesce(p_filters->>'query','');
- s:=coalesce(nullif(p_filters->>'sort',''),case p_kind when 'orders' then 'created_at' when 'products' then 'name' else 'product_name' end);
+ s:=coalesce(nullif(p_filters->>'sort',''),case p_kind when 'orders' then 'created_at' when 'products' then 'display_order' else 'product_name' end);
  direction:=coalesce(p_filters->>'direction',case when p_kind='orders' then 'desc' else 'asc' end);
  if char_length(q)>200 or direction not in ('asc','desc')
  or (p_kind='orders' and (s not in ('created_at','reference','status','total') or coalesce(p_filters->>'status','') not in ('','placed','confirmed','processing','ready_for_pickup','out_for_delivery','completed','cancelled') or coalesce(p_filters->>'payment','') not in ('','pending','awaiting_payment','paid','failed') or coalesce(p_filters->>'fulfilment','') not in ('','pickup','delivery')))
@@ -68,11 +68,11 @@ declare result jsonb;
 begin
  perform public.require_business_admin();
  if p_from is null or p_to is null or not isfinite(p_from) or not isfinite(p_to) or p_to<=p_from or p_to-p_from>interval '366 days' or p_to>(date_trunc('day',now() at time zone 'UTC')+interval '1 day') at time zone 'UTC' then raise exception 'INVALID_ANALYTICS_RANGE' using errcode='22023'; end if;
- with cohort as materialized(select created_at,status,fulfilment_method,payment_status from public.orders where created_at>=p_from and created_at<p_to), days as(select d::date bucket_date from generate_series((p_from at time zone 'UTC')::date::timestamp,((p_to-interval '1 microsecond') at time zone 'UTC')::date::timestamp,interval '1 day') d)
+ with cohort as materialized(select created_at,status,fulfilment_method,payment_status from public.orders where created_at>=p_from and created_at<p_to), daily as(select (created_at at time zone 'UTC')::date bucket_date,count(*) orders from cohort group by 1), days as(select d::date bucket_date from generate_series((p_from at time zone 'UTC')::date::timestamp,((p_to-interval '1 microsecond') at time zone 'UTC')::date::timestamp,interval '1 day') d)
  select jsonb_build_object('from',p_from,'to',p_to,'total_orders',(select count(*) from cohort),'awaiting_payment',(select count(*) from cohort where payment_status='awaiting_payment'),
  'by_status',(select jsonb_object_agg(s.status,(select count(*) from cohort c where c.status=s.status)) from (values('placed'),('confirmed'),('processing'),('ready_for_pickup'),('out_for_delivery'),('completed'),('cancelled')) s(status)),
  'by_fulfilment',jsonb_build_object('pickup',(select count(*) from cohort where fulfilment_method='pickup'),'delivery',(select count(*) from cohort where fulfilment_method='delivery')),
- 'series',(select jsonb_agg(jsonb_build_object('date',to_char(bucket_date,'YYYY-MM-DD'),'orders',(select count(*) from cohort c where (c.created_at at time zone 'UTC')::date=bucket_date)) order by bucket_date) from days)) into result;
+ 'series',(select jsonb_agg(jsonb_build_object('date',to_char(d.bucket_date,'YYYY-MM-DD'),'orders',coalesce(c.orders,0)) order by d.bucket_date) from days d left join daily c on c.bucket_date=d.bucket_date)) into result;
  return result;
 end;
 $$;
