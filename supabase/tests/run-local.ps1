@@ -103,6 +103,15 @@ $guard$;
   Run-Sql 'disposable Storage policy model' (Read-Sql (Join-Path $testRoot 'storage-media-bootstrap.sql'))
   Run-Sql 'private product Storage migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010002300_product_media_storage.sql'))
   Run-Sql 'Storage policy denial model' (Read-Sql (Join-Path $testRoot 'storage-media.sql'))
+  Run-Sql 'disabled owner/staff MVP foundation' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261011002400_business_roles_mvp.sql'))
+  # admin-products tests the pre-01500 creation contract at its original position
+  # above; final-schema product creation is covered by product-creation instead.
+  foreach($suite in @('admin','admin-variants','admin-inventory','admin-orders','product-creation','media','memberships','cancellation-requests','admin-pagination','admin-dashboard')) {
+    Run-Sql 'legacy regression with disabled role migration installed' (Read-Sql (Join-Path $testRoot ($suite+'.sql')))
+  }
+  Run-Sql 'owner/staff isolation and legacy bypass' (Read-Sql (Join-Path $testRoot 'business-roles.sql'))
+  node (Join-Path $testRoot 'business-roles-concurrency.mjs') $containerName
+  if ($LASTEXITCODE -ne 0) { throw 'Role concurrency checks failed' }
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin
@@ -111,6 +120,10 @@ begin
     or exists(select 1 from public.order_confirmation_jobs)
     or exists(select 1 from public.business_admins)
     or exists(select 1 from public.business_admin_history)
+    or exists(select 1 from public.business_roles)
+    or exists(select 1 from public.business_role_history)
+    or exists(select 1 from public.business_role_activation)
+    or (select enabled from public.business_role_control)
     or exists(select 1 from public.order_cancellation_requests)
     or exists(select 1 from public.business_order_operations)
     or exists(select 1 from public.business_order_fulfilment)
