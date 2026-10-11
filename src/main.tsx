@@ -10,7 +10,7 @@ import { CartPage } from "./features/cart/CartPage";
 import "./styles.css";
 import { ProductProvider } from "./features/products/ProductProvider";
 import { AuthProvider } from "./features/auth/AuthProvider";
-import { CustomerAccount, CustomerCheckout, CustomerOrders,CustomerOrder } from "./features/auth/CustomerRoutes";
+import { AuthCallback, CustomerAccount, CustomerCheckout, CustomerOrders,CustomerOrder } from "./features/auth/CustomerRoutes";
 import { AboutPage } from "./features/content/AboutPage";
 import { HelpPage } from "./features/content/HelpPage";
 import { DeliveryPickupPage, ReturnsRefundsPage, PrivacyPage, TermsPage } from "./features/content/PolicyPages";
@@ -34,7 +34,7 @@ const router = createBrowserRouter(createRoutesFromElements(
               <Route path="/account/orders" element={<CustomerOrders />} />
               <Route path="/account/orders/:orderId" element={<CustomerOrder />} />
               <Route path="/orders/:orderId/success" element={<CustomerOrder success />} />
-              <Route path="/auth/callback" element={<CustomerAccount />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
               <Route
                 path="*"
                 element={

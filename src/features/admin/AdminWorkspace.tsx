@@ -10,6 +10,7 @@ import { OrderManager, AdminOrderDetailPage } from './OrderManager';
 import { MembershipManager } from './MembershipManager';
 import { AdminProfile } from './AdminProfile';
 import { AdminDashboard } from './AdminDashboard';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 export function AdminWorkspace({ token, role='legacy' }: { token: string; role?:'legacy'|'owner' }) {
   const workspace=useRef<HTMLDivElement>(null);const routerContext=useContext(UNSAFE_DataRouterContext);useAdminDraftNavigation(workspace,Boolean(routerContext));
@@ -17,6 +18,7 @@ export function AdminWorkspace({ token, role='legacy' }: { token: string; role?:
   const section = adminSection(pathname);
   const { session, signOut, error } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
+  const [confirmOut,setConfirmOut]=useState(false);
   async function leave() {
     setSigningOut(true);
     try { await signOut(); } finally { setSigningOut(false); }
@@ -34,9 +36,10 @@ export function AdminWorkspace({ token, role='legacy' }: { token: string; role?:
     <div className="admin-content">
       <header className="admin-page-heading">
         <div><p className="eyebrow">Lumé House / Business</p><h1>{section?.title ?? 'Administration page not found'}</h1><p className="admin-page-description">{section?.description ?? 'Choose a section from the administration navigation.'}</p></div>
-        <div className="admin-session"><span className="admin-account-label">Signed in</span><span className="admin-account-email">{session?.user.email ?? 'Authorized account'}</span><button className="admin-sign-out" data-admin-leave="true" disabled={signingOut} onClick={() => void leave()}>{signingOut ? 'Signing out…' : 'Sign Out'}</button></div>
+        <div className="admin-session"><span className="admin-account-label">{role==='owner'?'Owner':'Administrator'}</span><span className="admin-account-email">{session?.user.email ?? 'Authorized account'}</span><button className="admin-sign-out" data-admin-leave="true" disabled={signingOut} onClick={() => setConfirmOut(true)}>{signingOut ? 'Signing out…' : 'Sign Out'}</button></div>
       </header>
       {error && <p role="alert" className="admin-session-error">{error}</p>}
+      {confirmOut&&<ConfirmDialog title="Sign out of administration?" description="Save your work before ending this session." confirmLabel="Sign out" onCancel={()=>setConfirmOut(false)} onConfirm={()=>{setConfirmOut(false);void leave();}}/>}
       <div className="admin-screen">
         <Routes>
           <Route index element={<AdminDashboard token={token} />} />
