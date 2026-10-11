@@ -180,3 +180,5 @@
 
 .admin-read-state { overflow-wrap: anywhere; line-height: 1.6; }
 .admin-read-state button { min-height: 44px; max-width: 100%; margin: .35rem .5rem .35rem 0; white-space: normal; }
+.admin-screen table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.admin-screen th, .admin-screen td { padding: .5rem; text-align: left; overflow-wrap: anywhere; border-bottom: 1px solid #d7d1c4; }

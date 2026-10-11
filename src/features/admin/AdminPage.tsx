@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { shop } from '../../config/shop';
 import { getSupabaseClient } from '../../lib/supabase/client';
-import { checkAdmin } from './adminRepository';
+import { checkBusinessAccess, type BusinessAccess } from './businessAccess';
+import { StaffWorkspace } from './StaffWorkspace';
 import { AdminWorkspace } from './AdminWorkspace';
 import './admin.css';
 
@@ -14,14 +15,15 @@ function AdminGate({ children }: { children: ReactNode }) {
 
 function AdminAccess({ token }: { token: string }) {
   const [revision,setRevision]=useState(0);
-  const [state, setState] = useState<'loading' | 'denied' | 'allowed' | 'error'>('loading');
+  const [state, setState] = useState<'loading' | 'denied' | BusinessAccess | 'error'>('loading');
   useEffect(() => {
     let active = true;
-    checkAdmin(getSupabaseClient(), token).then(allowed => { if (active) setState(allowed ? 'allowed' : 'denied'); })
+    checkBusinessAccess(getSupabaseClient(), token).then(access => { if (active) setState(access ?? 'denied'); })
       .catch(() => { if (active) setState('error'); });
     return () => { active = false; };
   }, [token,revision]);
-  if (state === 'allowed') return <AdminWorkspace token={token} />;
+  if (state === 'staff') return <StaffWorkspace token={token} />;
+  if (state === 'legacy' || state === 'owner') return <AdminWorkspace token={token} role={state} />;
   return <AdminGate>
     {state === 'loading' && <p role="status">Checking administration access…</p>}
     <AdminReadState message={state==='error'?'Administration access could not be checked.':state==='denied'?'This account does not have business administration access.':''} retry={()=>{setState('loading');setRevision(value=>value+1);}} retryLabel="Retry access check"/>
