@@ -17,7 +17,8 @@ export function adminErrorKind(cause:unknown, attempted:boolean):AdminErrorKind 
 export async function adminRpc(client: SupabaseClient, token: string, name: string, args: Record<string, unknown> = {}): Promise<unknown> {
   try {
   const { data, error } = await client.rpc(name, args).setHeader('Authorization', `Bearer ${token}`);
-  if (error) throw new AdminOperationError(error.code === '42501'?'denied':error.code === '40001'?'stale':'uncertain', error.code === '42501' ? 'Administration access was denied. Reload to check your access.' : error.code === '40001' ? 'This record changed. Reload before saving.' : 'The operation could not be confirmed. Review your inputs and reload before retrying.');
+  const stale = error?.code === '40001' || (name === 'admin_save_fulfilment_v1' && error?.code === 'PT409' && error.message === 'FULFILMENT_CHANGED');
+  if (error) throw new AdminOperationError(error.code === '42501'?'denied':stale?'stale':'uncertain', error.code === '42501' ? 'Administration access was denied. Reload to check your access.' : stale ? 'This record changed. Reload before saving.' : 'The operation could not be confirmed. Review your inputs and reload before retrying.');
   return data;
   } catch(cause) {if(cause instanceof AdminOperationError)throw cause;throw new AdminOperationError('uncertain','The operation could not be confirmed. Review your inputs and reload before retrying.');}
 }

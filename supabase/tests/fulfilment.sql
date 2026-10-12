@@ -43,7 +43,7 @@ select pg_temp.error(format('select public.admin_save_fulfilment_v1(%L,0,null,nu
 select public.admin_save_fulfilment_v1(:'delivery_id',0,'  Courrier é  ',' Ref-01 / 2 ',' First manual entry ','70000000-3333-4000-8000-000000000001') as first_result \gset
 select pg_temp.assert(public.admin_save_fulfilment_v1(:'delivery_id',0,'Courrier é','Ref-01 / 2','First manual entry','70000000-3333-4000-8000-000000000001')=:'first_result'::jsonb,'same actor normalized retry returns identical receipt');
 select pg_temp.error(format('select public.admin_save_fulfilment_v1(%L,0,%L,%L,%L,%L)',:'delivery_id','Changed','Ref-01 / 2','First manual entry','70000000-3333-4000-8000-000000000001'),'22023','changed replay rejected');
-select pg_temp.error(format('select public.admin_save_fulfilment_v1(%L,0,null,null,%L,%L)',:'delivery_id','Stale edit','70000000-3333-4000-8000-000000000002'),'40001','competing expected version rejected');
+select pg_temp.error(format('select public.admin_save_fulfilment_v1(%L,0,null,null,%L,%L)',:'delivery_id','Stale edit','70000000-3333-4000-8000-000000000002'),'PT409','competing expected version rejected');
 select set_config('request.jwt.claim.sub','70000000-0000-4000-8000-000000000003',true);
 select pg_temp.error(format('select public.admin_save_fulfilment_v1(%L,0,%L,%L,%L,%L)',:'delivery_id','Courrier é','Ref-01 / 2','First manual entry','70000000-3333-4000-8000-000000000001'),'22023','different actor cannot reuse receipt');
 select pg_temp.assert(public.admin_save_fulfilment_v1(:'delivery_id',1,repeat('C',100),repeat('R',100),repeat('N',500),'70000000-3333-4000-8000-000000000002')->>'version'='2','maximum field sizes and second admin update allowed');

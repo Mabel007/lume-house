@@ -95,6 +95,7 @@ $guard$;
   Run-Sql 'dashboard aggregate migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010002100_admin_dashboard.sql'))
   Run-Sql 'dashboard counts and authorization' (Read-Sql (Join-Path $testRoot 'admin-dashboard.sql'))
   Run-Sql 'manual fulfilment additive contract' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261010002150_manual_fulfilment.sql'))
+  Run-Sql 'permanent fulfilment HTTP conflict' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261012002600_fulfilment_conflict_http.sql'))
   Run-Sql 'manual fulfilment authorization and preservation' (Read-Sql (Join-Path $testRoot 'fulfilment.sql'))
   node (Join-Path $testRoot 'fulfilment-concurrency.mjs') $containerName
   if ($LASTEXITCODE -ne 0) { throw 'Fulfilment two-session concurrency checks failed' }
