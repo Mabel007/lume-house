@@ -57,3 +57,9 @@ test('only the known fulfilment PT409 maps to stale; legacy 40001 remains compat
  for(const [name,error,kind] of [['admin_save_fulfilment_v1',{code:'PT409',message:'FULFILMENT_CHANGED'},'stale'],['admin_save_fulfilment_v1',{code:'PT409',message:'OTHER'},'uncertain'],['admin_other',{code:'PT409',message:'FULFILMENT_CHANGED'},'uncertain'],['admin_save_fulfilment_v1',{code:'40001'},'stale']]){
  const c={rpc:()=>({setHeader:async()=>({data:null,error})})};await assert.rejects(adminRpc(c,'synthetic-A',name),e=>e.kind===kind);}
 });
+
+test('six active admin PT409 contracts require their exact RPC/message pair',async()=>{
+ const {adminRpc}=await module('adminRepository.ts');
+ const pairs=[['admin_save_product','PRODUCT_CHANGED'],['admin_save_variant','VARIANT_CHANGED'],['admin_set_inventory_policy','VARIANT_CHANGED'],['admin_transition_order','ORDER_CHANGED'],['admin_revoke_membership','MEMBERSHIP_CHANGED'],['admin_save_product_gallery_v1','PRODUCT_CHANGED']];
+ for(const [name,message]of pairs){for(const [value,kind]of [[message,'stale'],['OTHER','uncertain']]){const c={rpc:()=>({setHeader:async()=>({data:null,error:{code:'PT409',message:value}})})};await assert.rejects(adminRpc(c,'synthetic-A',name),e=>e.kind===kind);}}
+});

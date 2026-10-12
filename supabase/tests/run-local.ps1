@@ -117,6 +117,8 @@ $guard$;
   Run-Sql 'filter/export/analytics authorization and correctness' (Read-Sql (Join-Path $testRoot 'admin-filter-analytics.sql'))
   node (Join-Path $testRoot 'admin-filter-concurrency.mjs') $containerName
   if ($LASTEXITCODE -ne 0) { throw 'Filter/analytics read concurrency failed' }
+  Run-Sql 'permanent admin HTTP conflicts' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261012002700_admin_conflict_http.sql'))
+  Run-Sql 'final admin conflict and preservation regressions' (Read-Sql (Join-Path $testRoot 'admin-conflicts.sql'))
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin
