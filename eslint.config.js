@@ -8,7 +8,7 @@ export default tseslint.config(
   { ignores: ["dist", ".browser-check", ".codex"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
-  { files: ["tests/**/*.mjs", "supabase/local/**/*.mjs"], languageOptions: { globals: globals.node } },
+  { files: ["tests/**/*.mjs", "supabase/local/**/*.mjs", "supabase/tests/**/*.mjs"], languageOptions: { globals: globals.node } },
   {
     files: ["**/*.{ts,tsx}"],
     languageOptions: { globals: globals.browser },

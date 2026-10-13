@@ -1,4 +1,5 @@
 import {AdminReadState} from './AdminReadState';
+import {RecordTime} from '../../components/RecordTime';
 import {parseAdminRows} from './adminValidation';
 import { AdminForm } from './AdminForm';
 import { useAdminReturnFocus } from './adminFormBehavior';
@@ -8,7 +9,7 @@ import { useAuth } from '../auth/AuthContext';
 import { adminRpc, adminReadFailure, isAdminDenied } from './adminRepository';
 import { canRevokeMembership, membershipFailure, parseMembership, parseMembershipEvent, revokeMembership, type Membership, type MembershipEvent } from './membershipPresentation';
 type MembershipState={status:'loading'|'ready'|'error';members:Membership[];history:MembershipEvent[];message?:string;uncertain?:boolean};
-function MembershipDate({value}:{value:string|null}){return value?<time dateTime={value}>{new Date(value).toLocaleString()}</time>:<span>Not recorded — historic provisioning date unknown</span>;}
+function MembershipDate({value}:{value:string|null}){return value?<RecordTime value={value}/>:<span>Not recorded — historic provisioning date unknown</span>;}
 export function MembershipRows({members,currentUserId,busy,revoke,reasons={},reasonChanged,validation}:{members:Membership[];currentUserId:string|null;busy:boolean;revoke:(event:FormEvent<HTMLFormElement>,member:Membership)=>void;reasons?:Record<string,string>;reasonChanged?:(id:string,value:string)=>void;validation?:{id:string;message:string}|null}){
  return members.length?<ul className="admin-membership-list">{members.map(member=>{
  const current=member.user_id===currentUserId;const help=`membership-help-${member.user_id}`;

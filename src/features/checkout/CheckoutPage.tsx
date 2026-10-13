@@ -1,3 +1,4 @@
+import { FormField } from '../../components/FormField';
 import { variantLabel } from "../products/variants";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -417,24 +418,5 @@ function Field({
   value?: string;
   onChange?: (value: string) => void;
 }) {
-  return (
-    <div className={wide ? "sm:col-span-2" : ""}>
-      <label htmlFor={name}>
-        {label}
-        <span aria-hidden="true"> *</span>
-      </label>
-      <input
-        id={name}
-        name={name}
-        type={type}
-        autoComplete={autoComplete}
-        required
-        maxLength={200}
-        value={value}
-        onChange={
-          onChange ? (event) => onChange(event.target.value) : undefined
-        }
-      />
-    </div>
-  );
+  return <FormField label={label} name={name} id={name} type={type} autoComplete={autoComplete} wide={wide} required maxLength={200} value={value} onChange={onChange ? event=>onChange(event.target.value) : undefined}/>;
 }

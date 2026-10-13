@@ -7,6 +7,7 @@ export function AdminPagination({ page, size, total, loading, error, changePage,
  return <nav className="admin-pagination" aria-label="Record pagination" aria-busy={loading}>
   <label>Records per page<select value={size} onChange={event => changeSize(Number(event.target.value) as PageSize)}>{pageSizes.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
   <p role="status">{loading ? 'Loading records…' : error ? 'Records unavailable' : `${total} records · Page ${pages ? page + 1 : 0} of ${pages}`}</p>
+  {!loading&&!error&&<p className="admin-visible-range">Showing {total?Math.min(page*size+1,total):0}–{Math.min((page+1)*size,total)} of {total}</p>}
   <button type="button" disabled={loading || Boolean(error) || page === 0 || !pages} onClick={() => changePage(page - 1)}>Previous</button>
   <button type="button" disabled={loading || Boolean(error) || page + 1 >= pages} onClick={() => changePage(page + 1)}>Next</button>
  </nav>;

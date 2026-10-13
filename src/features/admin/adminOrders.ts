@@ -1,3 +1,4 @@
+import {filtersFromSearch} from './filters/recordFilters';
 import {adminRecord,adminText,adminDate,parseAdminRows} from './adminValidation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseOrder, parseOrderList, orderStates, paymentStates, type OrderListItem, type Order } from '../orders/orders';
@@ -17,7 +18,8 @@ export function orderFilters(search: string) {
 }
 export function orderFilterSearch(search: string): string {
   const { query, status } = orderFilters(search);
-  const params = new URLSearchParams();
+  let extended:Record<string,string>={};try{extended=filtersFromSearch('orders',search);}catch{/* Preserve validated legacy fields below. */}
+  const params = new URLSearchParams(extended);
   if (query) params.set('query', query);
   if (status) params.set('status', status);
   return params.size ? `?${params}` : '';

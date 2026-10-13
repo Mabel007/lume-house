@@ -1,0 +1,76 @@
+/* Shared retail surfaces. Editorial colors and type remain the brand's own. */
+:root { --ui-border: #dcded3; --ui-muted: #56614f; --ui-surface: #fffdf8; --ui-radius: .65rem; }
+button, input, select, textarea { font: inherit; }
+button, select, input:not([type=checkbox]):not([type=radio]) { min-height: 44px; }
+input, select, textarea { border-radius: .35rem; }
+input[aria-invalid=true], textarea[aria-invalid=true], select[aria-invalid=true] { border-color: #8c392c; box-shadow: 0 0 0 1px #8c392c; }
+.button { gap: .5rem; border-radius: .35rem; text-align: center; min-height: 46px; }
+.button.secondary { color: var(--color-ink); background: transparent; border: 1px solid var(--ui-border); }
+.button.destructive { background: #783a2e; color: #fff; }
+.ui-page-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; margin-block: 1.5rem 2rem; }
+.ui-page-header > div:first-child { flex: 1 1 20rem; min-width: 0; }
+.ui-page-header nav { font-size: .875rem; color: var(--ui-muted); margin-bottom: .75rem; }
+.ui-page-header nav a { text-decoration: underline; text-underline-offset: .2em; }
+.ui-page-header h1 { font: normal clamp(2rem, 5vw, 3.25rem)/1.15 Georgia, serif; letter-spacing: -.035em; margin: 0 0 .75rem; }
+.ui-page-header p { max-width: 42rem; line-height: 1.7; color: var(--ui-muted); }
+.ui-page-actions, .ui-dialog-actions { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+.ui-status { padding: clamp(1rem, 3vw, 1.75rem); margin-block: 1rem; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: #f0f1e9; overflow-wrap: anywhere; }
+.ui-status-error { border-left: 4px solid #8c392c; background: #fbf1ec; }
+.ui-status-copy > :first-child { margin-top: 0; }
+.ui-status-copy > :last-child { margin-bottom: 0; }
+.ui-status-action { margin-top: 1rem; }
+.ui-status-action button { min-height: 44px; }
+.ui-skeleton { display: grid; gap: .6rem; margin-bottom: 1rem; max-width: 32rem; }
+.ui-skeleton span { display: block; height: .7rem; background: #d8ddce; border-radius: .2rem; }
+.ui-skeleton span:last-child { width: 60%; }
+.ui-confirm-dialog { width: min(30rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; border: 1px solid var(--ui-border); border-radius: .8rem; padding: clamp(1.25rem, 4vw, 2rem); color: var(--color-ink); background: var(--ui-surface); box-shadow: 0 20px 70px #13251833; }
+.ui-confirm-dialog::backdrop { background: #17261dcc; }
+.ui-confirm-dialog h2 { font: normal 1.75rem/1.2 Georgia, serif; margin-top: 0; }
+.ui-confirm-dialog p { line-height: 1.7; }
+.ui-dialog-actions { justify-content: flex-end; margin-top: 1.5rem; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+
+/* Storefront: comfortable spacing and controls without replacing the editorial layout. */
+.product-search { padding: 1rem 1.25rem; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: var(--ui-surface); }
+.product-search input { min-width: 0; }
+.collection-toolbar { gap: 1rem; align-items: center; }
+.collection-toolbar > div { flex-wrap: wrap; min-width: 0; }
+.filters button { min-height: 44px; padding: .65rem 1rem; }
+.product-card { min-width: 0; }
+.product-card h3, .product-details h1 { overflow-wrap: anywhere; }
+.product-card .price { flex-shrink: 0; }
+.product-card .product-description { line-height: 1.65; }
+.product-details-copy { min-width: 0; }
+.variant-options label { padding: .85rem; border: 1px solid var(--ui-border); border-radius: .4rem; min-height: 48px; }
+.variant-options label:has(input:checked), .choice-group label:has(input:checked) { border-color: #536746; background: #e9eee1; }
+.variant-options input, .choice-group input { accent-color: #395234; }
+.cart-line, .cart-item { min-width: 0; }
+.checkout-grid > *, .account-layout > * { min-width: 0; }
+.checkout-grid form > fieldset, .profile-surface { border-radius: var(--ui-radius); }
+.checkout-notice { border-radius: .5rem; line-height: 1.7; }
+.choice-group label { min-height: 48px; align-items: center; border-radius: .4rem; }
+.page-section input, .page-section select, .page-section textarea { max-width: 100%; }
+.order-history > li { border-radius: .5rem; overflow: hidden; }
+.order-information, .email-information, .account-note { border-radius: var(--ui-radius); }
+.field-error, .feedback { overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .product-search { padding: 1rem; }
+  .collection-toolbar { align-items: flex-start; }
+  .collection-toolbar > div { width: 100%; }
+  .product-card .price { font-size: .875rem; }
+  .choice-group { flex-wrap: wrap; }
+  .choice-group label { flex: 1 1 8rem; }
+  .profile-actions { align-items: stretch; }
+  .profile-actions .button { width: 100%; }
+}
+/* Keep controls reachable at the smallest supported viewport. */
+.admin-profile-card, .admin-screen, .ui-status-copy { min-width: 0; overflow-wrap: anywhere; }
+.admin-profile-card .button { max-width: 100%; white-space: normal; }
+.admin-metric-card dd { margin-inline-start: 0; }
+input[aria-invalid="true"] { border-color: #9b4037; }
+@media (max-width: 390px) {
+ .main-nav { flex-wrap: wrap; gap: .4rem; }
+ .ui-confirm-dialog .ui-dialog-actions { flex-wrap: wrap; }
+ .ui-confirm-dialog button { min-height: 44px; }
+ .admin-workspace-header { align-items: flex-start; flex-wrap: wrap; }
+}

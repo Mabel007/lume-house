@@ -76,10 +76,10 @@ test('structured existing options have labeled controls and removal',async()=>{
  assert.match(html,/Option 1 name/);assert.match(html,/value="Cream"/);assert.match(html,/Remove option 2/);assert.doesNotMatch(html,/textarea/);
 });
 
-test('media foundation states its actual capability without pretending uploads',async()=>{
+test('media foundation preserves reviewed images and exposes additive gallery loading',async()=>{
  const {ProductMedia}=await server.ssrLoadModule('/src/features/admin/ProductMedia.tsx');
  const html=renderToStaticMarkup(React.createElement(ProductMedia,{product:{id:'local',name:'Local',image_path:'/images/mug.svg'},token:'local',saved:()=>{}}));
- assert.match(html,/Product media/);assert.match(html,/Uploads and galleries are not available yet/);assert.match(html,/Loading reviewed media/);assert.doesNotMatch(html,/type="file"/);
+ assert.match(html,/Product media/);assert.match(html,/compatibility fallback/);assert.match(html,/Loading reviewed media/);assert.match(html,/Loading gallery/);assert.match(html,/Gallery and uploads/);
 });
 
 test('membership UI preserves service bootstrap boundary',async()=>{
@@ -201,7 +201,7 @@ test('cancellation timeline validates resolution dates and retains customer-visi
 test('catalogue rows show permitted thumbnails/category/status with no invented variant counts',async()=>{
  const {CatalogueList,ProductManager}=await server.ssrLoadModule('/src/features/admin/ProductManager.tsx');
  const products=[{id:'local-a',name:'LOCAL TEST long product',category:'Ceramics',image_path:'/images/mug.svg',active:true},{id:'local-b',name:'LOCAL TEST archived',category:'Textiles',image_path:'/images/mug.svg',active:false}];
- const html=renderToStaticMarkup(React.createElement(CatalogueList,{products,select(){}}));assert.match(html,/admin-catalogue-list/);assert.equal((html.match(/class="admin-product-row"/g)??[]).length,2);assert.match(html,/<img[^>]*alt=""[^>]*loading="lazy"/);for(const label of ['Ceramics','Textiles','Active','Archived','editorial fields, variants and reviewed media'])assert.ok(html.includes(label));assert.doesNotMatch(html,/0 variants|Stock:|Delete product/);
+ const html=renderToStaticMarkup(React.createElement(CatalogueList,{products,select(){}}));assert.match(html,/admin-catalogue-list/);assert.equal((html.match(/aria-label="View details for/g)??[]).length,2);assert.match(html,/<th scope="col"[^>]*>Publication/);assert.match(html,/<img[^>]*alt=""[^>]*loading="lazy"/);for(const label of ['Ceramics','Textiles','Active','Archived','editorial fields, variants and reviewed media'])assert.ok(html.includes(label));assert.doesNotMatch(html,/0 variants|Stock:|Delete product/);
  const manager=renderToStaticMarkup(React.createElement(ProductManager,{token:'synthetic'}));assert.match(manager,/Search products/);assert.match(manager,/complete authorized catalogue/);assert.match(manager,/Loading products/);
 });
 test('catalogue save scope preserves creation receipt and safe exit guidance',async()=>{
@@ -286,7 +286,7 @@ test('inventory presentation separates variant state availability and tracking w
 });
 test('inventory actions retain captured-token RPC boundary receipt identity and stale-policy guard',async()=>{
  const {adminRpc}=await server.ssrLoadModule('/src/features/admin/adminRepository.ts');let captured;const client={rpc:(name,args)=>({setHeader:async(key,value)=>{captured={name,args,key,value};return {data:null,error:{code:'42501'}};}})};await assert.rejects(adminRpc(client,'synthetic-jwt','admin_inventory_history',{p_variant_id:'local'}),/Administration access was denied/);assert.equal(captured.value,'Bearer synthetic-jwt');assert.equal(captured.name,'admin_inventory_history');
- const source=readFileSync('src/features/admin/InventoryManager.tsx','utf8');for(const fragment of ['pending.current.signature!==signature','p_operation_id:pending.current.id','p_expected_updated_at:row.updated_at','Resolve or review the pending adjustment','submitting.current)return',"useAdminPage(token,'admin_inventory_page_v1'",'parseAdminRows(data,parseInventoryHistory'])assert.ok(source.includes(fragment));assert.doesNotMatch(source,/\.from\(|service_role/);const css=readFileSync('src/features/admin/admin.css','utf8');assert.match(css,/admin-inventory-filters[^}]*minmax\(0, 2fr\)/);assert.match(css,/max-width: 700px/);
+ const source=readFileSync('src/features/admin/InventoryManager.tsx','utf8');for(const fragment of ['pending.current.signature!==signature','p_operation_id:pending.current.id','p_expected_updated_at:row.updated_at','Resolve or review the pending adjustment','submitting.current)return','useAdminPage(token,request.rpc,request.args','parseAdminRows(data,parseInventoryHistory'])assert.ok(source.includes(fragment));assert.doesNotMatch(source,/\.from\(|service_role/);const css=readFileSync('src/features/admin/admin.css','utf8');assert.match(css,/admin-inventory-filters[^}]*minmax\(0, 2fr\)/);assert.match(css,/max-width: 700px/);
 });
 
 test('membership projections validate dates identifiers states and preserve unknown historic provisioning',async()=>{

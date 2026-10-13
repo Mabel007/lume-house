@@ -53,7 +53,7 @@ test('Admin Profile uses current authenticated identity, hides stale access read
  const view=(id,provider='google')=>React.createElement(MemoryRouter,null,React.createElement(AuthContext.Provider,{value:{session:id?{access_token:`token-${id}`,user:{id,email:`${id}@example.invalid`,user_metadata:{full_name:`Current ${id}`},app_metadata:{provider}}}:null,loading:false,error:null,signOut:async()=>{signOuts++;},signIn:async()=>{}}},React.createElement(AdminProfile,{token:`token-${id}`})));
  await mount(view('a'));assert.match(host.textContent,/Checking your administration access/);assert.doesNotMatch(host.textContent,/Current a/);const old=read;read=deferred();await render(view('b'));await act(async()=>old.resolve({data:true,error:null}));assert.doesNotMatch(host.textContent,/Current a|a@example.invalid/);
  await act(async()=>read.resolve({data:true,error:null}));assert.match(host.textContent,/Current b|b@example.invalid/);assert.match(host.textContent,/Active business-admin membership/);assert.match(host.textContent,/Sign-in provider: Google/);assert.doesNotMatch(host.textContent,/token-b|Change Password|Owner|Manager/);assert.equal(host.querySelector('input'),null);
- await click(host.querySelector('button'));assert.equal(signOuts,1);
+ await click(host.querySelector('button'));assert.equal(signOuts,0);await click(host.querySelector('dialog button'));assert.equal(signOuts,0);await click(host.querySelector('button'));await click(host.querySelectorAll('dialog button')[1]);assert.equal(signOuts,1);
  read=deferred();await render(view('c','unknown'));await act(async()=>read.resolve({data:false,error:null}));assert.match(host.textContent,/access was denied/);assert.doesNotMatch(host.textContent,/Current b|Current c/);
  read=deferred();await click(host.querySelector('button'));await act(async()=>read.resolve({data:true,error:null}));assert.match(host.textContent,/provider information unavailable/);assert.doesNotMatch(host.textContent,/Google manages/);
  await render(view(null));assert.doesNotMatch(host.textContent,/Current c|Active business-admin/);assert.match(host.textContent,/Sign in to view/);
@@ -122,7 +122,15 @@ test('CSV serialization preserves typed numbers, quotes UTF-8 text and neutraliz
  const order={order_reference:'LH-0000000000000001',created_at:'2026-10-10T00:00:00Z',status:'placed',payment_status:'awaiting_payment',currency:'NLE',total_cents:12550};assert.match(exportCsv({items:[order],total_count:1},'orders').csv,/total_minor_units/);assert.match(exportCsv({items:[order],total_count:1},'orders').csv,/,12550\r\n/);
 });
 
-test('complete CSV downloads once; cancellation, switched identity, revoked access and partial failures download nothing',async()=>{
+test('order filter reset requests only supported server filters and keeps CSV scoped to them',async()=>{
+ const {OrderManager}=await module('features/admin/OrderManager.tsx');const calls=[];
+ fakeClient((name,args)=>{assert.equal(name,'admin_orders_page_v1');calls.push(args);return Promise.resolve({data:{items:[],total_count:0,page:args.p_page,page_size:args.p_page_size},error:null});});
+ await mount(React.createElement(MemoryRouter,{initialEntries:['/admin/orders?query=fixture&status=placed']},React.createElement(OrderManager,{token:'local'})));
+ assert.equal(calls[0].p_query,'fixture');assert.equal(calls[0].p_status,'placed');assert.ok(host.querySelector('[aria-label="Export filtered orders CSV"]'));
+ const clear=Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Clear filters');await click(clear);assert.equal(calls.at(-1).p_query,'');assert.equal(calls.at(-1).p_status,'');assert.equal(host.querySelector('input[type=datetime-local]'),null);
+});
+
+test('complete CSV downloads once; cancellation, empty results, switched identity, revoked access and partial failures download nothing',async()=>{
  const {AdminCsvExport}=await module('features/admin/AdminCsvExport.tsx');let pending=deferred(),allowed=true;const calls=[];let downloads=0;const originalCreate=URL.createObjectURL,originalRevoke=URL.revokeObjectURL,originalClick=window.HTMLAnchorElement.prototype.click;
  URL.createObjectURL=()=> 'blob:local-test';URL.revokeObjectURL=()=>{};window.HTMLAnchorElement.prototype.click=function(){assert.equal(this.download,'lume-house-products.csv');downloads++;};
  const payload={items:[{id:'local',name:'Lumé piece',category:'Ceramics',active:true,display_order:0}],total_count:1};
@@ -130,6 +138,7 @@ test('complete CSV downloads once; cancellation, switched identity, revoked acce
  const view=(token='a',query='')=>React.createElement(AdminCsvExport,{token,kind:'products',query});
  try{
   await mount(view());await click(host.querySelector('button'));assert.equal(host.querySelector('button').disabled,true);assert.equal(calls[0].args.p_query,'');await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);assert.match(host.textContent,/Complete export downloaded: 1 records/);
+  pending=deferred();await click(host.querySelector('button'));await act(async()=>pending.resolve({data:{items:[],total_count:0},error:null}));assert.equal(downloads,1);assert.match(host.textContent,/No records match these filters/);
   pending=deferred();await click(host.querySelector('button'));await click(Array.from(host.querySelectorAll('button')).find(node=>node.textContent==='Cancel export'));await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);assert.match(host.textContent,/Export cancelled/);
   pending=deferred();await click(host.querySelector('button'));await render(view('b','filtered'));await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);assert.doesNotMatch(host.textContent,/Complete export downloaded/);
   allowed=false;pending=deferred();await click(host.querySelector('button'));await act(async()=>pending.resolve({data:payload,error:null}));assert.equal(downloads,1);assert.match(host.textContent,/Export failed/);assert.equal(calls.at(-2).args.p_query,'filtered');
@@ -207,7 +216,7 @@ test('actual application router keeps Auth/Product/Bag providers across customer
  const session=id=>({user:{id,email:`${id}@example.invalid`},access_token:`synthetic-${id}`});let current=session('customer-a'),receive,restores=0,unsubscribes=0,reads=0;
  const client=fakeClient((name,args,token)=>{
   if(name==='load_variant_cart')return Promise.resolve({data:{id:'synthetic-cart',items:token==='Bearer synthetic-customer-a'?[{product_id:product.id,variant_id:variant.id,quantity:3}]:[]},error:null});
-  if(name==='is_business_admin')return Promise.resolve({data:false,error:null});
+  if(name==='business_access_v1')return Promise.resolve({data:null,error:{code:'42501'}});if(name==='is_business_admin')return Promise.resolve({data:false,error:null});
   throw new Error(`Unexpected mocked RPC: ${name}`);
  });
  client.auth={onAuthStateChange(callback){receive=callback;return {data:{subscription:{unsubscribe(){unsubscribes++;}}}};},async getSession(){restores++;return {data:{session:current},error:null};},async signOut(){current=null;receive('SIGNED_OUT',null);return {error:null};}};
@@ -286,7 +295,7 @@ test('product create Cancel has no mutation; duplicate submit and uncertain repl
 
 test('actual protected order deep link mounts on fresh router and preserves provider continuity through return and POP',async()=>{
  const {testRouter}=await module('main.tsx');let subscriptions=0,restores=0;
- const client=fakeClient(name=>{if(name==='is_business_admin')return Promise.resolve({data:true,error:null});if(name==='load_variant_cart')return Promise.resolve({data:{id:'synthetic-cart',items:[]},error:null});if(name==='admin_get_order')return Promise.resolve({data:null,error:null});if(name==='admin_orders_page_v1')return Promise.resolve({data:[],error:null});throw new Error(`Unexpected RPC ${name}`);});
+ const client=fakeClient(name=>{if(name==='business_access_v1')return Promise.resolve({data:'legacy',error:null});if(name==='is_business_admin')return Promise.resolve({data:true,error:null});if(name==='load_variant_cart')return Promise.resolve({data:{id:'synthetic-cart',items:[]},error:null});if(name==='admin_get_order')return Promise.resolve({data:null,error:null});if(name==='admin_orders_page_v1')return Promise.resolve({data:[],error:null});throw new Error(`Unexpected RPC ${name}`);});
  client.auth={onAuthStateChange(){subscriptions++;return {data:{subscription:{unsubscribe(){}}}};},async getSession(){restores++;return {data:{session:{user:{id:'synthetic-admin',email:'admin@example.invalid'},access_token:'synthetic-admin-token'}},error:null};}};
  client.from=()=>{const query={select(){return query;},eq(){return query;},order(){return query;},abortSignal(){return Promise.resolve({data:[],error:null});}};return query;};
  router=createMemoryRouter(testRouter.routes,{initialEntries:['/admin/orders/missing?status=placed']});await mount(React.createElement(RouterProvider,{router}));assert.ok(host.querySelector('.admin-workspace'));assert.match(host.textContent,/Order not found/);assert.equal(host.querySelector('footer'),null);
@@ -312,7 +321,7 @@ test('membership cancellation makes no mutation; failed revoke retains reason af
 });
 
 test('reviewed media selection after an uncertain save keeps the review warning and canonical draft without auto-saving',async()=>{
- const {ProductMedia}=await module('features/admin/ProductMedia.tsx');let pending=deferred();const calls=[];fakeClient((name,args)=>{if(name==='admin_media_assets')return Promise.resolve({data:['/images/mug.svg','/images/arch-vase.webp'],error:null});calls.push({name,args});return pending.promise;});
+ const {ProductMedia}=await module('features/admin/ProductMedia.tsx');let pending=deferred();const calls=[];fakeClient((name,args)=>{if(name==='admin_media_assets')return Promise.resolve({data:['/images/mug.svg','/images/arch-vase.webp'],error:null});if(name==='admin_product_gallery_v1')return Promise.resolve({data:{items:[],updated_at:'2026-10-08T00:00:00Z'},error:null});assert.equal(name,'admin_set_product_media');calls.push({name,args});return pending.promise;});
  const product={id:'synthetic-product',name:'LOCAL TEST',image_path:'/images/mug.svg',updated_at:'2026-10-08T00:00:00Z'};await mount(React.createElement(ProductMedia,{product,token:'synthetic-token',saved(){throw new Error('Unexpected success');}}));await act(async()=>host.querySelector('.admin-media-preview').dispatchEvent(new window.Event('load')));await submit(host.querySelector('form'));assert.equal(calls.length,1);assert.equal(calls[0].args.p_path,'/images/mug.svg');await act(async()=>pending.resolve({data:null,error:{code:'transport'}}));
  await click(host.querySelector('[value="/images/arch-vase.webp"]'));assert.equal(host.querySelector('form').dataset.adminUncertain,'true');assert.match(host.textContent,/earlier save was not confirmed/);assert.equal(calls.length,1);assert.equal(product.image_path,'/images/mug.svg');
 });
@@ -370,5 +379,5 @@ test('catalogue registry denial hides and disables the retained product form; va
 });
 
 test('administration gate read retry rechecks authority without navigation or a mutation',async()=>{
- const {AdminPage}=await module('features/admin/AdminPage.tsx');const {AuthContext}=await module('features/auth/AuthContext.ts');let reads=0;fakeClient(name=>{assert.equal(name,'is_business_admin');reads++;return Promise.resolve({data:reads>1,error:null});});router=createMemoryRouter([{path:'/admin/*',element:React.createElement(AuthContext.Provider,{value:{session:{user:{id:'synthetic-admin',email:'admin@example.invalid'},access_token:'synthetic-token'},loading:false}},React.createElement(AdminPage))}],{initialEntries:['/admin']});await mount(React.createElement(RouterProvider,{router}));assert.equal(host.querySelector('.admin-workspace'),null);await click(Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Retry access check'));assert.ok(host.querySelector('.admin-workspace'));assert.equal(reads,2);assert.equal(router.state.location.pathname,'/admin');
+ const {AdminPage}=await module('features/admin/AdminPage.tsx');const {AuthContext}=await module('features/auth/AuthContext.ts');let reads=0;fakeClient(name=>{assert.equal(name,'business_access_v1');reads++;return Promise.resolve({data:reads>1?'legacy':null,error:reads>1?null:{code:'42501'}});});router=createMemoryRouter([{path:'/admin/*',element:React.createElement(AuthContext.Provider,{value:{session:{user:{id:'synthetic-admin',email:'admin@example.invalid'},access_token:'synthetic-token'},loading:false}},React.createElement(AdminPage))}],{initialEntries:['/admin']});await mount(React.createElement(RouterProvider,{router}));assert.equal(host.querySelector('.admin-workspace'),null);await click(Array.from(host.querySelectorAll('button')).find(button=>button.textContent==='Retry access check'));assert.ok(host.querySelector('.admin-workspace'));assert.equal(reads,2);assert.equal(router.state.location.pathname,'/admin');
 });

@@ -1,35 +1,35 @@
 import { useProducts } from "./ProductContext";
+import { UiStatus } from '../../components/UiStatus';
 
 export function ProductStatus() {
   const { state, refresh } = useProducts();
   if (state.status === "loading")
     return (
-      <div className="catalog-status" role="status">
+      <UiStatus kind="loading">
         Loading the collection…
-      </div>
+      </UiStatus>
     );
   if (state.status === "error")
     return (
-      <div className="catalog-status" role="alert">
+      <UiStatus kind="error">
         <h2>The collection is unavailable.</h2>
         <p>
-          We couldn’t load the products. The shop may still be getting
-          connected. Please try again shortly.
+          We couldn’t load the products. Please try again shortly.
         </p>
         <button className="button" onClick={refresh}>
           Try again
         </button>
-      </div>
+      </UiStatus>
     );
   if (!state.products.length)
     return (
-      <div className="catalog-status">
+      <UiStatus kind="empty">
         <h2>A new collection is on its way.</h2>
         <p>There are no available products right now.</p>
         <button className="button" onClick={refresh}>
           Refresh collection
         </button>
-      </div>
+      </UiStatus>
     );
   return null;
 }

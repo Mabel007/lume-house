@@ -180,3 +180,39 @@
 
 .admin-read-state { overflow-wrap: anywhere; line-height: 1.6; }
 .admin-read-state button { min-height: 44px; max-width: 100%; margin: .35rem .5rem .35rem 0; white-space: normal; }
+.admin-screen table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.admin-screen th, .admin-screen td { padding: .5rem; text-align: left; overflow-wrap: anywhere; border-bottom: 1px solid #d7d1c4; }
+
+/* Operations console: compact navigation, calm surfaces and genuine server-backed records. */
+.admin-screen { box-shadow: 0 4px 20px #29382e06; border-radius: .75rem; }
+.admin-page-heading { padding-bottom: 1.25rem; border-bottom: 1px solid #dcded3; }
+.admin-navigation a { border-color: transparent; border-radius: .5rem; }
+.admin-navigation a[aria-current="page"] { box-shadow: inset 3px 0 0 #caa47e; }
+.admin-form { border-color: #dcded3; border-radius: .65rem; background: #f9faf5; padding: clamp(1rem, 2vw, 1.5rem); }
+.admin-form input, .admin-form textarea, .admin-form select { border-color: #9ba38e; border-radius: .35rem; }
+.admin-form .button + button { min-height: 44px; margin-left: .5rem; padding: .65rem .8rem; }
+.admin-form ol { padding-left: 1.25rem; }
+.admin-form ol > li { padding-block: .8rem; line-height: 1.7; border-bottom: 1px solid #dcded3; overflow-wrap: anywhere; }
+.admin-table-shell { min-width: 0; max-width: 100%; margin-block: 1.25rem; }
+.admin-table-hint { font-size: .875rem; color: #56614f; }
+.admin-table-scroll { overflow-x: auto; overscroll-behavior-x: contain; border: 1px solid #dcded3; border-radius: .5rem; }
+.admin-screen .admin-data-table { table-layout: auto; min-width: 680px; margin: 0; }
+.admin-data-table caption { text-align: left; padding: .85rem 1rem; font-weight: 600; background: #fffdf8; }
+.admin-screen .admin-data-table thead th { background: #eef0e7; color: #455340; font-size: .875rem; font-weight: 600; white-space: nowrap; }
+.admin-screen .admin-data-table th, .admin-screen .admin-data-table td { padding: 1rem; vertical-align: top; line-height: 1.6; }
+.admin-data-table tbody th { font-weight: 500; min-width: 12rem; max-width: 20rem; }
+.admin-data-table tbody tr:nth-child(even) { background: #f8f9f3; }
+.admin-data-table tbody tr:hover { background: #f0f3e8; }
+.admin-screen .admin-data-table .numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.admin-table-product { display: flex; gap: .85rem; align-items: center; min-width: 14rem; }
+.admin-table-product .admin-product-thumbnail { width: 3.5rem; height: 3.5rem; flex-basis: 3.5rem; }
+.ui-detail-action { display: inline-flex; align-items: center; gap: .45rem; padding: .5rem .65rem; min-height: 44px; border: 1px solid #dcded3; border-radius: .35rem; background: #fffdf8; text-decoration: none; white-space: nowrap; font-size: .875rem; }
+.admin-export { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-block: 1rem; }
+.admin-export p { flex-basis: 100%; margin: 0; }
+.admin-visible-range { font-size: .875rem; color: #56614f; }
+.admin-access .button { margin-block: .75rem; }
+.admin-access .text-link { margin-left: .75rem; }
+.admin-order-filters, .admin-inventory-filters { padding: 1rem; border: 1px solid #dcded3; border-radius: .5rem; background: #f4f6ed; }
+.admin-filter-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.admin-filter-actions .button { min-width: 8rem; }
+@media (max-width: 850px) { .admin-filter-actions { width: 100%; } .admin-filter-actions .button { flex: 1; } }

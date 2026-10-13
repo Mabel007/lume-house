@@ -1,4 +1,11 @@
+import {columnSort} from './filters/columnSort';
+import {RecordFilterControls} from './filters/RecordFilterControls';
+import {recordPageRequest} from './filters/recordPageRequest';
+import type {RecordFilters} from './filters/recordFilters';
+import {filtersFromSearch,filterSearch} from './filters/recordFilters';
 import {AdminCsvExport} from './AdminCsvExport';
+import {RecordTime} from '../../components/RecordTime';
+import {ManualFulfilment} from './ManualFulfilment';
 import {AdminReadState} from './AdminReadState';
 import {useAdminPage} from './useAdminPage';
 import {AdminPagination} from './PaginationControls';
@@ -35,13 +42,13 @@ export function OrderOperations({order,token,saved,blocked=false}:{order:Order;t
 }
 type DetailState = { status: 'loading' } | { status: 'missing' } | { status: 'denied' } | { status: 'error' } | { status: 'ready'; order: Order };
 export function AdminOrderDetailState({state,token,saved,retry}:{state:DetailState;token:string;saved:()=>void;retry:()=>void}) {
-  const [historyDenied,setHistoryDenied]=useState(false);const [requestDenied,setRequestDenied]=useState(false);const blocked=historyDenied||requestDenied;
+  const [historyDenied,setHistoryDenied]=useState(false);const [requestDenied,setRequestDenied]=useState(false);const [fulfilmentDenied,setFulfilmentDenied]=useState(false);const blocked=historyDenied||requestDenied||fulfilmentDenied;
   if (state.status === 'loading') return <p role="status">Loading order details…</p>;
   if (state.status === 'missing') return <p role="status">Order not found. Check the link or return to the order list.</p>;
   if (state.status === 'denied') return <AdminReadState message="Administration access was denied. Private data and actions are hidden." retry={retry} retryLabel="Retry loading order"/>;
   if (state.status === 'error') return <p role="alert">Order details could not be loaded. <button onClick={retry}>Retry loading order</button></p>;
   const {order} = state;
-  return <>{!blocked&&<><h2>{order.order_reference}</h2><OrderSnapshot order={order} context="admin"/></>}<CancellationRequest key={`${order.id}:${order.status}:request`} orderId={order.id} status={order.status} token={token} admin blocked={blocked} accessChanged={setRequestDenied}/><OrderOperations key={`${order.id}:${order.status}`} order={order} token={token} saved={saved} blocked={blocked}/><AdminOrderTimeline id={order.id} token={token} accessChanged={setHistoryDenied} blocked={blocked}/></>;
+  return <>{!blocked&&<><h2>{order.order_reference}</h2><OrderSnapshot order={order} context="admin"/></>}<CancellationRequest key={`${order.id}:${order.status}:request`} orderId={order.id} status={order.status} token={token} admin blocked={blocked} accessChanged={setRequestDenied}/><OrderOperations key={`${order.id}:${order.status}`} order={order} token={token} saved={saved} blocked={blocked}/>{order.fulfilment_method==='delivery'?<ManualFulfilment orderId={order.id} token={token} blocked={blocked} accessChanged={setFulfilmentDenied}/>:!blocked&&<p>Courier and tracking fields apply only to delivery orders.</p>}<AdminOrderTimeline id={order.id} token={token} accessChanged={setHistoryDenied} blocked={blocked}/></>;
 }
 function AdminOrderDetail({id,token}:{id:string;token:string}) {
   const [state,setState]=useState<DetailState>({status:'loading'});
@@ -60,19 +67,27 @@ export function AdminOrderDetailPage({token}:{token:string}) {
   const {orderId=''}=useParams();const {search}=useLocation();
   return <section className="admin-order-detail"><Link className="back-link" to={orderListUrl(search)}>Back to orders</Link><AdminOrderDetail key={`${orderId}:${token}`} id={orderId} token={token}/></section>;
 }
-export function AdminOrderList({orders,search}:{orders:AdminOrderListItem[];search:string}) {
-  return <ul className="admin-order-list">{orders.map(order=><li key={order.id}><article>
-    <div className="admin-order-identity"><Link className="admin-order-link" to={orderDetailUrl(order.id,search)}>{order.order_reference}</Link><time dateTime={order.created_at}>{new Date(order.created_at).toLocaleString('en-GB')}</time><span>{order.full_name}</span></div>
-    <dl><div><dt>Fulfilment</dt><dd>{order.fulfilment_method==='pickup'?'Pickup':'Delivery'}</dd></div><div><dt>Operational status</dt><dd className="status-pill">{orderLabel(order.status)}</dd></div><div><dt>Payment status</dt><dd className="status-pill payment-pill">{orderLabel(order.payment_status)}</dd></div><div><dt>Total</dt><dd>{formatMoney(order.total_cents)}</dd></div></dl>
-  </article></li>)}</ul>;
+export function AdminOrderList({orders,search,sortBy='created_at',direction='desc',onSort}:{orders:AdminOrderListItem[];search:string;sortBy?:string;direction?:string;onSort?:(key:string)=>void}) {
+  return <AdminTable caption="Customer orders" className="admin-order-list" rows={orders} rowKey={order=>order.id} columns={[
+    {...columnSort(sortBy,direction,onSort,'reference'),key:'reference',heading:'Reference / customer',rowHeader:true,render:order=><div className="admin-order-identity"><Link className="admin-order-link" to={orderDetailUrl(order.id,search)}>{order.order_reference}</Link><span>{order.full_name}</span></div>},
+    {...columnSort(sortBy,direction,onSort,'created_at'),key:'date',heading:'Placed (UTC)',render:order=><RecordTime value={order.created_at}/>},
+    {key:'fulfilment',heading:'Fulfilment',render:order=>order.fulfilment_method==='pickup'?'Pickup':'Delivery'},
+    {...columnSort(sortBy,direction,onSort,'status'),key:'status',heading:'Operational status',render:order=><span className="status-pill">{orderLabel(order.status)}</span>},
+    {key:'payment',heading:'Payment status',render:order=><span className="status-pill payment-pill">{orderLabel(order.payment_status)}</span>},
+    {...columnSort(sortBy,direction,onSort,'total'),key:'total',heading:'Total',numeric:true,render:order=>formatMoney(order.total_cents)},
+    {key:'actions',heading:'Details',render:order=><Link className="ui-detail-action" aria-label={`View details for ${order.order_reference}`} to={orderDetailUrl(order.id,search)}><EyeIcon/>View details</Link>},
+  ]}/>;
 }
 export function OrderManager({token}:{token:string}) {
   const [params,setParams]=useSearchParams();const search=params.toString();const {query,status}=orderFilters(search);
-  const pagination=useAdminPage(token,'admin_orders_page_v1',{p_query:query,p_status:status},parseAdminOrderList,orderKey);
+  let applied:RecordFilters;let filterError='';try{applied=filtersFromSearch('orders',search);}catch{applied={query,status};filterError='The saved URL contains invalid filters. Clear or correct the filters before reviewing results.';}const request=recordPageRequest('orders',applied);
+  const pagination=useAdminPage(token,request.rpc,request.args,parseAdminOrderList,orderKey);
   const {rows:orders,error,loading}=pagination;
   return <section><h2>Order list</h2><p>Search and status filters apply to all authorized orders. Customer and fulfilment details are private business information.</p>
-    <form className="admin-order-filters" key={`${query}:${status}`} onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);const next=new URLSearchParams();const q=String(data.get('query'));const s=String(data.get('status'));if(q)next.set('query',q);if(s)next.set('status',s);setParams(next);}}><label>Search reference, customer name or email<input name="query" type="search" maxLength={200} defaultValue={query}/></label><label>Order status<select name="status" defaultValue={status}><option value="">All statuses</option>{orderStates.map(s=><option key={s} value={s}>{orderLabel(s)}</option>)}</select></label><button className="button">Apply filters</button></form>
-    <AdminCsvExport token={token} kind="orders" query={query} status={status} disabled={loading||Boolean(error)}/><AdminReadState loading={loading} message={loading?(orders.length?'Refreshing orders…':'Loading orders…'):error} retry={pagination.refresh} retryLabel="Retry loading orders"/>{!loading&&!error&&!orders.length&&<p>No matching orders.</p>}
-    {!loading&&!error&&<><AdminOrderList orders={orders} search={search}/><AdminPagination {...pagination}/></>}
+    <form className="admin-order-filters" key={`${query}:${status}`} onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);const next=new URLSearchParams(applied);next.delete('query');next.delete('status');const q=String(data.get('query'));const s=String(data.get('status'));if(q)next.set('query',q);if(s)next.set('status',s);setParams(next);}}><label>Search reference, customer name or email<input name="query" type="search" maxLength={200} defaultValue={query}/></label><label>Order status<select name="status" defaultValue={status}><option value="">All statuses</option>{orderStates.map(s=><option key={s} value={s}>{orderLabel(s)}</option>)}</select></label><div className="admin-filter-actions"><button className="button">Apply filters</button><button type="button" className="button secondary" onClick={()=>setParams(new URLSearchParams())}>Clear filters</button></div></form>
+    <RecordFilterControls kind="orders" applied={applied} onApply={filters=>setParams(filterSearch(filters))}/><AdminCsvExport token={token} kind="orders" query={query} filters={request.rpc.endsWith('_v2')?applied:undefined} status={status} disabled={loading||Boolean(error)||Boolean(filterError)}/><AdminReadState loading={loading&&!filterError} message={filterError||(loading?(orders.length?'Refreshing orders…':'Loading orders…'):error)} retry={pagination.refresh} retryLabel="Retry loading orders"/>{!loading&&!error&&!filterError&&!orders.length&&<p>No matching orders.</p>}
+    {!loading&&!error&&!filterError&&<><AdminOrderList orders={orders} search={search} sortBy={applied.sort||'created_at'} direction={applied.direction||'desc'} onSort={sort=>setParams(filterSearch({...applied,sort,direction:(applied.sort||'created_at')===sort&&(applied.direction||'desc')==='asc'?'desc':'asc'}))}/><AdminPagination {...pagination}/></>}
   </section>;
 }
+import { AdminTable } from './AdminTable';
+import { EyeIcon } from '../../components/EyeIcon';

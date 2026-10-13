@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import {test,before,after,afterEach} from 'node:test';
+import React,{act} from 'react';
+import {JSDOM} from 'jsdom';
+import {createServer} from 'vite';
+const dom=new JSDOM('<!doctype html><button id="opener">Open</button><div id="root"></div>',{url:'http://localhost/'});
+const document=dom.window.document;
+for(const name of ['window','document','HTMLElement'])Object.defineProperty(globalThis,name,{configurable:true,value:dom.window[name]});
+globalThis.IS_REACT_ACT_ENVIRONMENT=true;
+const {createRoot}=await import('react-dom/client');
+let server,root;const host=document.getElementById('root');
+before(async()=>{server=await createServer({root:process.cwd(),configFile:false,envDir:false,server:{middlewareMode:true,hmr:false}});});
+afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;host.replaceChildren();});
+after(async()=>{await server.close();dom.window.close();});
+async function mount(node){root=createRoot(host);await act(async()=>root.render(node));}
+test('read states expose live loading, errors with retry, and useful empty feedback',async()=>{
+ const {AdminReadState}=await server.ssrLoadModule('/src/features/admin/AdminReadState.tsx');let retried=0;
+ await mount(React.createElement(AdminReadState,{loading:true,message:'Loading orders…'}));assert.equal(host.querySelector('[role=status]').textContent,'Loading orders…');assert.ok(host.querySelector('[aria-hidden=true]'));
+ await act(async()=>root.render(React.createElement(AdminReadState,{message:'Access denied',retry:()=>retried++})));
+ assert.match(host.querySelector('[role=alert]').textContent,/Access denied/);await act(async()=>host.querySelector('button').click());assert.equal(retried,1);
+ await act(async()=>root.render(React.createElement(AdminReadState,{empty:'No matching orders'})));assert.match(host.textContent,/No matching orders/);assert.equal(host.querySelector('button'),null);
+});
+test('confirmation labels its dialog, starts on cancel and restores invoking control focus',async()=>{
+ const {ConfirmDialog}=await server.ssrLoadModule('/src/components/ConfirmDialog.tsx');let confirmed=0,cancelled=0;
+ const opener=document.getElementById('opener');opener.focus();
+ await mount(React.createElement(ConfirmDialog,{title:'Sign out?',description:'End this session.',confirmLabel:'Sign out',onConfirm:()=>confirmed++,onCancel:()=>cancelled++}));
+ const dialog=host.querySelector('dialog');assert.equal(document.getElementById(dialog.getAttribute('aria-labelledby')).textContent,'Sign out?');assert.equal(document.activeElement.textContent,'Cancel');
+ await act(async()=>host.querySelector('button').click());assert.equal(cancelled,1);assert.equal(confirmed,0);
+ await act(async()=>host.querySelectorAll('button')[1].click());assert.equal(confirmed,1);
+ await act(async()=>root.unmount());root=undefined;assert.equal(document.activeElement,opener);
+});
+test('record table has labelled scroll region, real column/row headers and an actionable detail control',async()=>{
+ const {AdminTable}=await server.ssrLoadModule('/src/features/admin/AdminTable.tsx');let selected='';
+ await mount(React.createElement(AdminTable,{caption:'Inventory',rows:[{id:'fixture',name:'Reviewed piece'}],rowKey:r=>r.id,columns:[{key:'name',heading:'Product',rowHeader:true,render:r=>r.name},{key:'action',heading:'Details',render:r=>React.createElement('button',{type:'button',onClick:()=>selected=r.id},'View details')}]}));
+ const region=host.querySelector('[role=region]');assert.equal(region.tabIndex,0);assert.equal(region.getAttribute('aria-label'),'Inventory table');assert.equal(host.querySelector('caption').textContent,'Inventory');assert.equal(host.querySelector('[scope=col]').textContent,'Product');assert.equal(host.querySelector('[scope=row]').textContent,'Reviewed piece');await act(async()=>host.querySelector('button').click());assert.equal(selected,'fixture');assert.equal(host.querySelector('[aria-sort]'),null);
+});
+test('audit timestamps show explicit UTC across offset day boundaries without changing the stored instant',async()=>{
+ const {RecordTime}=await server.ssrLoadModule('/src/components/RecordTime.tsx');const {formatRecordTime}=await server.ssrLoadModule('/src/config/dateTime.ts');const value='2026-10-11T00:30:00+02:00';assert.match(formatRecordTime(value),/10\/10\/2026, 22:30:00 UTC/);assert.equal(formatRecordTime('invalid'),'Date unavailable');await mount(React.createElement(RecordTime,{value}));assert.equal(host.querySelector('time').getAttribute('datetime'),value);assert.match(host.textContent,/UTC/);
+});
+test('status chart exposes genuine counts and a safe empty-state ring',async()=>{
+ const {StatusBreakdown}=await server.ssrLoadModule('/src/features/admin/StatusBreakdown.tsx');const {MemoryRouter}=await import('react-router-dom');const counts={placed:2,confirmed:0,processing:0,ready_for_pickup:0,out_for_delivery:0,completed:1,cancelled:0};
+ await mount(React.createElement(MemoryRouter,null,React.createElement(StatusBreakdown,{counts,total:3})));assert.match(host.querySelector('title').textContent,/3 orders/);assert.equal(host.querySelectorAll('circle').length,3);assert.equal(host.querySelectorAll('dt').length,7);assert.equal(host.querySelector('dd').textContent,'2');assert.doesNotMatch(host.innerHTML,/NaN|Infinity/);
+ await act(async()=>root.render(React.createElement(MemoryRouter,null,React.createElement(StatusBreakdown,{counts:Object.fromEntries(Object.keys(counts).map(key=>[key,0])),total:0}))));assert.equal(host.querySelectorAll('circle').length,1);assert.match(host.querySelector('title').textContent,/0 orders/);assert.doesNotMatch(host.innerHTML,/NaN|Infinity/);
+});
+test('required form fields link native validation errors and clear them once valid',async()=>{
+ const {FormField}=await server.ssrLoadModule('/src/components/FormField.tsx');await mount(React.createElement(FormField,{label:'Email',id:'email-fixture',name:'email',type:'email',required:true}));const input=host.querySelector('input');assert.equal(host.querySelector('label').htmlFor,input.id);await act(async()=>input.dispatchEvent(new dom.window.Event('invalid',{bubbles:false})));assert.equal(input.getAttribute('aria-invalid'),'true');assert.equal(document.getElementById(input.getAttribute('aria-describedby')).textContent,input.validationMessage);await act(async()=>{input.value='fixture@example.invalid';input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});assert.equal(input.getAttribute('aria-invalid'),null);assert.equal(input.getAttribute('aria-describedby'),null);
+});
+test('filter drawer labels modal, closes without applying and restores trigger focus',async()=>{
+ const {FilterDrawer}=await server.ssrLoadModule('/src/features/admin/filters/FilterDrawer.tsx');let applied=0,closed=0,reset=0;const opener=document.getElementById('opener');opener.focus();await mount(React.createElement(FilterDrawer,{title:'Order filters',onClose:()=>closed++,onApply:()=>applied++,onReset:()=>reset++},React.createElement('input',{name:'query',defaultValue:'draft'})));const dialog=host.querySelector('dialog');assert.equal(document.getElementById(dialog.getAttribute('aria-labelledby')).textContent,'Order filters');assert.equal(document.activeElement.textContent,'Close filters');await act(async()=>host.querySelector('button').click());assert.equal(closed,1);assert.equal(applied,0);await act(async()=>dialog.dispatchEvent(new dom.window.Event('cancel',{cancelable:true})));assert.equal(closed,2);await act(async()=>host.querySelectorAll('button')[1].click());assert.equal(reset,1);assert.equal(applied,0);await act(async()=>host.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})));assert.equal(applied,1);await act(async()=>root.unmount());root=undefined;assert.equal(document.activeElement,opener);
+});
+test('date range quick period retains selection and reset returns to custom range',async()=>{
+ const {DateRangePicker}=await server.ssrLoadModule('/src/features/admin/filters/DateRangePicker.tsx');let value={mode:'date',start:'',end:''};const node=()=>React.createElement(DateRangePicker,{value,onChange:next=>{value=next;root.render(node());}});await mount(node());const period=[...host.querySelectorAll('select')][1];await act(async()=>{period.value='Today';period.dispatchEvent(new dom.window.Event('change',{bubbles:true}));});assert.equal(period.value,'Today');assert.equal(value.start,new Date().toISOString().slice(0,10));assert.equal(value.end,value.start);await act(async()=>host.querySelector('button').click());assert.equal(period.value,'Custom range');assert.equal(value.start,'');assert.equal(value.end,'');
+});

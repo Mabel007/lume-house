@@ -1,3 +1,7 @@
+import {columnSort} from './filters/columnSort';
+import {RecordFilterControls} from './filters/RecordFilterControls';
+import {recordPageRequest} from './filters/recordPageRequest';
+import type {RecordFilters} from './filters/recordFilters';
 import {AdminCsvExport} from './AdminCsvExport';
 import {AdminReadState} from './AdminReadState';
 import {useAdminPage} from './useAdminPage';
@@ -79,13 +83,18 @@ function ProductThumbnail({product}:{product:AdminProduct}) {
   const [broken,setBroken]=useState(false);
   return broken ? <span className="admin-product-thumbnail" aria-label="Image unavailable">No image</span> : <img className="admin-product-thumbnail" src={product.image_path} alt="" loading="lazy" onError={()=>setBroken(true)}/>;
 }
-export function CatalogueList({products,select}:{products:AdminProduct[];select:(product:AdminProduct)=>void}) {
-  return <ul className="admin-catalogue-list">{products.map(product=><li key={product.id}><button className="admin-product-row" onClick={()=>select(product)}><ProductThumbnail key={`${product.id}:${product.image_path}`} product={product}/><span className="admin-product-summary"><strong className="admin-product-name">{product.name}</strong><span>{product.category}</span><span>Open editorial fields, variants and reviewed media</span></span><span className="status-pill">{product.active?'Active':'Archived'}</span></button></li>)}</ul>;
+export function CatalogueList({products,select,sortBy='display_order',direction='asc',onSort}:{products:AdminProduct[];select:(product:AdminProduct)=>void;sortBy?:string;direction?:string;onSort?:(key:string)=>void}) {
+  return <AdminTable caption="Catalogue products" className="admin-catalogue-list" rows={products} rowKey={product=>product.id} columns={[
+    {...columnSort(sortBy,direction,onSort,'name'),key:'product',heading:'Product',rowHeader:true,render:product=><div className="admin-table-product"><ProductThumbnail key={`${product.id}:${product.image_path}`} product={product}/><span className="admin-product-name">{product.name}</span></div>},
+    {key:'category',heading:'Collection',render:product=>product.category},
+    {...columnSort(sortBy,direction,onSort,'publication'),key:'state',heading:'Publication',render:product=><span className="status-pill">{product.active?'Active':'Archived'}</span>},
+    {key:'actions',heading:'Details',render:product=><button type="button" className="ui-detail-action" aria-label={`View details for ${product.name}`} onClick={()=>select(product)}><EyeIcon/>View details<span className="sr-only">: editorial fields, variants and reviewed media</span></button>},
+  ]}/>;
 }
 
 export function ProductManager({ token }: { token: string }) {
 
-  const [selected, setSelected] = useState<AdminProduct | null | undefined>(); const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<AdminProduct | null | undefined>(); const [query, setQuery] = useState(''); const [advanced,setAdvanced]=useState<RecordFilters>({}); const applied={...advanced,...(query?{query}:{})}; const request=recordPageRequest('products',applied);
   const noticeTarget=useRef<HTMLParagraphElement>(null);
   const [editorDenied,setEditorDenied]=useState(false);const [variantsDenied,setVariantsDenied]=useState(false);const [mediaDenied,setMediaDenied]=useState(false);const blocked=editorDenied||variantsDenied||mediaDenied;
   const [dirty,setDirty]=useState(false);const [saving,setSaving]=useState(false);const [notice,setNotice]=useState('');
@@ -96,22 +105,24 @@ export function ProductManager({ token }: { token: string }) {
     setDirty(false);setSelected(product);setNotice(product===undefined?'Returned to catalogue. Review any unconfirmed save before starting another creation.':'');
   }
   function saved(message:string){setDirty(false);setSelected(undefined);pagination.refresh();setNotice(message);}
-  const pagination = useAdminPage(token,'admin_products_page_v1',{p_query:query},parseAdminProduct,productKey);
+  const pagination = useAdminPage(token,request.rpc,request.args,parseAdminProduct,productKey);
   const {rows: products,error,loading}=pagination;
   const visible=products;
   return <section><h2>Products</h2><p>Search matches names and categories across the complete authorized catalogue, including archived products.</p>
     {notice&&<p role="status" className="admin-save-notice" ref={noticeTarget} tabIndex={-1}>{notice}</p>}
     {selected===undefined && <><label>Search products<input maxLength={200} value={query} onChange={e => setQuery(e.target.value)} type="search" /></label><button className="button" disabled={blocked||loading||Boolean(error)} onClick={() => choose(null)}>Create product</button></>}
-    <AdminCsvExport token={token} kind="products" query={query} disabled={blocked||loading||Boolean(error)||selected!==undefined}/><AdminReadState loading={loading} message={loading?(products.length?'Refreshing products…':'Loading products…'):error} retry={pagination.refresh} retryLabel="Retry loading products" disabled={saving}/>{!loading && !error && selected===undefined && !visible.length && <p>No products match.</p>}
-    {!blocked && !loading && !error && selected===undefined && <><CatalogueList products={visible} select={choose}/><AdminPagination {...pagination}/></>}
+    <RecordFilterControls kind="products" applied={applied} onApply={filters=>{const {query,...rest}=filters;setQuery(query||'');setAdvanced(rest);}} disabled={blocked||selected!==undefined}/><AdminCsvExport token={token} kind="products" query={query} filters={Object.keys(advanced).length?applied:undefined} disabled={blocked||loading||Boolean(error)||selected!==undefined}/><AdminReadState loading={loading} message={loading?(products.length?'Refreshing products…':'Loading products…'):error} retry={pagination.refresh} retryLabel="Retry loading products" disabled={saving}/>{!loading && !error && selected===undefined && !visible.length && <p>No products match.</p>}
+    {!blocked && !loading && !error && selected===undefined && <><CatalogueList products={visible} select={choose} sortBy={advanced.sort||'display_order'} direction={advanced.direction||'asc'} onSort={sort=>setAdvanced({...advanced,sort,direction:advanced.sort===sort&&advanced.direction==='asc'?'desc':'asc'})}/><AdminPagination {...pagination}/></>}
     {!loading && !error && selected!==undefined && <div className="admin-product-workspace" onChange={()=>setDirty(true)}>
       <button disabled={saving||blocked} onClick={()=>choose(undefined)}>Back to catalogue / Cancel</button>
       <p className="admin-field-help">{dirty?'Unsaved draft changes. ':''}Work on one section at a time. Product or media saves return to the catalogue; other drafts are discarded.</p>
       <details className="admin-save-guidance"><summary>Save and retry guidance</summary><p>Independent section saves do not save other drafts. If a save is unconfirmed, reload and review the catalogue before creating another product.</p></details>
       {selected&&<nav className="admin-product-sections" aria-label="Product sections"><a href="#product-editorial">Editorial fields</a><a href="#product-variants">Variants and SKUs</a><a href="#product-media">Reviewed media</a></nav>}
       <fieldset disabled={saving}><div id="product-editorial" tabIndex={-1}><ProductEditor key={`editor-${selected?.id ?? 'new'}`} product={selected} token={token} saved={result=>saved(productSaveMessage(result))} busyChanged={setSaving} cancel={()=>choose(undefined)} categories={categorySuggestions(products)} blocked={blocked} accessChanged={setEditorDenied}/></div>
-      {selected&&<><div id="product-variants" tabIndex={-1}><p>Variant options, SKUs, price and active state are saved independently of editorial fields.</p><VariantManager key={`variants-${selected.id}`} productId={selected.id} token={token} busyChanged={setSaving} blocked={blocked} accessChanged={setVariantsDenied}/></div><div id="product-media" tabIndex={-1}><ProductMedia key={`media-${selected.id}-${selected.updated_at}`} product={selected} token={token} saved={()=>saved('Reviewed image saved successfully. Product and variant drafts are saved separately.')} busyChanged={setSaving} blocked={blocked} accessChanged={setMediaDenied}/></div></>}
+      {selected&&<><div id="product-variants" tabIndex={-1}><p>Variant options, SKUs, price and active state are saved independently of editorial fields.</p><VariantManager key={`variants-${selected.id}`} productId={selected.id} token={token} busyChanged={setSaving} blocked={blocked} accessChanged={setVariantsDenied}/></div><div id="product-media" tabIndex={-1}><ProductMedia key={`media-${selected.id}-${selected.updated_at}`} product={selected} token={token} saved={message=>saved(message??'Legacy image saved successfully. Product and variant drafts are saved separately.')} busyChanged={setSaving} blocked={blocked} accessChanged={setMediaDenied}/></div></>}
       </fieldset>
     </div>}
   </section>;
 }
+import { AdminTable } from './AdminTable';
+import { EyeIcon } from '../../components/EyeIcon';

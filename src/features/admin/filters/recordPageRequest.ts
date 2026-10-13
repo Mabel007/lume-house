@@ -1,0 +1,3 @@
+﻿import type {ExportKind} from '../adminCsv';
+import type {RecordFilters} from './recordFilters';
+export function recordPageRequest(kind:ExportKind,filters:RecordFilters){const legacy=kind==='orders'?['query','status']:kind==='inventory'?['query','policy']:['query'];const advanced=Object.keys(filters).some(key=>!legacy.includes(key));if(advanced)return {rpc:'admin_records_page_v2',args:{p_kind:kind,p_filters:filters} as Record<string,unknown>};return {rpc:`admin_${kind}_page_v1`,args:{p_query:filters.query||'',...(kind==='orders'?{p_status:filters.status||''}:kind==='inventory'?{p_policy:filters.policy||''}:{})} as Record<string,unknown>};}
