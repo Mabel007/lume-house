@@ -94,6 +94,10 @@ async function settleError(deferredChange, reason) {
 async function flush() {
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 }
+async function typeQuantity(input, text) {
+  Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(input, text);
+  await act(async () => { input.dispatchEvent(new dom.window.Event("input", { bubbles: true })); });
+}
 function withProviders(auth, children, catalogValue = catalog) {
   return React.createElement(MemoryRouter, { initialEntries: ["/"] },
     React.createElement(AuthContext.Provider, { value: auth },
@@ -180,6 +184,76 @@ test("guest Product Details adds the chosen quantity from the number input", asy
   assert.match(host.textContent, /Added 3 × Fixture mug to your Bag/);
 });
 
+test("details quantity input ignores empty, zero, negative and decimal typing", async () => {
+  bagClient(() => emptyCart());
+  await mount(withProviders(guestAuth, React.createElement(ProductDetails, { product })));
+  const input = host.querySelector("#product-quantity");
+  for (const raw of ["", "0", "-5", "2.5"]) {
+    await typeQuantity(input, raw);
+    assert.equal(input.value, "1", `typing ${JSON.stringify(raw)} must not change the committed quantity`);
+  }
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  assert.deepEqual(readStored().items.map(item => item.quantity), [1], "only the committed quantity reaches the cart");
+});
+
+test("details quantity input clamps above 99 and the stepper respects the 1 and 99 boundaries", async () => {
+  bagClient(() => emptyCart());
+  await mount(withProviders(guestAuth, React.createElement(ProductDetails, { product })));
+  const input = host.querySelector("#product-quantity");
+  const minus = buttonByLabel("Decrease Fixture mug quantity");
+  const plus = buttonByLabel("Increase Fixture mug quantity");
+  assert.equal(minus.disabled, true, "decrement is disabled at the lower boundary");
+  assert.equal(plus.disabled, false);
+  await typeQuantity(input, "100");
+  assert.equal(input.value, "99", "100 clamps to the upper boundary");
+  await typeQuantity(input, "999");
+  assert.equal(input.value, "99", "999 clamps to the upper boundary");
+  assert.equal(buttonByLabel("Increase Fixture mug quantity").disabled, true, "increment is disabled at the upper boundary");
+  await click(buttonByLabel("Decrease Fixture mug quantity"));
+  assert.equal(host.querySelector("#product-quantity").value, "98");
+  assert.equal(buttonByLabel("Increase Fixture mug quantity").disabled, false);
+  await click(buttonByLabel("Increase Fixture mug quantity"));
+  assert.equal(host.querySelector("#product-quantity").value, "99");
+  await typeQuantity(input, "1");
+  assert.equal(input.value, "1");
+  assert.equal(buttonByLabel("Decrease Fixture mug quantity").disabled, true, "decrement returns to the disabled lower boundary");
+});
+
+test("details add is blocked when the existing quantity plus the requested amount would exceed 99", async () => {
+  bagClient(() => emptyCart());
+  sessionStorage.setItem("lume-guest-cart", JSON.stringify({
+    version: 2,
+    items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 99, mergeId: "11111111-1111-4111-8111-111111111111" }],
+  }));
+  await mount(withProviders(guestAuth, React.createElement(ProductDetails, { product })));
+  const add = buttonByLabel("Add Fixture mug to Bag");
+  assert.equal(add.disabled, true, "99 in Bag + 1 requested exceeds the limit");
+  assert.match(add.textContent, /Quantity limit reached/);
+  await click(add);
+  assert.equal(readStored().items.map(item => item.quantity).join(), "99", "the blocked add never mutates the cart");
+  assert.equal(host.textContent.includes("Added"), false);
+});
+
+test("details quantity controls operate from the keyboard where the harness supports it", async () => {
+  bagClient(() => emptyCart());
+  await mount(withProviders(guestAuth, React.createElement(ProductDetails, { product })));
+  const input = host.querySelector("#product-quantity");
+  input.focus();
+  assert.equal(document.activeElement, input, "the quantity input receives keyboard focus");
+  await typeQuantity(input, "5");
+  assert.equal(host.querySelector("#product-quantity").value, "5", "typed input commits");
+  const plus = buttonByLabel("Increase Fixture mug quantity");
+  plus.focus();
+  assert.equal(document.activeElement, plus, "the increment control receives keyboard focus");
+  await click(plus);
+  assert.equal(host.querySelector("#product-quantity").value, "6");
+  const minus = buttonByLabel("Decrease Fixture mug quantity");
+  minus.focus();
+  assert.equal(document.activeElement, minus, "the decrement control receives keyboard focus");
+  await click(minus);
+  assert.equal(host.querySelector("#product-quantity").value, "5");
+});
+
 test("authenticated Add to Bag saves once through the RPC, stays busy and cannot duplicate while saving", async () => {
   const change = deferred();
   const calls = bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
@@ -198,11 +272,15 @@ test("authenticated Add to Bag saves once through the RPC, stays busy and cannot
   assert.match(args.p_operation_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   assert.equal(add.disabled, true);
   assert.match(add.textContent, /Adding…/);
+  assert.equal(host.querySelector("#product-quantity").disabled, true, "quantity input disables while saving");
+  assert.equal(buttonByLabel("Increase Fixture mug quantity").disabled, true, "stepper disables while saving");
   await click(add);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
   await settle(change, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
   assert.equal(buttonByLabel("Add Fixture mug to Bag").disabled, false);
   assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Add to Bag/);
+  assert.equal(host.querySelector("#product-quantity").disabled, false, "quantity input re-enables after the save settles");
+  assert.equal(buttonByLabel("Increase Fixture mug quantity").disabled, false, "stepper re-enables after the save settles");
   assert.match(host.textContent, /Added 1 × Fixture mug to your Bag/);
 });
 
@@ -276,6 +354,78 @@ test("guest Bag page updates quantities and removals in local storage with deriv
   assert.match(host.textContent, /Your Bag is taking a slow day/);
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast, "removal confirmation survives the empty-state transition");
+  assert.match(toast.textContent, /Removed Fixture mug from your Bag/);
+});
+
+test("cart quantity input ignores empty, zero, negative, decimal and over-limit typing and commits valid values", async () => {
+  bagClient(() => emptyCart());
+  sessionStorage.setItem("lume-guest-cart", JSON.stringify({
+    version: 2,
+    items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 2, mergeId: "11111111-1111-4111-8111-111111111111" }],
+  }));
+  await mount(withProviders(guestAuth, React.createElement(CartPage)));
+  const input = host.querySelector('input[type="number"]');
+  for (const raw of ["", "0", "-3", "2.5", "100"]) {
+    await typeQuantity(input, raw);
+    assert.equal(input.value, "2", `typing ${JSON.stringify(raw)} must not change the committed quantity`);
+    assert.deepEqual(readStored().items.map(item => item.quantity), [2], "rejected typing never reaches storage");
+  }
+  await typeQuantity(input, "7");
+  assert.equal(input.value, "7", "a valid typed quantity commits");
+  assert.deepEqual(readStored().items.map(item => item.quantity), [7]);
+  assert.match(host.textContent, /NLe 126/);
+});
+
+test("cart quantity controls enforce the lower boundary at 1", async () => {
+  bagClient(() => emptyCart());
+  sessionStorage.setItem("lume-guest-cart", JSON.stringify({
+    version: 2,
+    items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 1, mergeId: "11111111-1111-4111-8111-111111111111" }],
+  }));
+  await mount(withProviders(guestAuth, React.createElement(CartPage)));
+  assert.equal(buttonByLabel("Decrease Fixture mug quantity").disabled, true, "decrement is disabled at 1");
+  await click(buttonByLabel("Increase Fixture mug quantity"));
+  assert.deepEqual(readStored().items.map(item => item.quantity), [2]);
+  assert.equal(buttonByLabel("Decrease Fixture mug quantity").disabled, false);
+  await click(buttonByLabel("Decrease Fixture mug quantity"));
+  assert.deepEqual(readStored().items.map(item => item.quantity), [1]);
+  assert.equal(buttonByLabel("Decrease Fixture mug quantity").disabled, true, "decrement returns to the disabled boundary at 1");
+});
+
+test("cart quantity controls enforce the upper boundary at 99", async () => {
+  bagClient(() => emptyCart());
+  sessionStorage.setItem("lume-guest-cart", JSON.stringify({
+    version: 2,
+    items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 99, mergeId: "11111111-1111-4111-8111-111111111111" }],
+  }));
+  await mount(withProviders(guestAuth, React.createElement(CartPage)));
+  assert.match(host.textContent, /NLe 1,782/);
+  assert.equal(buttonByLabel("Increase Fixture mug quantity").disabled, true, "increment is disabled at 99");
+  await click(buttonByLabel("Decrease Fixture mug quantity"));
+  assert.deepEqual(readStored().items.map(item => item.quantity), [98]);
+  assert.equal(buttonByLabel("Increase Fixture mug quantity").disabled, false);
+  await click(buttonByLabel("Increase Fixture mug quantity"));
+  assert.deepEqual(readStored().items.map(item => item.quantity), [99]);
+  assert.equal(buttonByLabel("Increase Fixture mug quantity").disabled, true, "increment returns to the disabled boundary at 99");
+});
+
+test("cart controls disable while a removal is saving and recover when it settles", async () => {
+  const change = deferred();
+  bagClient(name => {
+    if (name === "load_variant_cart")
+      return Promise.resolve({ data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null });
+    return change.promise;
+  });
+  await mount(withProviders(userAuth, React.createElement(CartPage)));
+  await click(buttonByLabel("Remove Fixture mug"));
+  assert.equal(buttonByLabel("Remove Fixture mug").disabled, true, "remove disables while saving");
+  assert.equal(buttonByLabel("Increase Fixture mug quantity").disabled, true, "stepper disables while saving");
+  assert.equal(buttonByLabel("Decrease Fixture mug quantity").disabled, true, "stepper disables while saving");
+  assert.equal(host.querySelector('input[type="number"]').disabled, true, "quantity input disables while saving");
+  await settle(change, { data: { id: "cart-1", items: [] }, error: null });
+  assert.match(host.textContent, /Your Bag is taking a slow day/);
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
   assert.match(toast.textContent, /Removed Fixture mug from your Bag/);
 });
 
@@ -738,4 +888,97 @@ test("bag notice auto-expires after five seconds", async t => {
   } finally {
     t.mock.timers.reset();
   }
+});
+
+test("a replacement notice shows only the newest message", async () => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  function ReplaceHost() {
+    const [message, setMessage] = React.useState(null);
+    return React.createElement("div", null,
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 1, tone: "success", text: "First message" }) }, "one"),
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 2, tone: "failure", text: "Second message" }) }, "two"),
+      React.createElement(BagNotice, { message, onExpire: () => setMessage(null) }));
+  }
+  await mount(React.createElement(ReplaceHost));
+  await click(button("one"));
+  assert.match(host.textContent, /First message/);
+  await click(button("two"));
+  const toasts = host.querySelectorAll(".bag-notice");
+  assert.equal(toasts.length, 1, "only the newest message is rendered");
+  assert.match(toasts[0].textContent, /Second message/);
+  assert.doesNotMatch(host.textContent, /First message/);
+});
+
+test("a second notice resets the expiry timing", async t => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  function ResetHost() {
+    const [message, setMessage] = React.useState(null);
+    return React.createElement("div", null,
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 1, tone: "success", text: "First message" }) }, "one"),
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 2, tone: "failure", text: "Second message" }) }, "two"),
+      React.createElement(BagNotice, { message, onExpire: () => setMessage(null) }));
+  }
+  await mount(React.createElement(ResetHost));
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    await click(button("one"));
+    assert.ok(host.querySelector(".bag-notice"));
+    await act(async () => { t.mock.timers.tick(4999); });
+    assert.ok(host.querySelector(".bag-notice"));
+    await click(button("two"));
+    await act(async () => { t.mock.timers.tick(4999); });
+    assert.ok(host.querySelector(".bag-notice"), "the second message keeps its own full expiry window");
+    assert.match(host.textContent, /Second message/);
+    await act(async () => { t.mock.timers.tick(1); });
+    assert.equal(host.querySelector(".bag-notice"), null, "the second message expires on its own timing");
+  } finally {
+    t.mock.timers.reset();
+  }
+});
+
+test("unmounting the notice clears its expiry timer", async t => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  let expired = 0;
+  function UnmountHost() {
+    const [message, setMessage] = React.useState(null);
+    return React.createElement("div", null,
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 1, tone: "success", text: "Mounted message" }) }, "show"),
+      React.createElement(BagNotice, { message, onExpire: () => { expired += 1; setMessage(null); } }));
+  }
+  await mount(React.createElement(UnmountHost));
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    await click(button("show"));
+    assert.ok(host.querySelector(".bag-notice"));
+    await act(async () => { root.unmount(); });
+    root = null;
+    await act(async () => { t.mock.timers.tick(5000); });
+    assert.equal(expired, 0, "cleanup cancelled the pending expiry timer");
+    assert.equal(host.querySelector(".bag-notice"), null);
+  } finally {
+    t.mock.timers.reset();
+  }
+});
+
+test("repeated identical notices render a fresh node for the live region", async () => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  const text = "Added 1 × Fixture mug to your Bag";
+  function RepeatHost() {
+    const [message, setMessage] = React.useState(null);
+    return React.createElement("div", null,
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 1, tone: "success", text }) }, "first"),
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 2, tone: "success", text }) }, "again"),
+      React.createElement(BagNotice, { message, onExpire: () => setMessage(null) }));
+  }
+  await mount(React.createElement(RepeatHost));
+  await click(button("first"));
+  const first = host.querySelector(".bag-notice");
+  assert.ok(first);
+  assert.equal(first.textContent, text);
+  await click(button("again"));
+  const second = host.querySelector(".bag-notice");
+  assert.ok(second);
+  assert.notEqual(second, first, "an identical message arrives as a fresh node the live region can re-announce");
+  assert.equal(second.textContent, text);
+  assert.ok(host.querySelector('.bag-notice-region[role="status"][aria-live="polite"]'), "the polite live region stays present for announcements");
 });
