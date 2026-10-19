@@ -9,11 +9,11 @@ import {
 } from "./payment.ts";
 import { catalog } from "../products/catalog.ts";
 import { getCartLines } from "../cart/cart.ts";
-test("NLE formatting uses consistent NLe and integer minor units", () => {
-  assert.equal(formatMoney(45000), "NLe 450");
-  assert.equal(formatMoney(125000), "NLe 1,250");
-  assert.equal(formatMoney(45050), "NLe 450.50");
-  assert.equal(formatMoney(0), "NLe 0");
+test("NLE formatting uses consistent NLE and integer minor units", () => {
+  assert.equal(formatMoney(45000), "NLE 450");
+  assert.equal(formatMoney(125000), "NLE 1,250");
+  assert.equal(formatMoney(45050), "NLE 450.50");
+  assert.equal(formatMoney(0), "NLE 0");
   assert.throws(() => formatMoney(1.5));
 });
 test("20 active local pieces have unique stable IDs and NLE minor prices", () => {

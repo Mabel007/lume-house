@@ -19,7 +19,7 @@ const render=(Component,props={})=>renderToStaticMarkup(React.createElement(Memo
 test('shared snapshot separates operational/payment/fulfilment states and contextual heading levels',()=>{
  const customer=render(components.OrderSnapshot,{order:orderFixture});const admin=render(components.OrderSnapshot,{order:orderFixture,context:'admin'});
  assert.match(customer,/<h2[^>]*>Your selected pieces/);assert.match(admin,/<h3[^>]*>Ordered items/);assert.doesNotMatch(admin,/<h2[ >]/);
- for(const html of [customer,admin]){for(const text of ['Operational status','Payment status','Fulfilment — Delivery','Payment: Awaiting confirmation','not been charged or verified','not payment settlement','NLe 500','NLe 50','number ending 1208'])assert.ok(html.includes(text));assert.doesNotMatch(html,/Mark Paid|Verify Payment|Refund payment|Charge card/);}
+ for(const html of [customer,admin]){for(const text of ['Operational status','Payment status','Fulfilment — Delivery','Payment: Awaiting confirmation','not been charged or verified','not payment settlement','NLE 500','NLE 50','number ending 1208'])assert.ok(html.includes(text));assert.doesNotMatch(html,/Mark Paid|Verify Payment|Refund payment|Charge card/);}
  for(const payment_status of ['pending','awaiting_payment','paid','failed'])for(const status of ['completed','cancelled']){
   const order={...orderFixture,status,payment_status,fulfilment_method:'pickup',pickup_location:'Lumley'};const html=render(components.OrderSnapshot,{order,context:'admin'});
   assert.ok(html.includes(`Order: ${status}`));assert.ok(html.includes(`Payment: ${payment_status==='awaiting_payment'?'Awaiting confirmation':payment_status}`));assert.match(html,/Fulfilment — Pickup/);assert.match(html,/ready for pickup/);assert.equal(order.payment_status,payment_status);
@@ -47,22 +47,36 @@ test('variant order snapshots render selected options while genuine historical r
 });
 test('My Orders list and detail render durable reference, historical prices and masked payer',()=>{
  const list=render(components.OrderHistory,{orders:[orderFixture]});
- assert.match(list,/LH-1234567890ABCDEF/);assert.match(list,/NLe 550/);assert.match(list,/Awaiting confirmation/);assert.match(list,/account\/orders\//);
+ assert.match(list,/LH-1234567890ABCDEF/);assert.match(list,/NLE 550/);assert.match(list,/Awaiting confirmation/);assert.match(list,/account\/orders\//);
  const detail=render(components.OrderSnapshot,{order:parseOrder(orderFixture)});
- assert.match(detail,/Historical candle/);assert.match(detail,/2 × NLe 250/);assert.match(detail,/number ending 1208/);assert.match(detail,/Lumley to Congo Cross/);
+ assert.match(detail,/Historical candle/);assert.match(detail,/2 × NLE 250/);assert.match(detail,/number ending 1208/);assert.match(detail,/Lumley to Congo Cross/);
  assert.match(render(components.MyOrdersPage),/Sign in to view your orders/);
 });
-test('success explicitly separates order placement from payment',()=>{
- const html=render(components.OrderSuccessMessage);
+test('historical delivery snapshots render stored zone, fee and states without today\'s configuration',()=>{
+ // A retired zone label/fee must display exactly as stored and must never be
+ // recalculated from the current delivery configuration.
+ const historical={...orderFixture,delivery_zone_label:'Retired zone',delivery_fee_cents:700,subtotal_cents:50000,total_cents:50700,status:'completed',payment_status:'paid'};
+ const order=parseOrder(historical);
+ const detail=render(components.OrderSnapshot,{order});
+ assert.match(detail,/Retired zone/);assert.match(detail,/<dd>NLE 7<\/dd>/);assert.match(detail,/NLE 507/);
+ assert.match(detail,/Operational status/);assert.match(detail,/Order: completed/);assert.match(detail,/Payment: paid/);
+ assert.match(detail,/A landmark/);assert.match(detail,/Lumley, Freetown/);
+ const list=render(components.OrderHistory,{orders:[historical]});
+ assert.match(list,/LH-1234567890ABCDEF/);assert.match(list,/NLE 507/);assert.match(list,/paid/);
+ const email=renderConfirmation(historical);
+ assert.ok(email.html.includes('Retired zone'));assert.ok(email.html.includes('NLE 507'));assert.ok(email.text.includes('Delivery: NLE 7'));
+ assert.throws(()=>parseOrder({...historical,delivery_fee_cents:600}),/Invalid order totals/);
+});
+test('success explicitly separates order placement from payment',()=>{ const html=render(components.OrderSuccessMessage);
  assert.match(html,/Your order has been placed/);assert.match(html,/Payment is awaiting confirmation/);
  assert.doesNotMatch(html,/Payment successful|payment captured|payment verified/i);
 });
 test('confirmation email includes immutable summary, escapes content and uses no invented sender claim',()=>{
  const email=renderConfirmation(orderFixture);
- for(const text of ['Lumé House','LH-1234567890ABCDEF','Historical candle','NLe 250','NLe 500','NLe 50','NLe 550','Orange Money','awaiting confirmation','A landmark'])assert.ok(email.html.includes(text));
+ for(const text of ['Lumé House','LH-1234567890ABCDEF','Historical candle','NLE 250','NLE 500','NLE 50','NLE 550','Orange Money','awaiting confirmation','A landmark'])assert.ok(email.html.includes(text));
  assert.match(email.html,/Customer &lt;example&gt;/);assert.doesNotMatch(email.html,/Customer <example>/);
  assert.doesNotMatch(email.html,/payment successful|USSD|hello@lumehouse.sl/i);
- assert.match(email.text,/Subtotal: NLe 500/);
+ assert.match(email.text,/Subtotal: NLE 500/);
 });
 test('Resend recipient comes from persisted snapshot, stable dedup key and honest failure',async()=>{
  let captured;

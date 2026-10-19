@@ -8,6 +8,13 @@ create function pg_temp.denied(statement text) returns text language plpgsql as 
 begin begin execute statement;exception when insufficient_privilege then return 'PASS: permission denied';end;raise exception 'FAIL: expected permission denial';end;$$;
 create function pg_temp.checkout() returns jsonb language sql as $$
 select '{"full_name":"Local fixture","email":"fixture@example.invalid","contact_phone":"+23276521208","payment_phone":"+23276521209","provider":"orange","fulfilment":"pickup"}'::jsonb;$$;
+-- Delivery checkout fixture. overrides are untrusted browser-supplied keys used
+-- to prove the trusted path ignores them; they never contribute to the order.
+create function pg_temp.delivery(zone text, overrides jsonb default '{}') returns jsonb language sql as $$
+select pg_temp.checkout()
+  || '{"fulfilment":"delivery","street":"Local landmark","area":"Lumley","city":"Freetown"}'::jsonb
+  || jsonb_build_object('zone_id',zone)
+  || overrides;$$;
 create function pg_temp.quote() returns jsonb language sql as $$
 select coalesce(jsonb_agg(jsonb_build_object('product_id',v.product_id,'variant_id',v.id,'quantity',ci.quantity,'unit_price',v.price_cents) order by v.id),'[]')
 from public.variant_cart_items ci join public.product_variants v on v.id=ci.variant_id
@@ -84,6 +91,39 @@ select pg_temp.assert((select count(*)=1 from public.orders),'failed variant con
 select pg_temp.assert((select count(*)=1 from public.variant_cart_items),'failed conversion retains intent');
 reset role;
 select pg_temp.assert((select count(*)=1 from public.order_confirmation_jobs),'failed conversion creates no extra job');
+-- Delivery/zone/fee coverage for the trusted variant path. The failure trigger
+-- above is removed so a delivery conversion can commit and be asserted.
+drop trigger test_variant_conversion on public.variant_cart_items;
+set local role authenticated;
+select public.change_variant_cart('fixture-blue','add',2,null,'10000000-0000-4000-8000-000000000010');
+select pg_temp.error($q$select public.place_variant_order('20000000-0000-4000-8000-000000000010',pg_temp.delivery('zone-4'),pg_temp.quote())$q$,'INVALID_DELIVERY_ZONE');
+select pg_temp.error($q$select public.place_variant_order('20000000-0000-4000-8000-000000000010',pg_temp.delivery('zone-2','{"city":"Bo"}'),pg_temp.quote())$q$,'INVALID_DELIVERY_DETAILS');
+select pg_temp.error($q$select public.place_variant_order('20000000-0000-4000-8000-000000000010',pg_temp.delivery('zone-2','{"street":"   ","area":""}'),pg_temp.quote())$q$,'INVALID_DELIVERY_DETAILS');
+select pg_temp.assert((select count(*)=0 from public.orders where checkout_request_id='20000000-0000-4000-8000-000000000010'),'rejected delivery attempts create no order');
+select public.place_variant_order('20000000-0000-4000-8000-000000000010',
+  pg_temp.delivery('zone-2','{"user_id":"22222222-2222-4222-8222-222222222222","fee":1,"subtotal":1,"total":1,"delivery_fee":1,"zone_label":"Untrusted label","payment_status":"paid"}'),
+  pg_temp.quote());
+select pg_temp.assert((select user_id='11111111-1111-4111-8111-111111111111'
+  and fulfilment_method='delivery' and delivery_zone_id='zone-2'
+  and delivery_zone_label='Lumley to Congo Cross, including Aberdeen'
+  and delivery_street_address='Local landmark' and delivery_area='Lumley' and delivery_city='Freetown'
+  and pickup_location is null
+  and subtotal_cents=97000 and delivery_fee_cents=5000 and total_cents=102000
+  and status='placed' and payment_status='awaiting_payment'
+  from public.orders where checkout_request_id='20000000-0000-4000-8000-000000000010'),
+  'trusted zone fee/label/address/subtotal/total/payment replace tampered browser values');
+select pg_temp.assert((select count(*)=0 from public.variant_cart_items),'delivery order converts the variant Bag atomically');
+select public.place_variant_order('20000000-0000-4000-8000-000000000010','{}','[]');
+select pg_temp.assert((select count(*)=1 from public.orders where checkout_request_id='20000000-0000-4000-8000-000000000010'),'delivery order retry stays idempotent');
+select pg_temp.assert((select delivery_fee_cents=0 and delivery_zone_id is null and delivery_zone_label is null and pickup_location='Lumley, Freetown'
+  from public.orders where fulfilment_method='pickup'),'pickup stays free with no zone snapshot');
+reset role;
+update public.product_variants set price_cents=99000,options='{"Color":"Edited"}' where id='fixture-blue';
+select pg_temp.assert((select subtotal_cents=97000 and delivery_fee_cents=5000 and total_cents=102000
+  and delivery_zone_label='Lumley to Congo Cross, including Aberdeen'
+  from public.orders where checkout_request_id='20000000-0000-4000-8000-000000000010'),
+  'delivery snapshots survive later catalog price/label edits');
+select pg_temp.error($q$update public.orders set delivery_fee_cents=0$q$,'Historical order snapshot is immutable');
 set constraints all immediate;
 rollback;
 select 'PASS: variant checkout fixtures rolled back';

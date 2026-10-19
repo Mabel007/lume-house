@@ -4,7 +4,7 @@
 Maintain the implemented Sierra Leone ecommerce application. React 19/TypeScript/Vite is deployed on Vercel; Supabase PostgreSQL/Auth/RLS and Google OAuth own identity/persistence. Hosted products, profiles, authenticated carts, trusted checkout, durable order history and server-side Resend confirmations are implemented with genuine human E2E evidence. Preserve validated behavior and avoid unnecessary architecture replacement. Never stage, commit, push, create a PR, deploy or mutate hosted resources without task authorization.
 
 ## Engineering
-Use strict TypeScript, functional React and explicit types. Shared UI belongs in src/components, replaceable business configuration in src/config, business features in src/features and browser Supabase configuration in src/lib/supabase. Store integer NLE minor units; format centrally as NLe. Derive totals, avoid redundant state, unnecessary dependencies and speculative abstractions.
+Use strict TypeScript, functional React and explicit types. Shared UI belongs in src/components, replaceable business configuration in src/config, business features in src/features and browser Supabase configuration in src/lib/supabase. Store integer NLE minor units; format centrally as NLE. Derive totals, avoid redundant state, unnecessary dependencies and speculative abstractions.
 
 ## Commerce and identity invariants
 
@@ -22,7 +22,7 @@ Use the existing Lumé House project wyvsbzcltrhnjeuijsva; do not create another
 ## UX and content
 Preserve warm editorial branding, reviewed images, responsiveness and accessibility: semantic landmarks, skip link, focus-visible states, labels, meaningful alt text, touch targets, reduced motion and explicit loading/error/empty states. Never add HNG/student/demo customer copy, unsupported business claims or fake social links. hello@lumehouse.sl is display-only, not a verified sender.
 
-Provisional owner-configured zones: zone-1 NLe 40, zone-2 NLe 50, zone-3 NLe 60; pickup Lumley, Freetown is free. These are not researched courier pricing/geospatial boundaries. Preserve trusted fees/snapshots. Order success means placed/payment awaiting confirmation, not payment successful.
+Provisional owner-configured zones: zone-1 NLE 40, zone-2 NLE 50, zone-3 NLE 60; pickup Lumley, Freetown is free. These are not researched courier pricing/geospatial boundaries. Preserve trusted fees/snapshots. Order success means placed/payment awaiting confirmation, not payment successful.
 
 ## Environment and email evidence
 All VITE values are public. Browser uses public project URL/publishable key and optional same-origin auth redirect. Never expose service-role keys, Google secrets, database passwords or Resend API keys in browser/VITE/source/examples/logs/Git. Ignore local env, .codex evidence, Supabase temp/build/cache output. Never request secrets in chat or print them.
