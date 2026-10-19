@@ -52,8 +52,22 @@ test('My Orders list and detail render durable reference, historical prices and 
  assert.match(detail,/Historical candle/);assert.match(detail,/2 × NLE 250/);assert.match(detail,/number ending 1208/);assert.match(detail,/Lumley to Congo Cross/);
  assert.match(render(components.MyOrdersPage),/Sign in to view your orders/);
 });
-test('success explicitly separates order placement from payment',()=>{
- const html=render(components.OrderSuccessMessage);
+test('historical delivery snapshots render stored zone, fee and states without today\'s configuration',()=>{
+ // A retired zone label/fee must display exactly as stored and must never be
+ // recalculated from the current delivery configuration.
+ const historical={...orderFixture,delivery_zone_label:'Retired zone',delivery_fee_cents:700,subtotal_cents:50000,total_cents:50700,status:'completed',payment_status:'paid'};
+ const order=parseOrder(historical);
+ const detail=render(components.OrderSnapshot,{order});
+ assert.match(detail,/Retired zone/);assert.match(detail,/<dd>NLE 7<\/dd>/);assert.match(detail,/NLE 507/);
+ assert.match(detail,/Operational status/);assert.match(detail,/Order: completed/);assert.match(detail,/Payment: paid/);
+ assert.match(detail,/A landmark/);assert.match(detail,/Lumley, Freetown/);
+ const list=render(components.OrderHistory,{orders:[historical]});
+ assert.match(list,/LH-1234567890ABCDEF/);assert.match(list,/NLE 507/);assert.match(list,/paid/);
+ const email=renderConfirmation(historical);
+ assert.ok(email.html.includes('Retired zone'));assert.ok(email.html.includes('NLE 507'));assert.ok(email.text.includes('Delivery: NLE 7'));
+ assert.throws(()=>parseOrder({...historical,delivery_fee_cents:600}),/Invalid order totals/);
+});
+test('success explicitly separates order placement from payment',()=>{ const html=render(components.OrderSuccessMessage);
  assert.match(html,/Your order has been placed/);assert.match(html,/Payment is awaiting confirmation/);
  assert.doesNotMatch(html,/Payment successful|payment captured|payment verified/i);
 });
