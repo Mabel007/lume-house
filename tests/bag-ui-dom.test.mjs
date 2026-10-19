@@ -21,7 +21,14 @@ const product = {
 };
 const guestAuth = { loading: false, session: null, error: null, signIn: async () => {}, signOut: async () => {} };
 const userAuth = { loading: false, session: { user: { id: "user-1" }, access_token: "synthetic-test-jwt" }, error: null, signIn: async () => {}, signOut: async () => {} };
+const userAuthB = { loading: false, session: { user: { id: "user-2" }, access_token: "synthetic-test-jwt-b" }, error: null, signIn: async () => {}, signOut: async () => {} };
+const productTwo = {
+  id: "fixture-vase", name: "Fixture vase", description: "Fixture description", category: "Fixture category",
+  price: 2500, image: "/images/mug.svg", color: "#e9e3d8",
+  variants: [{ id: "v-vase", productId: "fixture-vase", options: {}, isDefault: true, price: 2500, currency: "NLE", inventoryPolicy: "untracked" }],
+};
 const catalog = { state: { status: "ready", products: [product] }, refresh() {} };
+const recorded = [];
 
 before(async () => {
   server = await createServer({
@@ -46,6 +53,7 @@ before(async () => {
 afterEach(async () => {
   if (root) await act(async () => root.unmount());
   root = null; host.replaceChildren(); sessionStorage.clear(); delete globalThis.__bagClient;
+  recorded.length = 0;
 });
 after(async () => { await server.close(); dom.window.close(); });
 
@@ -86,11 +94,15 @@ async function settleError(deferredChange, reason) {
 async function flush() {
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 }
-function withProviders(auth, children) {
+function withProviders(auth, children, catalogValue = catalog) {
   return React.createElement(MemoryRouter, { initialEntries: ["/"] },
     React.createElement(AuthContext.Provider, { value: auth },
-      React.createElement(ProductContext.Provider, { value: catalog },
+      React.createElement(ProductContext.Provider, { value: catalogValue },
         React.createElement(CartProvider, null, children))));
+}
+async function rerender(element) {
+  await act(async () => { root.render(element); await new Promise(resolve => setTimeout(resolve, 0)); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 }
 function layoutTree(auth, path = "/") {
   return React.createElement(MemoryRouter, { initialEntries: [path] },
@@ -111,6 +123,15 @@ function DoubleAddProbe() {
       },
     }, "double-add"),
     React.createElement("span", { id: "probe-count" }, String(items.reduce((total, item) => total + item.quantity, 0))));
+}
+function OutcomeProbe() {
+  const { dispatch } = useCart();
+  return React.createElement("button", {
+    onClick: () => {
+      dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default", quantity: 1 })
+        .then(outcome => { recorded.push(outcome.kind); });
+    },
+  }, "probe-add");
 }
 
 test("guest Add to Bag persists locally, relabels the card and never calls RPCs", async () => {
@@ -340,6 +361,128 @@ test("Product Details actions group keeps the Bag link beside a reserved notice 
   const sameLink = group.querySelector('a[href="/cart"]');
   assert.equal(sameLink, link, "notice appearance must not replace or move the link within the group");
   assert.match(group.querySelector(".feedback").textContent, /Added 1 × Fixture mug to your Bag/);
+});
+
+test("an obsolete add failure after switching accounts shows no feedback under the new identity", async () => {
+  const change = deferred();
+  const calls = bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
+  await mount(layoutTree(userAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
+  await rerender(layoutTree(userAuthB));
+  await settleError(change, new TypeError("Failed to fetch"));
+  assert.equal(host.querySelector(".bag-notice"), null, "no toast from A's obsolete operation under B");
+  assert.equal(host.querySelector('[role="alert"]'), null, "no global failure from A's obsolete operation under B");
+});
+
+test("a deferred add rejecting after an account switch resolves to superseded", async () => {
+  const change = deferred();
+  bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
+  await mount(withProviders(userAuth, React.createElement(OutcomeProbe)));
+  await click(button("probe-add"));
+  await rerender(withProviders(userAuthB, React.createElement(OutcomeProbe)));
+  await settleError(change, new TypeError("Failed to fetch"));
+  await flush();
+  assert.deepEqual(recorded, ["superseded"]);
+});
+
+test("a deferred add resolving after an account switch resolves to superseded", async () => {
+  const change = deferred();
+  bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
+  await mount(withProviders(userAuth, React.createElement(OutcomeProbe)));
+  await click(button("probe-add"));
+  await rerender(withProviders(userAuthB, React.createElement(OutcomeProbe)));
+  await settle(change, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
+  await flush();
+  assert.deepEqual(recorded, ["superseded"]);
+});
+
+test("an obsolete add resolving after sign-out shows no success under the guest identity", async () => {
+  const change = deferred();
+  bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
+  await mount(layoutTree(userAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await rerender(layoutTree(guestAuth));
+  await settle(change, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
+  await flush();
+  assert.equal(host.querySelector(".bag-notice"), null, "no success claimed for A's obsolete operation as a guest");
+  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(0\)/, "A's cart never appears under the guest identity");
+});
+
+test("an obsolete removal completion cannot replace B's newer confirmation", async () => {
+  const changes = [];
+  bagClient(name => {
+    if (name === "load_variant_cart")
+      return Promise.resolve({ data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null });
+    const next = deferred();
+    changes.push(next);
+    return next.promise;
+  });
+  await mount(layoutTree(userAuth, "/cart"));
+  await click(buttonByLabel("Remove Fixture mug"));
+  assert.equal(changes.length, 1, "A's removal is deferred in flight");
+  await rerender(layoutTree(userAuthB, "/cart"));
+  await click(buttonByLabel("Remove Fixture mug"));
+  assert.equal(changes.length, 2, "B's newer removal starts after the restore completes");
+  await settle(changes[1], { data: { id: "cart-1", items: [] }, error: null });
+  let toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /Removed Fixture mug from your Bag/);
+  await settleError(changes[0], new TypeError("Failed to fetch"));
+  toast = host.querySelector(".bag-notice");
+  assert.ok(toast, "B's confirmation stays mounted when A's request settles");
+  assert.match(toast.textContent, /Removed Fixture mug from your Bag/, "B's newer confirmation remains visible");
+  assert.doesNotMatch(host.textContent, /couldn't confirm removing/);
+  assert.equal(host.querySelector('[role="alert"]'), null, "the obsolete failure raises no global alert");
+  assert.match(host.textContent, /Your Bag is taking a slow day/);
+  assert.doesNotMatch(host.textContent, /Saving your Bag/, "pending status stays cleared after the active operation finished");
+});
+
+test("an obsolete completion cannot clear the newer operation's pending state or replace its confirmation", async () => {
+  const twoCatalog = { state: { status: "ready", products: [product, productTwo] }, refresh() {} };
+  const changes = [];
+  bagClient(name => {
+    if (name === "load_variant_cart") return emptyCart();
+    const next = deferred();
+    changes.push(next);
+    return next.promise;
+  });
+  await mount(withProviders(userAuth, React.createElement(ShopPage), twoCatalog));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  assert.equal(changes.length, 1, "A's add is deferred in flight");
+  await rerender(withProviders(userAuthB, React.createElement(ShopPage), twoCatalog));
+  assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Adding…/, "the in-flight pending state survives the identity restore");
+  assert.equal(buttonByLabel("Add Fixture mug to Bag").disabled, true);
+  const vaseAdd = buttonByLabel("Add Fixture vase to Bag");
+  assert.equal(vaseAdd.disabled, false, "the active account can start a newer operation");
+  await click(vaseAdd);
+  assert.equal(changes.length, 2);
+  assert.match(buttonByLabel("Add Fixture vase to Bag").textContent, /Adding…/, "pending state belongs to the active operation");
+  await settle(changes[1], { data: { id: "cart-1", items: [{ product_id: "fixture-vase", variant_id: "v-vase", quantity: 1 }] }, error: null });
+  let toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /Added 1 × Fixture vase to your Bag/);
+  assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Add to Bag/, "pending clears when the active operation finishes");
+  assert.equal(buttonByLabel("Add Fixture mug to Bag").disabled, false);
+  await settleError(changes[0], new TypeError("Failed to fetch"));
+  toast = host.querySelector(".bag-notice");
+  assert.ok(toast, "A's obsolete rejection does not clear the notice");
+  assert.match(toast.textContent, /Added 1 × Fixture vase to your Bag/, "B's newer confirmation remains visible");
+  assert.doesNotMatch(host.textContent, /couldn't confirm adding/);
+  assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Add to Bag/);
+});
+
+test("unmounting before a deferred add settles leaves no stale feedback behind", async () => {
+  const change = deferred();
+  bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
+  await mount(withProviders(userAuth, React.createElement(ShopPage)));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await act(async () => { root.unmount(); });
+  root = null;
+  await assert.doesNotReject(async () => {
+    await settleError(change, new TypeError("Failed to fetch"));
+  });
+  assert.equal(host.querySelector(".bag-notice"), null);
 });
 
 test("uncertain add after a lost RPC response makes no definite claim and reload reconciles the applied line", async () => {

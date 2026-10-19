@@ -90,8 +90,9 @@ export function CartProvider({children}:{children:ReactNode}) {
       }
       return {kind:'superseded'};
     }).catch((reason):CartOutcome=>{
+      if(!(identity.current===userId&&epoch.current===generation))return {kind:'superseded'};
       const message=reason instanceof VariantCartError?reason.message:'Your Bag change could not be confirmed. Refresh it before trying again.';
-      if(identity.current===userId&&epoch.current===generation)setError(message);
+      setError(message);
       return {kind:'rejected',message};
     }).finally(()=>{if(identity.current===userId&&epoch.current===generation){locked.current=false;setStatus('ready');}});
   }

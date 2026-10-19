@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useProducts } from './ProductContext';
 import { ProductStatus } from './ProductStatus';
@@ -25,6 +25,9 @@ export function ProductDetails({product}:{product:Product}) {
   const [notice,setNotice]=useState<{tone:'success'|'failure';text:string}|null>(null);
   const [amount,setAmount]=useState(1);
   const [pending,setPending]=useState(false);
+  const pendingSeq=useRef(0);
+  const alive=useRef(true);
+  useEffect(()=>()=>{alive.current=false;},[]);
   const optionsRequired=requiresOptions(product.variants);
   const choices=product.variants?.filter(variant=>!variant.isDefault)??[];
   const variant=optionsRequired ? choices.find(variant=>variant.id===selection) : defaultVariant(product);
@@ -35,8 +38,11 @@ export function ProductDetails({product}:{product:Product}) {
   async function addToBag() {
     if(!variant)return;
     const name=product.name;const detail=variantLabel(variant);const addedAmount=amount;
+    pendingSeq.current+=1;
+    const operation=pendingSeq.current;
     setPending(true);
     const outcome=await dispatch({type:'add',productId:product.id,variantId:variant.id,quantity:addedAmount});
+    if(!alive.current||operation!==pendingSeq.current)return;
     setPending(false);
     if(outcome.kind==='confirmed')setNotice({tone:'success',text:bagAddedText(addedAmount,name,detail)});
     else if(outcome.kind==='rejected')setNotice({tone:'failure',text:bagAddFailedText(name)});

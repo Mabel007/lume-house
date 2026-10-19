@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useCart } from "./CartContext";
 import { getCartLines, cartLineKey, MAX_QUANTITY } from "./cart";
 import { bagRemovedText, bagRemoveFailedText } from "./bagFeedback";
@@ -20,13 +20,16 @@ export function CartPage() {
   const auth = useAuth();
   const [notice, setNotice] = useState<BagNoticeMessage | null>(null);
   const noticeSeq = useRef(0);
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
   const clearNotice = useCallback(() => setNotice(null), []);
   async function removeLine(product: { id: string; name: string }, variantId: string | undefined, variantDetail: string) {
     noticeSeq.current += 1;
-    const id = noticeSeq.current;
+    const operation = noticeSeq.current;
     const outcome = await dispatch({ type: "remove", productId: product.id, variantId });
-    if (outcome.kind === "confirmed") setNotice({ id, tone: "success", text: bagRemovedText(product.name, variantDetail) });
-    else if (outcome.kind === "rejected") setNotice({ id, tone: "failure", text: bagRemoveFailedText(product.name) });
+    if (!alive.current || operation !== noticeSeq.current) return;
+    if (outcome.kind === "confirmed") setNotice({ id: operation, tone: "success", text: bagRemovedText(product.name, variantDetail) });
+    else if (outcome.kind === "rejected") setNotice({ id: operation, tone: "failure", text: bagRemoveFailedText(product.name) });
   }
   const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
   const { state, refresh } = useProducts();

@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { requiresOptions, variantAvailable, cataloguePrice } from "./variants";
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import type { Product } from "./products";
 import { useProducts } from "./ProductContext";
 import { ProductStatus } from "./ProductStatus";
@@ -18,6 +18,8 @@ export function ShopPage() {
   const searchInput=useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState<BagNoticeMessage | null>(null);
   const noticeSeq = useRef(0);
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
   const [addingId, setAddingId] = useState<string | null>(null);
   const clearNotice = useCallback(() => setNotice(null), []);
   const { items, dispatch, status: cartStatus } = useCart();
@@ -34,12 +36,13 @@ export function ShopPage() {
   async function addToBag(product: Product, variantId: string) {
     const name=product.name;
     noticeSeq.current+=1;
-    const id=noticeSeq.current;
+    const operation=noticeSeq.current;
     setAddingId(product.id);
     const outcome=await dispatch({type:"add",productId:product.id,variantId});
+    if(!alive.current||operation!==noticeSeq.current)return;
     setAddingId(null);
-    if(outcome.kind==="confirmed")setNotice({id,tone:"success",text:bagAddedText(1,name,"")});
-    else if(outcome.kind==="rejected")setNotice({id,tone:"failure",text:bagAddFailedText(name)});
+    if(outcome.kind==="confirmed")setNotice({id:operation,tone:"success",text:bagAddedText(1,name,"")});
+    else if(outcome.kind==="rejected")setNotice({id:operation,tone:"failure",text:bagAddFailedText(name)});
   }
   return (
     <>
