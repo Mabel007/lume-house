@@ -27,7 +27,9 @@ export function ProductDetails({product}:{product:Product}) {
   const [pending,setPending]=useState(false);
   const pendingSeq=useRef(0);
   const alive=useRef(true);
-  useEffect(()=>()=>{alive.current=false;},[]);
+  // Reset on (re)mount: StrictMode dev runs cleanup then re-runs the effect,
+  // and the guard must stay live for the remounted component.
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
   const optionsRequired=requiresOptions(product.variants);
   const choices=product.variants?.filter(variant=>!variant.isDefault)??[];
   const variant=optionsRequired ? choices.find(variant=>variant.id===selection) : defaultVariant(product);

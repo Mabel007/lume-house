@@ -21,7 +21,9 @@ export function CartPage() {
   const [notice, setNotice] = useState<BagNoticeMessage | null>(null);
   const noticeSeq = useRef(0);
   const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  // Reset on (re)mount: StrictMode dev runs cleanup then re-runs the effect,
+  // and the guard must stay live for the remounted component.
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const clearNotice = useCallback(() => setNotice(null), []);
   async function removeLine(product: { id: string; name: string }, variantId: string | undefined, variantDetail: string) {
     noticeSeq.current += 1;

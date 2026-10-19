@@ -117,6 +117,14 @@ function layoutTree(auth, path = "/") {
             React.createElement(Route, { element: React.createElement(Layout) },
               React.createElement(Route, { path, element: React.createElement(path === "/cart" ? CartPage : ShopPage) })))))));
 }
+// StrictMode reproduces the dev double-mount that plays effect cleanup then
+// re-runs effects; the alive guards must survive the replay.
+function strictProviders(auth, children, catalogValue = catalog) {
+  return React.createElement(React.StrictMode, null, withProviders(auth, children, catalogValue));
+}
+function strictLayoutTree(auth, path = "/") {
+  return React.createElement(React.StrictMode, null, layoutTree(auth, path));
+}
 function DoubleAddProbe() {
   const { items, dispatch } = useCart();
   return React.createElement("div", null,
@@ -981,4 +989,36 @@ test("repeated identical notices render a fresh node for the live region", async
   assert.notEqual(second, first, "an identical message arrives as a fresh node the live region can re-announce");
   assert.equal(second.textContent, text);
   assert.ok(host.querySelector('.bag-notice-region[role="status"][aria-live="polite"]'), "the polite live region stays present for announcements");
+});
+
+test("StrictMode double-mount keeps the details outcome guard live", async () => {
+  bagClient(() => emptyCart());
+  await mount(strictProviders(guestAuth, React.createElement(ProductDetails, { product })));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  const add = buttonByLabel("Add Fixture mug to Bag");
+  assert.match(add.textContent, /^Add to Bag$/, "pending state clears when the confirmed outcome returns");
+  assert.match(host.querySelector(".feedback").textContent, /Added 1 × Fixture mug to your Bag/,
+    "confirmation renders after StrictMode replays the mount effect");
+});
+
+test("StrictMode double-mount keeps the shop confirmation toast rendering", async () => {
+  bagClient(() => emptyCart());
+  await mount(strictLayoutTree(guestAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast, "shop toast renders after StrictMode replays the mount effect");
+  assert.match(toast.textContent, /Added 1 × Fixture mug to your Bag/);
+});
+
+test("StrictMode double-mount keeps Bag page removal confirmations rendering", async () => {
+  bagClient(() => emptyCart());
+  sessionStorage.setItem("lume-guest-cart", JSON.stringify({
+    version: 2,
+    items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 2, mergeId: "11111111-1111-4111-8111-111111111111" }],
+  }));
+  await mount(strictProviders(guestAuth, React.createElement(CartPage)));
+  await click(buttonByLabel("Remove Fixture mug"));
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast, "removal toast renders after StrictMode replays the mount effect");
+  assert.match(toast.textContent, /Removed Fixture mug from your Bag/);
 });

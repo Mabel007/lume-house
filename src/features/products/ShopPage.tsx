@@ -19,7 +19,7 @@ export function ShopPage() {
   const [notice, setNotice] = useState<BagNoticeMessage | null>(null);
   const noticeSeq = useRef(0);
   const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [addingId, setAddingId] = useState<string | null>(null);
   const clearNotice = useCallback(() => setNotice(null), []);
   const { items, dispatch, status: cartStatus } = useCart();
