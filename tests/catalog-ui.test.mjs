@@ -171,7 +171,7 @@ test("ready catalog feeds cards, cart prices and disabled checkout", () => {
   assert.match(render(ShopPage, state), /Fixture mug/);
   assert.match(render(ShopPage, state), /Fixture category/);
   const cart = render(CartPage, state);
-  assert.match(cart, /NLe 36/);
+  assert.match(cart, /NLE 36/);
   assert.match(cart, /Choose at checkout/);
   const checkout = render(CheckoutPage, state);
   assert.match(checkout, /disabled=""[^>]*>Sign in to place order/);
@@ -181,7 +181,7 @@ test("ready catalog feeds cards, cart prices and disabled checkout", () => {
       status: "ready",
       products: [{ ...fixture, price: 2000 }],
     }),
-    /NLe 40/,
+    /NLE 40/,
   );
 });
 test("unavailable products can be removed and cannot proceed to checkout", () => {
@@ -222,9 +222,9 @@ test("checkout localizes fields and honestly distinguishes delivery and payment"
   );
   assert.doesNotMatch(html, /chrisbarbz17|Naj Flex|Sheriff Drive/);
   assert.match(html, /name="delivery-zone" required/);
-  assert.match(html, /NLe 40/);
-  assert.match(html, /NLe 50/);
-  assert.match(html, /NLe 60/);
+  assert.match(html, /NLE 40/);
+  assert.match(html, /NLE 50/);
+  assert.match(html, /NLE 60/);
   assert.doesNotMatch(html, /then 76|then 88|PIN|USSD/);
 });
 
@@ -377,8 +377,8 @@ test("Product Details default-only renders a normal purchase without meaningless
 test("Product Details meaningful options require an explicit valid selection", () => {
   const product={id:'fixture',name:'Test piece',category:'Test',description:'Existing description',price:1800,image:'/images/mug.svg',color:'#e9e3d8',variants:[{id:'blue',productId:'fixture',options:{Color:'Blue'},isDefault:false,price:2000,currency:'NLE',inventoryPolicy:'untracked'}]};
   const html=renderDetails(product);
-  assert.match(html,/<legend>Choose your options/);assert.match(html,/type="radio"/);assert.match(html,/Color: Blue/);assert.match(html,/NLe 20/);assert.match(html,/disabled=""/);assert.doesNotMatch(html,/checked=""/);
-  assert.match(html,/class="product-details-price">From NLe 20/);
+  assert.match(html,/<legend>Choose your options/);assert.match(html,/type="radio"/);assert.match(html,/Color: Blue/);assert.match(html,/NLE 20/);assert.match(html,/disabled=""/);assert.doesNotMatch(html,/checked=""/);
+  assert.match(html,/class="product-details-price">From NLE 20/);
   assert.equal(routeTitle('/products/fixture'),'Product details');assert.equal(routeTitle('/products/fixture','Test piece'),'Test piece');
 });
 test('tracked Product Details refuses unverified or unavailable stock without showing fictional quantities',()=>{
@@ -397,7 +397,7 @@ test('Bag and checkout show separate variant options and variant-derived prices 
  const lines=[{productId:fixture.id,variantId:'blue',quantity:2},{productId:fixture.id,variantId:'red',quantity:1}];
  for(const page of [CartPage,CheckoutPage]){
   const html=render(page,state,lines);
-  assert.match(html,/Color: Blue/);assert.match(html,/Color: Red/);assert.match(html,/NLe 65/);
+  assert.match(html,/Color: Blue/);assert.match(html,/Color: Red/);assert.match(html,/NLE 65/);
  }
  const bag=render(CartPage,state,lines);
  assert.match(bag,/quantity-v:blue/);assert.match(bag,/quantity-v:red/);
