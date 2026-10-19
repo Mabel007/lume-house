@@ -297,6 +297,21 @@ test("shop toast keeps only the newest confirmation", async () => {
   assert.match(toasts[0].textContent, /Added 1 × Fixture mug to your Bag/);
 });
 
+test("Product Details actions group keeps the Bag link beside a reserved notice slot", async () => {
+  bagClient(() => emptyCart());
+  await mount(withProviders(guestAuth, React.createElement(ProductDetails, { product })));
+  const group = host.querySelector(".product-details-actions");
+  assert.ok(group);
+  const link = group.querySelector('a[href="/cart"]');
+  assert.ok(link);
+  assert.match(link.textContent, /View your Bag/);
+  assert.equal(group.querySelector(".feedback").textContent, "");
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  const sameLink = group.querySelector('a[href="/cart"]');
+  assert.equal(sameLink, link, "notice appearance must not replace or move the link within the group");
+  assert.match(group.querySelector(".feedback").textContent, /Added 1 × Fixture mug to your Bag/);
+});
+
 test("bag notice auto-expires after five seconds", async t => {
   const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
   function ExpireHost() {

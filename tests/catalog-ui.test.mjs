@@ -323,6 +323,22 @@ test("Add to Bag feedback waits for confirmed persistence before claiming succes
   assert.doesNotMatch(readFileSync("src/features/cart/CartProvider.tsx", "utf8"), /Your (?:saved )?cart/i);
 });
 
+test("Product Details groups add action, notice and Bag link in one stable actions row", async () => {
+  const { readFileSync } = await import("node:fs");
+  const details = readFileSync("src/features/products/ProductDetailsPage.tsx", "utf8");
+  const group = details.match(/<div className="product-details-actions">[\s\S]*?<\/div>/);
+  assert.ok(group, "actions group wraps button, status notice and View Bag link");
+  assert.match(group[0], /product-details-add/);
+  assert.match(group[0], /role="status" aria-live="polite"/);
+  assert.match(group[0], /to="\/cart">View your Bag/);
+  assert.ok(group[0].indexOf("product-details-add") < group[0].indexOf('to="/cart"'), "focus order: add button before Bag link");
+  const css = readFileSync("src/styles.css", "utf8");
+  assert.match(css, /\.product-details-actions \{ display: flex; flex-direction: column;/);
+  assert.match(css, /\.product-details-actions \.feedback \{ display: block; margin: 0; min-height: 3\.4em; \}/);
+  assert.match(css, /\.product-details-actions \.feedback:empty \{ display: block; \}/, "notice space is reserved so the Bag link never shifts");
+  assert.match(css, /@media \(max-width: 479px\)[^@]*\.product-details-actions \.product-details-add \{ width: 100%;/);
+});
+
 test("account initials handle whitespace, single names, missing names and Unicode graphemes", () => {
   for (const [name, expected] of [["Naj Builds", "NB"], [" Naj  ", "N"], ["", "LH"], [null,"LH"], [undefined,"LH"], ["  ---  ", "LH"], ["Élodie 東京", "É東"], ["e\u0301lodie", "É"]]) assert.equal(accountInitials(name), expected);
 });
