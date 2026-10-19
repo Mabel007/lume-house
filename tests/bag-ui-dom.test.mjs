@@ -118,20 +118,29 @@ function DoubleAddProbe() {
   return React.createElement("div", null,
     React.createElement("button", {
       onClick: () => {
-        dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default", quantity: 1 });
-        dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default", quantity: 1 });
+        dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default", quantity: 1 })
+          .then(outcome => { recorded.push(outcome.kind); });
+        dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default", quantity: 1 })
+          .then(outcome => { recorded.push(outcome.kind); });
       },
     }, "double-add"),
     React.createElement("span", { id: "probe-count" }, String(items.reduce((total, item) => total + item.quantity, 0))));
 }
 function OutcomeProbe() {
   const { dispatch } = useCart();
-  return React.createElement("button", {
-    onClick: () => {
-      dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default", quantity: 1 })
-        .then(outcome => { recorded.push(outcome.kind); });
-    },
-  }, "probe-add");
+  return React.createElement("div", null,
+    React.createElement("button", {
+      onClick: () => {
+        dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default", quantity: 1 })
+          .then(outcome => { recorded.push(outcome.kind); });
+      },
+    }, "probe-add"),
+    React.createElement("button", {
+      onClick: () => {
+        dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default", quantity: 0 })
+          .then(outcome => { recorded.push(outcome.kind); });
+      },
+    }, "probe-bad"));
 }
 
 test("guest Add to Bag persists locally, relabels the card and never calls RPCs", async () => {
@@ -483,6 +492,128 @@ test("unmounting before a deferred add settles leaves no stale feedback behind",
     await settleError(change, new TypeError("Failed to fetch"));
   });
   assert.equal(host.querySelector(".bag-notice"), null);
+});
+
+test("dispatch reports direct confirmed, rejected and superseded outcomes", async () => {
+  const changes = [];
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart") return emptyCart();
+    const next = deferred();
+    changes.push(next);
+    return next.promise;
+  });
+  await mount(withProviders(userAuth, React.createElement(OutcomeProbe)));
+  await click(button("probe-add"));
+  assert.equal(changes.length, 1);
+  await settle(changes[0], { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
+  await flush();
+  assert.deepEqual(recorded, ["confirmed"]);
+  await click(button("probe-bad"));
+  await flush();
+  assert.deepEqual(recorded, ["confirmed", "superseded"], "an invalid quantity resolves superseded");
+  assert.equal(changes.length, 1, "a superseded dispatch never reaches the mutation RPC");
+  await click(button("probe-add"));
+  assert.equal(changes.length, 2);
+  await settleError(changes[1], new TypeError("Failed to fetch"));
+  await flush();
+  assert.deepEqual(recorded, ["confirmed", "superseded", "rejected"]);
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 2);
+});
+
+test("a concurrent second dispatch resolves superseded while the first deferred mutation serializes", async () => {
+  const changes = [];
+  bagClient(name => {
+    if (name === "load_variant_cart") return emptyCart();
+    const next = deferred();
+    changes.push(next);
+    return next.promise;
+  });
+  await mount(withProviders(userAuth, React.createElement(DoubleAddProbe)));
+  await click(button("double-add"));
+  await flush();
+  assert.equal(changes.length, 1, "the lock serializes concurrent dispatches into one mutation");
+  assert.deepEqual(recorded, ["superseded"], "the blocked dispatch resolves superseded immediately");
+  await settle(changes[0], { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null });
+  await flush();
+  assert.deepEqual(recorded, ["superseded", "confirmed"]);
+  assert.equal(host.querySelector("#probe-count").textContent, "2");
+});
+
+test("a newer confirmed success is followed only by a superseded older rejection", async () => {
+  const changes = [];
+  bagClient(name => {
+    if (name === "load_variant_cart") return emptyCart();
+    const next = deferred();
+    changes.push(next);
+    return next.promise;
+  });
+  await mount(withProviders(userAuth, React.createElement(OutcomeProbe)));
+  await click(button("probe-add"));
+  await rerender(withProviders(userAuthB, React.createElement(OutcomeProbe)));
+  await click(button("probe-add"));
+  assert.equal(changes.length, 2, "B's newer operation runs while A's older one is still in flight");
+  await settle(changes[1], { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
+  await flush();
+  assert.deepEqual(recorded, ["confirmed"], "B's newer operation confirms first");
+  await settleError(changes[0], new TypeError("Failed to fetch"));
+  await flush();
+  assert.deepEqual(recorded, ["confirmed", "superseded"], "A's older rejection never surfaces as rejected");
+});
+
+test("a real guest-to-account transition merges the guest item with its stored receipt", async () => {
+  const merges = [];
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart") return emptyCart();
+    const next = deferred();
+    merges.push(next);
+    return next.promise;
+  });
+  await mount(layoutTree(guestAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  const receipt = readStored().items[0].mergeId;
+  assert.match(receipt, /^[0-9a-f-]{36}$/);
+  await rerender(layoutTree(userAuth));
+  const mergeCalls = calls.filter(call => call.name === "change_variant_cart");
+  assert.equal(mergeCalls.length, 1, "restore is waiting on the guest merge");
+  assert.equal(mergeCalls[0].args.p_mode, "merge");
+  assert.equal(mergeCalls[0].args.p_quantity, 1);
+  assert.equal(mergeCalls[0].args.p_operation_id, receipt, "stable sign-in merge receipt");
+  await settle(merges[0], { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
+  await flush();
+  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(1\)/);
+  assert.equal(readStored().items.length, 0, "guest intent is consumed by the successful merge");
+});
+
+test("a simulated merge failure keeps the guest receipt, surfaces the global retry and recovers without duplicates", async () => {
+  const merges = [];
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart") return emptyCart();
+    const next = deferred();
+    merges.push(next);
+    return next.promise;
+  });
+  await mount(layoutTree(guestAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  const receipt = readStored().items[0].mergeId;
+  await rerender(layoutTree(userAuth));
+  assert.equal(merges.length, 1);
+  await settleError(merges[0], new TypeError("Failed to fetch"));
+  await flush();
+  const alert = host.querySelector('[role="alert"]');
+  assert.ok(alert);
+  assert.match(alert.textContent, /could not be restored or merged/);
+  assert.match(alert.textContent, /Retry saved Bag/);
+  assert.equal(readStored().items.length, 1, "guest intent is retained after the merge failure");
+  await click(button("Retry saved Bag"));
+  await flush();
+  const mergeCalls = calls.filter(call => call.name === "change_variant_cart");
+  assert.equal(mergeCalls.length, 2, "the retry re-runs the restore merge");
+  assert.equal(mergeCalls[1].args.p_operation_id, receipt, "the retry reuses the stable merge receipt");
+  await settle(merges[1], { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
+  await flush();
+  assert.equal(host.querySelector('[role="alert"]'), null, "recovery clears the global alert");
+  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(1\)/, "exactly one merged line, no duplicates");
+  assert.equal(readStored().items.length, 0);
 });
 
 test("uncertain add after a lost RPC response makes no definite claim and reload reconciles the applied line", async () => {
