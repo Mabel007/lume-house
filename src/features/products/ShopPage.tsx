@@ -1,11 +1,14 @@
 import { Link } from "react-router-dom";
 import { requiresOptions, variantAvailable, cataloguePrice } from "./variants";
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback } from "react";
+import type { Product } from "./products";
 import { useProducts } from "./ProductContext";
 import { ProductStatus } from "./ProductStatus";
 import { formatMoney, shop } from "../../config/shop";
 import { useCart } from "../cart/CartContext";
 import { defaultVariant, MAX_QUANTITY } from "../cart/cart";
+import { bagAddedText, bagAddFailedText } from "../cart/bagFeedback";
+import { BagNotice, type BagNoticeMessage } from "../../components/BagNotice";
 import { ProductImage } from "./ProductImage";
 import {searchProducts} from './search';
 
@@ -13,7 +16,10 @@ export function ShopPage() {
   const [category, setCategory] = useState("All pieces");
   const [query,setQuery]=useState('');
   const searchInput=useRef<HTMLInputElement>(null);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<BagNoticeMessage | null>(null);
+  const noticeSeq = useRef(0);
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const clearNotice = useCallback(() => setNotice(null), []);
   const { items, dispatch, status: cartStatus } = useCart();
   const { state, refresh } = useProducts();
   const products = state.status === "ready" ? state.products : [];
@@ -25,6 +31,16 @@ export function ShopPage() {
     ? category
     : "All pieces";
   const visible=searchProducts(products,query,activeCategory);
+  async function addToBag(product: Product, variantId: string) {
+    const name=product.name;
+    noticeSeq.current+=1;
+    const id=noticeSeq.current;
+    setAddingId(product.id);
+    const outcome=await dispatch({type:"add",productId:product.id,variantId});
+    setAddingId(null);
+    if(outcome.kind==="confirmed")setNotice({id,tone:"success",text:bagAddedText(1,name,"")});
+    else if(outcome.kind==="rejected")setNotice({id,tone:"failure",text:bagAddFailedText(name)});
+  }
   return (
     <>
       <section className="hero wrap">
@@ -147,9 +163,6 @@ export function ShopPage() {
                 </button>
               </div>
             </div>
-            <p role="status" className="sr-only">
-              {notice}
-            </p>
             <p className="collection-results" role="status">{visible.length} {visible.length===1?'piece':'pieces'} found{activeCategory!=='All pieces'?` in ${activeCategory}`:''}.</p>
             {visible.length===0&&<div className="catalogue-no-results"><h3>No pieces found.</h3><p>Try a different search or collection.</p><button className="button" onClick={()=>{setQuery('');setCategory('All pieces');searchInput.current?.focus();}}>Reset search &amp; filters</button></div>}
             <div className="product-grid">
@@ -185,20 +198,17 @@ export function ShopPage() {
                     <p className="product-description">{product.description}</p>
                     {requiresOptions(product.variants) ? <Link className="add-button" to={`/products/${encodeURIComponent(product.id)}`}>Choose options <span aria-hidden="true">→</span></Link> : <button
                       className="add-button"
-                      disabled={!variantAvailable(variant) || quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out"}
-                      onClick={() => {
-                        dispatch({ type: "add", productId: product.id, variantId: variant!.id });
-                        setNotice(
-                          `${product.name}: Bag update requested.`,
-                        );
-                      }}
+                      disabled={!variantAvailable(variant) || quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out" || addingId === product.id}
+                      onClick={() => { void addToBag(product, variant!.id); }}
                       aria-label={`Add ${product.name} to Bag`}
                     >
-                      {quantity >= MAX_QUANTITY
-                        ? "Quantity limit reached"
-                        : quantity > 0
-                          ? `Add another · ${quantity} in Bag`
-                          : "Add to Bag"}
+                      {addingId === product.id
+                        ? "Adding…"
+                        : quantity >= MAX_QUANTITY
+                          ? "Quantity limit reached"
+                          : quantity > 0
+                            ? `Add another · ${quantity} in Bag`
+                            : "Add to Bag"}
                       <span aria-hidden="true">+</span>
                     </button>}
                   </article>
@@ -223,6 +233,7 @@ export function ShopPage() {
           Delivery in supported Freetown areas.
         </div>
       </section>
+      <BagNotice message={notice} onExpire={clearNotice} />
     </>
   );
 }

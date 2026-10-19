@@ -307,12 +307,19 @@ test('storefront search has a labelled native search control and polite results 
  assert.doesNotMatch(html,/No pieces found|Reset search/);
 });
 
-test("global loading saving and failure feedback uses Bag without claiming persistence success", async () => {
+test("Add to Bag feedback waits for confirmed persistence before claiming success", async () => {
   assert.match(renderLayout("/", { items: [], status: "loading" }), /Loading your Bag/);
   assert.match(renderLayout("/", { items, status: "saving" }), /Saving your Bag/);
   assert.match(renderLayout("/", { items, status: "error", error: "Your Bag change was not saved.", retry() {} }), /Retry saved Bag/);
   const { readFileSync } = await import("node:fs");
-  assert.match(readFileSync("src/features/products/ShopPage.tsx", "utf8"), /Bag update requested/);
+  const shop = readFileSync("src/features/products/ShopPage.tsx", "utf8");
+  const details = readFileSync("src/features/products/ProductDetailsPage.tsx", "utf8");
+  const feedback = readFileSync("src/features/cart/bagFeedback.ts", "utf8");
+  assert.match(details, /await dispatch\(\{type:'add'/);
+  assert.match(feedback, /Added \$\{quantity\} × /);
+  assert.match(shop, /outcome\.kind==="confirmed"/);
+  assert.match(shop, /bagAddedText\(1,name,""\)/);
+  assert.doesNotMatch(shop, /Bag update requested/);
   assert.doesNotMatch(readFileSync("src/features/cart/CartProvider.tsx", "utf8"), /Your (?:saved )?cart/i);
 });
 

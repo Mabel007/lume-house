@@ -113,6 +113,8 @@ test("guest Add to Bag persists locally, relabels the card and never calls RPCs"
   const add = buttonByLabel("Add Fixture mug to Bag");
   assert.ok(add);
   assert.match(add.textContent, /Add to Bag/);
+  assert.ok(host.querySelector('.bag-notice-region[role="status"][aria-live="polite"]'));
+  assert.equal(host.querySelector(".bag-notice"), null);
   assert.deepEqual(readStored().items, []);
   await click(add);
   const stored = readStored();
@@ -123,7 +125,9 @@ test("guest Add to Bag persists locally, relabels the card and never calls RPCs"
     [{ productId: "fixture-mug", variantId: "v-default", quantity: 1 }],
   );
   assert.match(stored.items[0].mergeId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-  assert.match(host.textContent, /Fixture mug: Bag update requested\./);
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /Added 1 × Fixture mug to your Bag/);
   assert.equal(calls.length, 0);
   const relabeled = buttonByLabel("Add Fixture mug to Bag");
   assert.match(relabeled.textContent, /Add another · 1 in Bag/);
@@ -137,7 +141,7 @@ test("guest Product Details adds the chosen quantity from the number input", asy
   await act(async () => { input.dispatchEvent(new dom.window.Event("input", { bubbles: true })); });
   await click(buttonByLabel("Add Fixture mug to Bag"));
   assert.deepEqual(readStored().items.map(item => item.quantity), [3]);
-  assert.match(host.textContent, /Fixture mug: Bag update requested\./);
+  assert.match(host.textContent, /Added 3 × Fixture mug to your Bag/);
 });
 
 test("authenticated Add to Bag saves once through the RPC, stays busy and cannot duplicate while saving", async () => {
@@ -157,11 +161,13 @@ test("authenticated Add to Bag saves once through the RPC, stays busy and cannot
   assert.equal(args.p_expected_quantity, null);
   assert.match(args.p_operation_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   assert.equal(add.disabled, true);
+  assert.match(add.textContent, /Adding…/);
   await click(add);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
   await settle(change, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
   assert.equal(buttonByLabel("Add Fixture mug to Bag").disabled, false);
-  assert.match(host.textContent, /Fixture mug: Bag update requested\./);
+  assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Add to Bag/);
+  assert.match(host.textContent, /Added 1 × Fixture mug to your Bag/);
 });
 
 test("authenticated Add to Bag failure surfaces the global alert, keeps the Bag unchanged and recovers", async () => {
@@ -175,6 +181,10 @@ test("authenticated Add to Bag failure surfaces the global alert, keeps the Bag 
   assert.ok(alert);
   assert.match(alert.textContent, /Your Bag change could not be confirmed/);
   assert.match(alert.textContent, /Retry saved Bag/);
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /Fixture mug was not added to your Bag\./);
+  assert.doesNotMatch(host.textContent, /Added 1 × Fixture mug to your Bag/);
   assert.equal(buttonByLabel("Add Fixture mug to Bag").disabled, false);
   assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Add to Bag/);
   await click(button("Retry saved Bag"));
@@ -275,4 +285,37 @@ test("guest items merge into the authenticated Bag on sign-in with stable receip
   await settle(merge, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null });
   assert.match(host.textContent, /NLe 36/);
   assert.deepEqual(readStored().items, []);
+});
+
+test("shop toast keeps only the newest confirmation", async () => {
+  bagClient(() => emptyCart());
+  await mount(layoutTree(guestAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  const toasts = host.querySelectorAll(".bag-notice");
+  assert.equal(toasts.length, 1);
+  assert.match(toasts[0].textContent, /Added 1 × Fixture mug to your Bag/);
+});
+
+test("bag notice auto-expires after five seconds", async t => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  function ExpireHost() {
+    const [message, setMessage] = React.useState(null);
+    return React.createElement("div", null,
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 1, tone: "success", text: "Added 1 × Fixture mug to your Bag" }) }, "show"),
+      React.createElement(BagNotice, { message, onExpire: () => setMessage(null) }));
+  }
+  await mount(React.createElement(ExpireHost));
+  assert.equal(host.querySelector(".bag-notice"), null);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    await click(button("show"));
+    assert.ok(host.querySelector(".bag-notice"));
+    await act(async () => { t.mock.timers.tick(4999); });
+    assert.ok(host.querySelector(".bag-notice"));
+    await act(async () => { t.mock.timers.tick(1); });
+    assert.equal(host.querySelector(".bag-notice"), null);
+  } finally {
+    t.mock.timers.reset();
+  }
 });
