@@ -25,7 +25,7 @@ async function submit(){await act(async()=>host.querySelector('form').dispatchEv
 async function click(label){const node=Array.from(host.querySelectorAll('button')).find(node=>node.textContent===label);assert.ok(node);await act(async()=>node.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true})));}
 
 test('fulfilment input bounds, Unicode carrier, optional clearing and supported reference characters',async()=>{
- const {fulfilmentInput}=await module('fulfilment.ts');assert.deepEqual(fulfilmentInput(' Courrier Ã© ',' REF-1 / 2 ',' Reason '),{carrier_label:'Courrier Ã©',tracking_reference:'REF-1 / 2',reason:'Reason'});assert.equal(fulfilmentInput('',' ','Reason').tracking_reference,null);assert.doesNotThrow(()=>fulfilmentInput('C'.repeat(100),'R'.repeat(100),'N'.repeat(500)));
+ const {fulfilmentInput}=await module('fulfilment.ts');assert.deepEqual(fulfilmentInput(' Courrier é ',' REF-1 / 2 ',' Reason '),{carrier_label:'Courrier é',tracking_reference:'REF-1 / 2',reason:'Reason'});assert.equal(fulfilmentInput('',' ','Reason').tracking_reference,null);assert.doesNotThrow(()=>fulfilmentInput('C'.repeat(100),'R'.repeat(100),'N'.repeat(500)));
  for(const args of [['C'.repeat(101),'','Reason'],['','R'.repeat(101),'Reason'],['','https://unsafe.example','Reason'],['Bad\ncarrier','','Reason'],['','',' '],['','','N'.repeat(501)],['','','New\nline']])assert.throws(()=>fulfilmentInput(...args));
 });
 test('validated projections exclude actors/contacts and reject cross-order, malformed and inconsistent receipts/history',async()=>{

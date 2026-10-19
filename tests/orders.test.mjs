@@ -166,6 +166,24 @@ test('confirmation forwards optional runtime Reply-To while preserving claimed s
   }
  }finally{globalThis.fetch=previousFetch;if(previousDeno===undefined)delete globalThis.Deno;else globalThis.Deno=previousDeno;}
 });
+test('default email sender is correct UTF-8 and RESEND_FROM overrides are preserved',async()=>{
+ const previousFetch=globalThis.fetch;const previousDeno=globalThis.Deno;
+ const expectedDefault='Lumé House <onboarding@resend.dev>';
+ const source=readFileSync('supabase/functions/_shared/confirmation.ts');
+ assert.ok(source.includes(Buffer.from(expectedDefault,'utf8')),'default sender literal must be correct UTF-8');
+ assert.equal(source.includes(Buffer.from([0x4c,0x75,0x6d,0xc3,0x83,0xc2,0xa9])),false,'previous double-encoded sender bytes must be absent');
+ try {
+  for(const [configured,expected] of [[undefined,expectedDefault],['Lumé House <orders@send.najbuilds.com>','Lumé House <orders@send.najbuilds.com>']]){
+   const calls=[];let captured;
+   globalThis.Deno={env:{get:name=>({RESEND_API_KEY:'unit-test-only',RESEND_FROM:configured})[name]}};
+   globalThis.fetch=async(url,init)=>{captured={url,init};return new Response(JSON.stringify({id:'mock-message'}),{status:200})};
+   const admin={rpc:async(name,args)=>{calls.push({name,args});return name==='claim_order_confirmation'?{data:{claim_token:orderFixture.id,sender:args.p_sender},error:null}:{data:true,error:null}},from:table=>{assert.equal(table,'orders');return {select(){return this},eq(){return this},single:async()=>({data:structuredClone(orderFixture),error:null})}}};
+   assert.equal(await deliverConfirmation(admin,orderFixture.id),'sent');
+   assert.deepEqual(calls[0],{name:'claim_order_confirmation',args:{p_order_id:orderFixture.id,p_sender:expected}});
+   assert.equal(JSON.parse(captured.init.body).from,expected);
+  }
+ }finally{globalThis.fetch=previousFetch;if(previousDeno===undefined)delete globalThis.Deno;else globalThis.Deno=previousDeno;}
+});
 test('email failure is durably recorded without deleting or undoing committed orders',async()=>{
  const previousFetch=globalThis.fetch;const previousDeno=globalThis.Deno;
  const calls=[];
