@@ -1,4 +1,4 @@
-﻿import { test } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { formatMoney, shop } from "../../config/shop.ts";
 import { deliveryConfig, getDeliveryFee } from "../../config/fulfilment.ts";
@@ -10,6 +10,7 @@ import {
 } from "./payment.ts";
 import { catalog } from "../products/catalog.ts";
 import { getCartLines } from "../cart/cart.ts";
+import { checkoutMessages, cityProblem, isValidEmail } from "./validation.ts";
 test("NLE formatting uses consistent NLE and integer minor units", () => {
   assert.equal(formatMoney(45000), "NLE 450");
   assert.equal(formatMoney(125000), "NLE 1,250");
@@ -171,4 +172,33 @@ test("contact reuse derives synchronized input and preserves independent payer",
     assert.ok(
       validatePaymentPhone(getPaymentPhone(missing, independent, true)),
     );
+});
+test("checkout city validation mirrors the trusted Freetown-only rule", () => {
+  assert.equal(cityProblem("Freetown", "Freetown"), undefined);
+  assert.equal(cityProblem("  freetown  ", "Freetown"), undefined);
+  assert.equal(cityProblem("", "Freetown"), checkoutMessages.city);
+  assert.equal(cityProblem("   ", "Freetown"), checkoutMessages.city);
+  assert.equal(
+    cityProblem("Bo", "Freetown"),
+    "Delivery is currently limited to Freetown.",
+  );
+});
+test("checkout email check accepts native-shaped addresses and rejects malformed input", () => {
+  for (const value of [
+    "customer@example.com",
+    "a.b+tag@sub.example.co",
+    "  customer@example.com  ",
+  ])
+    assert.equal(isValidEmail(value), true);
+  for (const value of [
+    "",
+    "   ",
+    "customer",
+    "customer@example",
+    "customer@ example.com",
+    "@example.com",
+    "customer@.com",
+    "customer @example.com",
+  ])
+    assert.equal(isValidEmail(value), false);
 });

@@ -188,3 +188,171 @@ test('any Sierra Leone network is accepted at placement with telephone keypads o
   assert.equal(calls[0].options.body.checkout.payment_phone,'+23288790011');
   assert.match(alertTexts().join(' '),/Please check your contact, payment and Freetown delivery details\./);
 });
+
+const errorText=id=>host.querySelector(`#${id}`)?.textContent??null;
+const describedBy=name=>host.querySelector(`[name="${name}"]`)?.getAttribute('aria-describedby');
+const invalidAttr=name=>host.querySelector(`[name="${name}"]`)?.getAttribute('aria-invalid');
+const fieldErrorId=name=>name==='delivery-zone'?'delivery-zone-error':`${name}-error`;
+
+function recordingClient(result){
+  const calls=[];
+  return {calls,client:fakeClient(async(name,options)=>{calls.push({name,options});
+    return result?result():{data:null,error:{context:new Response(JSON.stringify({error:'INVALID_DELIVERY_DETAILS'}),{status:400,headers:{'Content-Type':'application/json'}})}};})};
+}
+async function fillValidPhones(){
+  await setValue(host.querySelector('[name="contact-phone"]'),'076521208');
+  await toggle(host.querySelector('#reuse-phone'));
+}
+
+test('a blank checkout submit is blocked with field-associated errors and focuses the first field', async()=>{
+  const {calls,client}=recordingClient();
+  await mount({authSession:session,client});
+  await setValue(host.querySelector('[name="email"]'),'');
+  await submit();
+  assert.equal(calls.length,0);
+  assert.equal(errorText('full-name-error'),'Enter your full name.');
+  assert.equal(errorText('email-error'),'Enter your email address.');
+  assert.equal(errorText('address-error'),'Enter your street address or landmark.');
+  assert.equal(errorText('area-error'),'Enter your area or community.');
+  assert.equal(errorText('city-error'),'Enter your city or town.');
+  assert.equal(errorText('delivery-zone-error'),'Choose your delivery zone.');
+  assert.equal(errorText('payment-error'),'Enter a valid 8-digit Sierra Leone phone number.');
+  for(const name of ['full-name','email','address','area','city','contact-phone','payment-phone','delivery-zone'])
+    assert.equal(invalidAttr(name),'true',`${name} is flagged invalid`);
+  assert.match(describedBy('full-name'),/full-name-error/);
+  assert.match(describedBy('city'),/city-error/);
+  assert.match(describedBy('delivery-zone'),/delivery-zone-error/);
+  assert.match(alertTexts().join(' '),/Please check your contact and delivery details before placing your order\./);
+  assert.equal(dom.window.document.activeElement.getAttribute('name'),'full-name');
+});
+
+test('each required field omitted on its own blocks placement and names the field', async()=>{
+  const cases=[
+    ['full-name','Enter your full name.'],
+    ['contact-phone','Enter a valid 8-digit Sierra Leone phone number.'],
+    ['email','Enter your email address.'],
+    ['address','Enter your street address or landmark.'],
+    ['area','Enter your area or community.'],
+    ['city','Enter your city or town.'],
+    ['delivery-zone','Choose your delivery zone.'],
+  ];
+  for(const [name,message] of cases){
+    const {calls,client}=recordingClient();
+    await mount({authSession:session,client});
+    await fillRequired();
+    await fillValidPhones();
+    if(name==='delivery-zone')await selectZone('');
+    else await setValue(host.querySelector(`[name="${name}"]`),'');
+    await submit();
+    assert.equal(calls.length,0,`${name} must block placement`);
+    assert.equal(errorText(fieldErrorId(name)),message,`${name} message`);
+    assert.equal(dom.window.document.activeElement.getAttribute('name'),name,`${name} receives focus`);
+  }
+});
+
+test('whitespace-only name, address, area and city are rejected before placement and clear on correction', async()=>{
+  const {calls,client}=recordingClient();
+  await mount({authSession:session,client});
+  await fillRequired();
+  await fillValidPhones();
+  await setValue(host.querySelector('[name="full-name"]'),'   ');
+  await setValue(host.querySelector('[name="address"]'),'   ');
+  await setValue(host.querySelector('[name="area"]'),'   ');
+  await setValue(cityField(),'   ');
+  await submit();
+  assert.equal(calls.length,0);
+  assert.equal(errorText('full-name-error'),'Enter your full name.');
+  assert.equal(errorText('address-error'),'Enter your street address or landmark.');
+  assert.equal(errorText('area-error'),'Enter your area or community.');
+  assert.equal(errorText('city-error'),'Enter your city or town.');
+  assert.equal(dom.window.document.activeElement.getAttribute('name'),'full-name');
+  await setValue(host.querySelector('[name="full-name"]'),'Fixture Customer');
+  assert.equal(errorText('full-name-error'),null);
+});
+
+test('an invalid email format is rejected with a field-associated message', async()=>{
+  const {calls,client}=recordingClient();
+  await mount({authSession:session,client});
+  await fillRequired();
+  await fillValidPhones();
+  await setValue(host.querySelector('[name="email"]'),'not-an-email');
+  await submit();
+  assert.equal(calls.length,0);
+  assert.equal(errorText('email-error'),'Enter a valid email address.');
+  assert.equal(invalidAttr('email'),'true');
+  assert.match(describedBy('email'),/email-error/);
+  assert.equal(dom.window.document.activeElement.getAttribute('name'),'email');
+});
+
+test('unsupported city and missing zone get accurate field-associated messages', async()=>{
+  const city=recordingClient();
+  await mount({authSession:session,client:city.client});
+  await fillRequired();
+  await fillValidPhones();
+  await setValue(cityField(),'Bo');
+  await submit();
+  assert.equal(city.calls.length,0);
+  assert.equal(errorText('city-error'),'Delivery is currently limited to Freetown.');
+  assert.equal(invalidAttr('city'),'true');
+  assert.equal(errorText('delivery-zone-error'),null);
+
+  const zone=recordingClient();
+  await mount({authSession:session,client:zone.client});
+  await fillRequired();
+  await fillValidPhones();
+  await selectZone('');
+  await submit();
+  assert.equal(zone.calls.length,0);
+  assert.equal(errorText('delivery-zone-error'),'Choose your delivery zone.');
+  assert.equal(invalidAttr('delivery-zone'),'true');
+  assert.equal(describedBy('delivery-zone'),'zone-help delivery-zone-error');
+  assert.equal(errorText('city-error'),null);
+});
+
+test('pickup does not require delivery-only fields and still places the order', async()=>{
+  const {calls,client}=recordingClient();
+  await mount({authSession:session,client});
+  await setValue(host.querySelector('[name="full-name"]'),'Fixture Customer');
+  await setValue(host.querySelector('[name="email"]'),'fixture@example.invalid');
+  await fillValidPhones();
+  await chooseRadio('fulfilment','pickup');
+  assert.equal(host.querySelector('[name="city"]'),null);
+  assert.equal(host.querySelector('#delivery-zone'),null);
+  await submit();
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].name,'place-order');
+  assert.equal(calls[0].options.body.checkout.fulfilment,'pickup');
+  assert.equal(calls[0].options.body.checkout.zone_id,'');
+});
+
+test('a pasted formatted phone number places once, and a corrected form resubmits cleanly', async()=>{
+  const {calls,client}=recordingClient();
+  await mount({authSession:session,client});
+  await setValue(host.querySelector('[name="email"]'),'');
+  await submit();
+  assert.equal(calls.length,0);
+  assert.equal(errorText('full-name-error'),'Enter your full name.');
+  await fillRequired();
+  await setValue(host.querySelector('[name="contact-phone"]'),'(+232) 76-521208');
+  await toggle(host.querySelector('#reuse-phone'));
+  assert.equal(errorText('full-name-error'),null);
+  await submit();
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].name,'place-order');
+  assert.equal(calls[0].options.body.checkout.contact_phone,'+23276521208');
+  assert.equal(calls[0].options.body.checkout.payment_phone,'+23276521208');
+});
+
+test('a repeated submit while placement is in flight does not place a second order', async()=>{
+  let resolveInvoke;
+  const calls=[];
+  const client=fakeClient((name,options)=>{calls.push({name,options});return new Promise(resolve=>{resolveInvoke=resolve;});});
+  await mount({authSession:session,client});
+  await fillRequired();
+  await fillValidPhones();
+  await submit();
+  assert.equal(calls.length,1);
+  await submit();
+  assert.equal(calls.length,1);
+  await act(async()=>resolveInvoke({data:null,error:null}));
+});
