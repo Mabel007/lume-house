@@ -56,6 +56,7 @@ export function CheckoutPage() {
   const [provider, setProvider] = useState<PaymentProvider>("orange");
   const [phone, setPhone] = useState("");
   const [touched, setTouched] = useState(false);
+  const [contactTouched, setContactTouched] = useState(false);
   const userId = auth.session?.user.id;
   const userEmail = auth.session?.user.email;
   useEffect(()=>{
@@ -93,11 +94,12 @@ export function CheckoutPage() {
   const paymentPhone = getPaymentPhone(contactPhone, phone, reusePhone);
   const error =
     touched || reusePhone ? validatePaymentPhone(paymentPhone) : null;
+  const contactError = contactTouched ? validatePaymentPhone(contactPhone) : null;
   async function submit(event:React.FormEvent) {
     event.preventDefault();
     if(submittingRef.current||state.status!=='ready'||!userId)return;
-    setTouched(true);
-    if(validatePaymentPhone(paymentPhone)||validatePaymentPhone(contactPhone)){setOrderError('Enter valid Sierra Leone contact and payment numbers.');return;}
+    setTouched(true);setContactTouched(true);
+    if(validatePaymentPhone(paymentPhone)||validatePaymentPhone(contactPhone)){setOrderError('Enter valid 8-digit Sierra Leone contact and payment numbers.');return;}
     if(getDeliveryFee(fulfilment,city,zoneId)===null){setCityTouched(true);setOrderError('Choose a supported Freetown delivery zone.');return;}
     const checkoutTicket=beginCheckout?.();
     if(beginCheckout && checkoutTicket==null){setOrderError('Wait for your Bag changes to finish saving.');return;}
@@ -181,9 +183,13 @@ export function CheckoutPage() {
                 label="Phone number"
                 name="contact-phone"
                 type="tel"
+                inputMode="tel"
                 autoComplete="tel"
                 value={contactPhone}
                 onChange={setContactPhone}
+                onBlur={() => setContactTouched(true)}
+                hint="Enter an 8-digit Sierra Leone phone number, with or without 0 or +232. Example: 0XX XXX XXX."
+                error={contactError ?? undefined}
               />
               <Field
                 label="Email"
@@ -331,6 +337,7 @@ export function CheckoutPage() {
                   name="payment-phone"
                   type="tel"
                   autoComplete="off"
+                  inputMode="tel"
                   required
                   maxLength={30}
                   value={paymentPhone}
@@ -353,9 +360,9 @@ export function CheckoutPage() {
                   Use my contact phone number
                 </label>
                 <p className="small-note" id="payment-help">
-                  Enter a Sierra Leone mobile number, for example +23276521208.
-                  Number format only; this does not verify registration with the
-                  selected provider.
+                  Any Sierra Leone mobile network is accepted. Use 8 digits, with
+                  or without 0 or +232. Example: 0XX XXX XXX. Number format only;
+                  this does not verify registration with the selected provider.
                 </p>
                 <p className="small-note">
                   When selected, this follows your contact number. Turning it
@@ -431,6 +438,8 @@ function Field({
   wide = false,
   value,
   onChange,
+  hint,
+  error,
   ...rest
 }: {
   label: string;
@@ -440,9 +449,11 @@ function Field({
   wide?: boolean;
   value?: string;
   onChange?: (value: string) => void;
+  hint?: string;
+  error?: string;
 } & Omit<
   InputHTMLAttributes<HTMLInputElement>,
-  "label" | "name" | "type" | "autoComplete" | "wide" | "value" | "onChange"
+  "label" | "name" | "type" | "autoComplete" | "wide" | "value" | "onChange" | "hint" | "error"
 >) {
-  return <FormField label={label} name={name} id={name} type={type} autoComplete={autoComplete} wide={wide} required maxLength={200} value={value} onChange={onChange ? event=>onChange(event.target.value) : undefined} {...rest}/>;
+  return <FormField label={label} name={name} id={name} type={type} autoComplete={autoComplete} wide={wide} required maxLength={200} value={value} onChange={onChange ? event=>onChange(event.target.value) : undefined} hint={hint} error={error} {...rest}/>;
 }
