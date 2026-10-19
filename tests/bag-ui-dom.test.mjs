@@ -237,6 +237,28 @@ test("guest Bag page updates quantities and removals in local storage with deriv
   await click(buttonByLabel("Remove Fixture mug"));
   assert.deepEqual(readStored().items, []);
   assert.match(host.textContent, /Your Bag is taking a slow day/);
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast, "removal confirmation survives the empty-state transition");
+  assert.match(toast.textContent, /Removed Fixture mug from your Bag/);
+});
+
+test("authenticated Bag page removal failure shows no success claim and keeps the line", async () => {
+  const change = deferred();
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart")
+      return Promise.resolve({ data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null });
+    return change.promise;
+  });
+  await mount(withProviders(userAuth, React.createElement(CartPage)));
+  await click(buttonByLabel("Remove Fixture mug"));
+  await settle(change, { data: null, error: { code: "P0001", message: "fixture removal failure" } });
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /Fixture mug was not removed from your Bag\./);
+  assert.doesNotMatch(host.textContent, /Removed Fixture mug from your Bag/);
+  assert.match(host.textContent, /NLe 36/);
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
+  assert.equal(buttonByLabel("Remove Fixture mug").disabled, false);
 });
 
 test("authenticated Bag page quantity and removal use set and remove RPC modes", async () => {
