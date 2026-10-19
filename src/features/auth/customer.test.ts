@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { authRedirect, startGoogleSignIn, watchSession } from "./auth.ts";
 import { emptyProfile, mapProfile, profileValues, loadProfile, saveProfile } from "../account/profile.ts";
+import { invalidPhoneMessage } from "../checkout/payment.ts";
 import { loadCustomerCart, mergeGuestCart, writeCartItem, visibleCart } from "../cart/cartRepository.ts";
 import { checkoutDefaults } from "../checkout/profileDefaults.ts";
 import type { CartItem } from "../cart/cart.ts";
@@ -60,6 +61,20 @@ test("profile mapping, nullable defaults and format validation do not duplicate 
   assert.equal(values.phone, "+23276521208"); assert.equal(values.full_name, "Customer"); assert.equal(values.default_city, null);
   assert.equal("email" in values, false);
   assert.throws(() => profileValues({ ...emptyProfile, phone: "bad" }));
+});
+test("profile phone accepts any Sierra Leone network with shared network-neutral guidance", () => {
+  for (const [input, expected] of [
+    ["88 790011", "+23288790011"],
+    ["031521208", "+23231521208"],
+    ["+23277521208", "+23277521208"],
+    ["(232) 77-521208", "+23277521208"],
+  ] as const)
+    assert.equal(profileValues({ ...emptyProfile, phone: input }).phone, expected);
+  assert.doesNotMatch(invalidPhoneMessage, /Orange|\+232\d/i);
+  assert.throws(
+    () => profileValues({ ...emptyProfile, phone: "+23376521208" }),
+    (error: unknown) => error instanceof Error && error.message === invalidPhoneMessage,
+  );
 });
 test("first profile is inserted; existing profile updates only permitted columns", async () => {
   const first = database([{ data: null }, {}]);

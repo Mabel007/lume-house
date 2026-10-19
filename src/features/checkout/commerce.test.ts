@@ -4,6 +4,7 @@ import { formatMoney, shop } from "../../config/shop.ts";
 import { deliveryConfig, getDeliveryFee } from "../../config/fulfilment.ts";
 import {
   getPaymentPhone,
+  invalidPhoneMessage,
   normalizePhone,
   validatePaymentPhone,
 } from "./payment.ts";
@@ -106,6 +107,8 @@ test("payment format allows non-exhaustive ranges without provider claims", () =
     "+23288790011",
     "+23230521208",
     "+23290521208",
+    "+23277521208",
+    "+23231521208",
   ])
     assert.equal(validatePaymentPhone(value), null);
   for (const value of [
@@ -113,9 +116,42 @@ test("payment format allows non-exhaustive ranges without provider claims", () =
     "+232765212080",
     "",
     "+23376521208",
+    "0023376521208",
+    "0276521208",
+    "+232076521208",
     "+23276abc521208",
   ])
     assert.ok(validatePaymentPhone(value));
+});
+test("phone guidance stays network-neutral with a shared masked message", () => {
+  assert.equal(
+    invalidPhoneMessage,
+    "Enter a valid 8-digit Sierra Leone phone number.",
+  );
+  assert.doesNotMatch(invalidPhoneMessage, /Orange|\+232\d/i);
+  for (const value of [
+    "76521208",
+    "076521208",
+    "+23276521208",
+    "0023276521208",
+    "23276521208",
+    "+232 88 790011",
+    "031521208",
+    "(+232) 77-521208",
+  ])
+    assert.equal(validatePaymentPhone(value), null);
+  for (const value of [
+    "7652120",
+    "765212080",
+    "+23376521208",
+    "0023376521208",
+    "0276521208",
+    "+232076521208",
+    "+23276abc521208",
+    "",
+    "   ",
+  ])
+    assert.equal(validatePaymentPhone(value), invalidPhoneMessage);
 });
 test("contact reuse derives synchronized input and preserves independent payer", () => {
   const independent = "+23288790011";

@@ -138,3 +138,46 @@ test('invalid trusted delivery responses surface safe guidance and never claim p
   assert.ok(host.querySelector('form#checkout-form'));
   assert.equal(button().disabled,false);
 });
+
+test('contact phone exposes network-neutral help, a telephone keypad and field-associated validation', async()=>{
+  await mount({authSession:session});
+  const contact=host.querySelector('[name="contact-phone"]');
+  assert.equal(contact.getAttribute('type'),'tel');
+  assert.equal(contact.getAttribute('inputmode'),'tel');
+  assert.equal(contact.getAttribute('autocomplete'),'tel');
+  assert.equal(contact.getAttribute('aria-describedby'),'contact-phone-help');
+  assert.match(host.textContent,/Enter an 8-digit Sierra Leone phone number, with or without 0 or \+232\. Example: 0XX XXX XXX\./);
+  await setValue(contact,'not a phone');
+  assert.equal(host.querySelector('#contact-phone-error'),null);
+  await blur(contact);
+  assert.equal(contact.getAttribute('aria-invalid'),'true');
+  const described=contact.getAttribute('aria-describedby');
+  assert.match(described,/contact-phone-help/);
+  assert.match(described,/contact-phone-error/);
+  const error=host.querySelector('#contact-phone-error');
+  assert.ok(error);
+  assert.equal(error.textContent,'Enter a valid 8-digit Sierra Leone phone number.');
+  assert.doesNotMatch(error.textContent,/Orange|\+232\d/i);
+  await setValue(contact,'088 790011');
+  await blur(contact);
+  assert.equal(host.querySelector('#contact-phone-error'),null);
+  assert.equal(contact.getAttribute('aria-invalid'),null);
+});
+
+test('any Sierra Leone network is accepted at placement with telephone keypads on contact and payment', async()=>{
+  const calls=[];
+  await mount({authSession:session,client:fakeClient(async(name,options)=>{calls.push({name,options});return {data:null,error:{context:new Response(JSON.stringify({error:'INVALID_DELIVERY_ZONE'}),{status:400,headers:{'Content-Type':'application/json'}})}};})});
+  assert.equal(host.querySelector('#payment-phone').getAttribute('type'),'tel');
+  assert.equal(host.querySelector('#payment-phone').getAttribute('inputmode'),'tel');
+  assert.match(host.textContent,/Any Sierra Leone mobile network is accepted\./);
+  await setValue(cityField(),'Freetown');
+  await selectZone('zone-3');
+  await setValue(host.querySelector('[name="contact-phone"]'),'088 790011');
+  await toggle(host.querySelector('#reuse-phone'));
+  await submit();
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].name,'place-order');
+  assert.equal(calls[0].options.body.checkout.contact_phone,'+23288790011');
+  assert.equal(calls[0].options.body.checkout.payment_phone,'+23288790011');
+  assert.match(alertTexts().join(' '),/Please check your contact, payment and Freetown delivery details\./);
+});

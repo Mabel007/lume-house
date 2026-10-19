@@ -216,6 +216,19 @@ test("checkout localizes fields and honestly distinguishes delivery and payment"
   assert.match(html, /Delivery details needed/);
   assert.match(html, /Payment awaits confirmation/);
   assert.match(html, /aria-describedby="payment-help payment-error"/);
+  assert.match(html, /aria-describedby="contact-phone-help"/);
+  assert.match(html, /id="contact-phone-help"/);
+  assert.match(
+    html,
+    /Enter an 8-digit Sierra Leone phone number, with or without 0 or \+232\. Example: 0XX XXX XXX\./,
+  );
+  assert.match(
+    html,
+    /Any Sierra Leone mobile network is accepted\. Use 8 digits/,
+  );
+  assert.match(html, /Example: 0XX XXX XXX\./);
+  assert.equal((html.match(/inputmode="tel"/gi) ?? []).length, 2);
+  assert.doesNotMatch(html, /for example \+232|76521208/);
   assert.doesNotMatch(
     html,
     /State \/ region|Postal code|ZIP|Demo delivery|payment successful|order confirmed/i,
