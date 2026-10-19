@@ -14,11 +14,13 @@ import {
 } from "../../config/fulfilment";
 import {
   getPaymentPhone,
+  invalidPhoneMessage,
   normalizePhone,
   paymentProviders,
   validatePaymentPhone,
   type PaymentProvider,
 } from "./payment";
+import { checkoutMessages, cityProblem, isValidEmail } from "./validation";
 import { OrderSummary } from "./OrderSummary";
 import { EmptyCart } from "../../components/EmptyCart";
 import { useAuth } from "../auth/AuthContext";
@@ -57,8 +59,19 @@ export function CheckoutPage() {
   const [phone, setPhone] = useState("");
   const [touched, setTouched] = useState(false);
   const [contactTouched, setContactTouched] = useState(false);
+  const [attempted, setAttempted] = useState(false);
+  const [zoneTouched, setZoneTouched] = useState(false);
+  const [focusRequest, setFocusRequest] = useState(0);
+  const pendingFocus = useRef<string | null>(null);
   const userId = auth.session?.user.id;
   const userEmail = auth.session?.user.email;
+  useEffect(() => {
+    const target = pendingFocus.current;
+    if (!target) return;
+    pendingFocus.current = null;
+    const node = document.getElementById(target);
+    if (node && typeof node.focus === "function") node.focus();
+  }, [focusRequest]);
   useEffect(()=>{
     let active=true;
     const saved=userId?pendingRequest(userId):null;
@@ -92,15 +105,55 @@ export function CheckoutPage() {
     return () => { active = false; };
   }, [userId, userEmail]);
   const paymentPhone = getPaymentPhone(contactPhone, phone, reusePhone);
-  const error =
-    touched || reusePhone ? validatePaymentPhone(paymentPhone) : null;
-  const contactError = contactTouched ? validatePaymentPhone(contactPhone) : null;
+  // Ordered as the form renders so the first problem is also the first field to
+  // focus. Text rules mirror the trusted SQL; the database stays authoritative.
+  const problems: { id: string; message: string }[] = [];
+  if (!fullName.trim())
+    problems.push({ id: "full-name", message: checkoutMessages.fullName });
+  if (validatePaymentPhone(contactPhone))
+    problems.push({ id: "contact-phone", message: invalidPhoneMessage });
+  if (!email.trim())
+    problems.push({ id: "email", message: checkoutMessages.email });
+  else if (!isValidEmail(email))
+    problems.push({ id: "email", message: checkoutMessages.emailFormat });
+  if (fulfilment === "delivery") {
+    if (!address.trim())
+      problems.push({ id: "address", message: checkoutMessages.address });
+    if (!area.trim())
+      problems.push({ id: "area", message: checkoutMessages.area });
+    const cityMessage = cityProblem(city, deliveryConfig.serviceCity);
+    if (cityMessage) problems.push({ id: "city", message: cityMessage });
+    if (!zoneId)
+      problems.push({ id: "delivery-zone", message: checkoutMessages.zone });
+  }
+  if (validatePaymentPhone(paymentPhone))
+    problems.push({ id: "payment-phone", message: invalidPhoneMessage });
+  const problemFor = (id: string) =>
+    problems.find((problem) => problem.id === id)?.message;
+  const fullNameError = attempted ? problemFor("full-name") : undefined;
+  const emailError = attempted ? problemFor("email") : undefined;
+  const addressError = attempted ? problemFor("address") : undefined;
+  const areaError = attempted ? problemFor("area") : undefined;
+  const cityError =
+    cityTouched || attempted ? problemFor("city") : undefined;
+  const zoneError =
+    zoneTouched || attempted ? problemFor("delivery-zone") : undefined;
+  const paymentError =
+    touched || reusePhone ? problemFor("payment-phone") : undefined;
+  const contactError = contactTouched
+    ? problemFor("contact-phone")
+    : undefined;
   async function submit(event:React.FormEvent) {
     event.preventDefault();
     if(submittingRef.current||state.status!=='ready'||!userId)return;
-    setTouched(true);setContactTouched(true);
-    if(validatePaymentPhone(paymentPhone)||validatePaymentPhone(contactPhone)){setOrderError('Enter valid 8-digit Sierra Leone contact and payment numbers.');return;}
-    if(getDeliveryFee(fulfilment,city,zoneId)===null){setCityTouched(true);setOrderError('Choose a supported Freetown delivery zone.');return;}
+    setTouched(true);setContactTouched(true);setAttempted(true);
+    if(problems.length){
+      pendingFocus.current=problems[0].id;
+      setFocusRequest(value=>value+1);
+      const phonesOnly=problems.every(problem=>problem.id==='contact-phone'||problem.id==='payment-phone');
+      setOrderError(phonesOnly?'Enter valid 8-digit Sierra Leone contact and payment numbers.':'Please check your contact and delivery details before placing your order.');
+      return;
+    }
     const checkoutTicket=beginCheckout?.();
     if(beginCheckout && checkoutTicket==null){setOrderError('Wait for your Bag changes to finish saving.');return;}
     submittingRef.current=true;setSubmitting(true);setOrderError('');
@@ -146,9 +199,6 @@ export function CheckoutPage() {
     );
   const deliveryFee = getDeliveryFee(fulfilment, city, zoneId);
   const zone = deliveryConfig.zones.find((zone) => zone.id === zoneId);
-  const cityUnsupported =
-    city.trim().length > 0 &&
-    city.trim().toLowerCase() !== deliveryConfig.serviceCity.toLowerCase();
   return (
     <section className="wrap page-section">
       <Link to="/cart" className="back-link">
@@ -177,6 +227,7 @@ export function CheckoutPage() {
                 autoComplete="name"
                 value={fullName}
                 onChange={setFullName}
+                error={fullNameError}
                 wide
               />
               <Field
@@ -198,6 +249,7 @@ export function CheckoutPage() {
                 autoComplete="email"
                 value={email}
                 onChange={setEmail}
+                error={emailError}
               />
             </div>
             <p className="small-note" role="status">{profileNote || (!auth.session ? "Sign in to use your saved profile defaults. Online order placement will require an account." : "Checkout edits do not change your saved profile.")}</p>
@@ -233,6 +285,7 @@ export function CheckoutPage() {
                   autoComplete="address-line1"
                   value={address}
                   onChange={setAddress}
+                    error={addressError}
                     wide
                   />
                   <Field
@@ -241,6 +294,7 @@ export function CheckoutPage() {
                     autoComplete="address-level3"
                     value={area}
                     onChange={setArea}
+                    error={areaError}
                   />
                   <Field
                     label="City / town"
@@ -250,9 +304,7 @@ export function CheckoutPage() {
                     onChange={setCity}
                     list="delivery-city-options"
                     aria-describedby="delivery-city-help"
-                    aria-invalid={
-                      cityUnsupported && cityTouched ? true : undefined
-                    }
+                    error={cityError}
                     onBlur={() => setCityTouched(true)}
                   />
                   <div className="sm:col-span-2">
@@ -263,7 +315,11 @@ export function CheckoutPage() {
                       required
                       value={zoneId}
                       onChange={(event) => setZoneId(event.target.value)}
-                      aria-describedby="zone-help"
+                      onBlur={() => setZoneTouched(true)}
+                      aria-invalid={zoneError ? true : undefined}
+                      aria-describedby={
+                        zoneError ? "zone-help delivery-zone-error" : "zone-help"
+                      }
                     >
                       <option value="">Choose your delivery zone</option>
                       {deliveryConfig.zones
@@ -279,6 +335,11 @@ export function CheckoutPage() {
                         ? `${zone.coverage}. Delivery: ${formatMoney(zone.fee)}.`
                         : "Select a zone to calculate delivery and your total."}
                     </p>
+                    {zoneError && (
+                      <p className="field-error" id="delivery-zone-error">
+                        {zoneError}
+                      </p>
+                    )}
                   </div>
                   <div className="sm:col-span-2">
                     <label htmlFor="instructions">
@@ -300,11 +361,6 @@ export function CheckoutPage() {
                 <p className="small-note" id="delivery-city-help">
                   We currently deliver within {deliveryConfig.serviceCity} only.
                 </p>
-                {cityUnsupported && cityTouched && (
-                  <p className="field-error" role="alert">
-                    Delivery is currently limited to {deliveryConfig.serviceCity}.
-                  </p>
-                )}
               </div>
             ) : (
               <p key="pickup" className="checkout-notice fulfilment-panel">
@@ -347,7 +403,7 @@ export function CheckoutPage() {
                     setTouched(true);
                     if (!reusePhone) setPhone(normalizePhone(phone));
                   }}
-                  aria-invalid={error ? true : undefined}
+                  aria-invalid={paymentError ? true : undefined}
                   aria-describedby="payment-help payment-error"
                 />
                 <label className="phone-reuse" htmlFor="reuse-phone">
@@ -368,8 +424,8 @@ export function CheckoutPage() {
                   When selected, this follows your contact number. Turning it
                   off restores your separately entered payment number.
                 </p>
-                <p id="payment-error" className="field-error" role="status">
-                  {error}
+                <p id="payment-error" className="field-error">
+                  {paymentError}
                 </p>
               </div>
             </div>

@@ -59,6 +59,14 @@ async function chooseRadio(name,value){const node=host.querySelector(`input[name
 async function toggle(node){assert.ok(node);await act(async()=>node.click());}
 async function blur(node){assert.ok(node);await act(async()=>node.dispatchEvent(new dom.window.FocusEvent('focusout',{bubbles:true})));}
 async function submit(){const form=host.querySelector('form');assert.ok(form);await act(async()=>form.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})));}
+async function fillRequired(){
+  await setValue(host.querySelector('[name="full-name"]'),'Fixture Customer');
+  await setValue(host.querySelector('[name="email"]'),'fixture@example.invalid');
+  await setValue(host.querySelector('[name="address"]'),'12 Test Street');
+  await setValue(host.querySelector('[name="area"]'),'Lumley');
+  await setValue(cityField(),'Freetown');
+  await selectZone('zone-3');
+}
 
 test('delivery eligibility explains the Freetown limitation, lists active zones and shows NLE fee and totals', async()=>{
   await mount({authSession:session});
@@ -78,7 +86,8 @@ test('delivery eligibility explains the Freetown limitation, lists active zones 
   await setValue(cityField(),'Bo');
   await blur(cityField());
   assert.equal(cityField().getAttribute('aria-invalid'),'true');
-  assert.ok(alertTexts().includes('Delivery is currently limited to Freetown.'));
+  assert.match(cityField().getAttribute('aria-describedby'),/city-error/);
+  assert.equal(host.querySelector('#city-error').textContent,'Delivery is currently limited to Freetown.');
   assert.equal(button().disabled,true);
   await setValue(cityField(),' Freetown ');
   await blur(cityField());
@@ -126,8 +135,7 @@ test('Place order stays disabled while Bag changes are saving', async()=>{
 test('invalid trusted delivery responses surface safe guidance and never claim payment success', async()=>{
   const calls=[];
   await mount({authSession:session,client:fakeClient(async(name,options)=>{calls.push({name,options});return {data:null,error:{context:new Response(JSON.stringify({error:'INVALID_DELIVERY_ZONE'}),{status:400,headers:{'Content-Type':'application/json'}})}};})});
-  await setValue(cityField(),'Freetown');
-  await selectZone('zone-3');
+  await fillRequired();
   await setValue(host.querySelector('[name="contact-phone"]'),'76521208');
   await toggle(host.querySelector('#reuse-phone'));
   await submit();
@@ -170,8 +178,7 @@ test('any Sierra Leone network is accepted at placement with telephone keypads o
   assert.equal(host.querySelector('#payment-phone').getAttribute('type'),'tel');
   assert.equal(host.querySelector('#payment-phone').getAttribute('inputmode'),'tel');
   assert.match(host.textContent,/Any Sierra Leone mobile network is accepted\./);
-  await setValue(cityField(),'Freetown');
-  await selectZone('zone-3');
+  await fillRequired();
   await setValue(host.querySelector('[name="contact-phone"]'),'088 790011');
   await toggle(host.querySelector('#reuse-phone'));
   await submit();
