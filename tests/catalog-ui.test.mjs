@@ -222,6 +222,10 @@ test("checkout localizes fields and honestly distinguishes delivery and payment"
   );
   assert.doesNotMatch(html, /chrisbarbz17|Naj Flex|Sheriff Drive/);
   assert.match(html, /name="delivery-zone" required/);
+  assert.match(html, /list="delivery-city-options"/);
+  assert.match(html, /<datalist id="delivery-city-options">/);
+  assert.match(html, /aria-describedby="delivery-city-help"/);
+  assert.match(html, /id="delivery-city-help">We currently deliver within Freetown only\./);
   assert.match(html, /NLE 40/);
   assert.match(html, /NLE 50/);
   assert.match(html, /NLE 60/);

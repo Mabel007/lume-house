@@ -1,6 +1,6 @@
 import { FormField } from '../../components/FormField';
 import { variantLabel } from "../products/variants";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../cart/CartContext";
 import { getCartLines } from "../cart/cart";
@@ -46,6 +46,7 @@ export function CheckoutPage() {
   const requestId=useRef<string|null>(null);
   const [fulfilment, setFulfilment] = useState<Fulfilment>("delivery");
   const [city, setCity] = useState("");
+  const [cityTouched, setCityTouched] = useState(false);
   const [area, setArea] = useState("");
   const [address, setAddress] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -97,7 +98,7 @@ export function CheckoutPage() {
     if(submittingRef.current||state.status!=='ready'||!userId)return;
     setTouched(true);
     if(validatePaymentPhone(paymentPhone)||validatePaymentPhone(contactPhone)){setOrderError('Enter valid Sierra Leone contact and payment numbers.');return;}
-    if(getDeliveryFee(fulfilment,city,zoneId)===null){setOrderError('Choose a supported Freetown delivery zone.');return;}
+    if(getDeliveryFee(fulfilment,city,zoneId)===null){setCityTouched(true);setOrderError('Choose a supported Freetown delivery zone.');return;}
     const checkoutTicket=beginCheckout?.();
     if(beginCheckout && checkoutTicket==null){setOrderError('Wait for your Bag changes to finish saving.');return;}
     submittingRef.current=true;setSubmitting(true);setOrderError('');
@@ -143,6 +144,9 @@ export function CheckoutPage() {
     );
   const deliveryFee = getDeliveryFee(fulfilment, city, zoneId);
   const zone = deliveryConfig.zones.find((zone) => zone.id === zoneId);
+  const cityUnsupported =
+    city.trim().length > 0 &&
+    city.trim().toLowerCase() !== deliveryConfig.serviceCity.toLowerCase();
   return (
     <section className="wrap page-section">
       <Link to="/cart" className="back-link">
@@ -238,6 +242,12 @@ export function CheckoutPage() {
                     autoComplete="address-level2"
                     value={city}
                     onChange={setCity}
+                    list="delivery-city-options"
+                    aria-describedby="delivery-city-help"
+                    aria-invalid={
+                      cityUnsupported && cityTouched ? true : undefined
+                    }
+                    onBlur={() => setCityTouched(true)}
                   />
                   <div className="sm:col-span-2">
                     <label htmlFor="delivery-zone">Delivery zone *</label>
@@ -278,9 +288,15 @@ export function CheckoutPage() {
                     />
                   </div>
                 </div>
-                {city.trim() && city.trim().toLowerCase() !== "freetown" && (
-                  <p className="field-error" role="status">
-                    Delivery is currently limited to Freetown.
+                <datalist id="delivery-city-options">
+                  <option value={deliveryConfig.serviceCity} />
+                </datalist>
+                <p className="small-note" id="delivery-city-help">
+                  We currently deliver within {deliveryConfig.serviceCity} only.
+                </p>
+                {cityUnsupported && cityTouched && (
+                  <p className="field-error" role="alert">
+                    Delivery is currently limited to {deliveryConfig.serviceCity}.
                   </p>
                 )}
               </div>
@@ -409,6 +425,7 @@ function Field({
   wide = false,
   value,
   onChange,
+  ...rest
 }: {
   label: string;
   name: string;
@@ -417,6 +434,9 @@ function Field({
   wide?: boolean;
   value?: string;
   onChange?: (value: string) => void;
-}) {
-  return <FormField label={label} name={name} id={name} type={type} autoComplete={autoComplete} wide={wide} required maxLength={200} value={value} onChange={onChange ? event=>onChange(event.target.value) : undefined}/>;
+} & Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "label" | "name" | "type" | "autoComplete" | "wide" | "value" | "onChange"
+>) {
+  return <FormField label={label} name={name} id={name} type={type} autoComplete={autoComplete} wide={wide} required maxLength={200} value={value} onChange={onChange ? event=>onChange(event.target.value) : undefined} {...rest}/>;
 }
