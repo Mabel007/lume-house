@@ -352,11 +352,11 @@ test("guest Bag page updates quantities and removals in local storage with deriv
     items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 2, mergeId: "11111111-1111-4111-8111-111111111111" }],
   }));
   await mount(withProviders(guestAuth, React.createElement(CartPage)));
-  assert.match(host.textContent, /NLe 36/);
+  assert.match(host.textContent, /NLE 36/);
   await click(buttonByLabel("Increase Fixture mug quantity"));
   assert.deepEqual(readStored().items.map(item => item.quantity), [3]);
-  assert.match(host.textContent, /NLe 54/);
-  assert.match(host.textContent, /Bag subtotal NLe 54\./);
+  assert.match(host.textContent, /NLE 54/);
+  assert.match(host.textContent, /Bag subtotal NLE 54\./);
   await click(buttonByLabel("Remove Fixture mug"));
   assert.deepEqual(readStored().items, []);
   assert.match(host.textContent, /Your Bag is taking a slow day/);
@@ -381,7 +381,7 @@ test("cart quantity input ignores empty, zero, negative, decimal and over-limit 
   await typeQuantity(input, "7");
   assert.equal(input.value, "7", "a valid typed quantity commits");
   assert.deepEqual(readStored().items.map(item => item.quantity), [7]);
-  assert.match(host.textContent, /NLe 126/);
+  assert.match(host.textContent, /NLE 126/);
 });
 
 test("cart quantity controls enforce the lower boundary at 1", async () => {
@@ -407,7 +407,7 @@ test("cart quantity controls enforce the upper boundary at 99", async () => {
     items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 99, mergeId: "11111111-1111-4111-8111-111111111111" }],
   }));
   await mount(withProviders(guestAuth, React.createElement(CartPage)));
-  assert.match(host.textContent, /NLe 1,782/);
+  assert.match(host.textContent, /NLE 1,782/);
   assert.equal(buttonByLabel("Increase Fixture mug quantity").disabled, true, "increment is disabled at 99");
   await click(buttonByLabel("Decrease Fixture mug quantity"));
   assert.deepEqual(readStored().items.map(item => item.quantity), [98]);
@@ -452,7 +452,7 @@ test("authenticated Bag page removal failure shows no success claim and keeps th
   assert.match(toast.textContent, /couldn't confirm removing Fixture mug from your Bag/);
   assert.doesNotMatch(toast.textContent, /was not removed/);
   assert.doesNotMatch(host.textContent, /Removed Fixture mug from your Bag/);
-  assert.match(host.textContent, /NLe 36/);
+  assert.match(host.textContent, /NLE 36/);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
   assert.equal(buttonByLabel("Remove Fixture mug").disabled, false);
 });
@@ -467,7 +467,7 @@ test("authenticated Bag page quantity and removal use set and remove RPC modes",
     return next.promise;
   });
   await mount(withProviders(userAuth, React.createElement(CartPage)));
-  assert.match(host.textContent, /NLe 36/);
+  assert.match(host.textContent, /NLE 36/);
   await click(buttonByLabel("Increase Fixture mug quantity"));
   const setCall = calls.find(call => call.name === "change_variant_cart");
   assert.equal(setCall.args.p_variant_id, "v-default");
@@ -476,7 +476,7 @@ test("authenticated Bag page quantity and removal use set and remove RPC modes",
   assert.equal(setCall.args.p_expected_quantity, 2);
   assert.match(setCall.args.p_operation_id, /^[0-9a-f-]{36}$/);
   await settle(changes[0], { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 3 }] }, error: null });
-  assert.match(host.textContent, /NLe 54/);
+  assert.match(host.textContent, /NLE 54/);
   await click(buttonByLabel("Remove Fixture mug"));
   const removeCall = calls.filter(call => call.name === "change_variant_cart").pop();
   assert.equal(removeCall.args.p_variant_id, "v-default");
@@ -501,7 +501,7 @@ test("guest items merge into the authenticated Bag on sign-in with stable receip
   assert.equal(mergeCall.args.p_expected_quantity, null);
   assert.equal(mergeCall.args.p_operation_id, "11111111-1111-4111-8111-111111111111");
   await settle(merge, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null });
-  assert.match(host.textContent, /NLe 36/);
+  assert.match(host.textContent, /NLE 36/);
   assert.deepEqual(readStored().items, []);
 });
 
@@ -841,7 +841,7 @@ test("uncertain removal after a lost RPC response makes no definite claim and re
     return change.promise;
   });
   await mount(layoutTree(userAuth, "/cart"));
-  assert.match(host.textContent, /NLe 36/);
+  assert.match(host.textContent, /NLE 36/);
   await click(buttonByLabel("Remove Fixture mug"));
   await settleError(change, new TypeError("Failed to fetch"));
   const toast = host.querySelector(".bag-notice");
@@ -1199,4 +1199,20 @@ test("StrictMode double-mount keeps Bag page removal confirmations rendering", a
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast, "removal toast renders after StrictMode replays the mount effect");
   assert.match(toast.textContent, /Removed Fixture mug from your Bag/);
+});
+
+// Integration regression (B1 Bag surfaces x B2 approved D1): the Bag must render the
+// shared uppercase NLE label derived from configuration, never the legacy mixed-case
+// "NLe" literal that predated the currency decision.
+test("Bag surfaces render the shared uppercase NLE label with no legacy NLe casing", async () => {
+  bagClient(() => emptyCart());
+  sessionStorage.setItem("lume-guest-cart", JSON.stringify({
+    version: 2,
+    items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 2, mergeId: "11111111-1111-4111-8111-111111111111" }],
+  }));
+  await mount(withProviders(guestAuth, React.createElement(CartPage)));
+  assert.match(host.textContent, /NLE 36/, "Bag renders the uppercase NLE label");
+  assert.match(host.textContent, /NLE 18 each/, "per-unit price uses the uppercase NLE label");
+  assert.match(host.textContent, /Bag subtotal NLE 36\./, "Bag subtotal live region uses uppercase NLE");
+  assert.doesNotMatch(host.textContent, /NLe/, "legacy mixed-case NLe label must not resurface on Bag surfaces");
 });
