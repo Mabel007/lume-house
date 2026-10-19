@@ -105,11 +105,18 @@ test('pickup removes delivery requirements with a zero fee and switching back re
   assert.equal(button().disabled,true);
 });
 
-test('Place order stays disabled without a session or while Bag changes are saving', async()=>{
+test('a guest is offered an actionable Account sign-in link instead of an inert Place order button', async()=>{
   await mount({authSession:null});
-  assert.match(button().textContent,/Sign in to place order/);
-  assert.equal(button().disabled,true);
+  assert.equal(button(),null);
+  const link=host.querySelector('a[href="/account"]');
+  assert.ok(link);
+  assert.match(link.textContent,/Sign in to place your order/);
+  assert.match(host.textContent,/An account is required before you can place your order\./);
+});
+
+test('Place order stays disabled while Bag changes are saving', async()=>{
   await mount({authSession:session,cartStatus:'saving'});
+  assert.match(button().textContent,/Place order/);
   await setValue(cityField(),'Freetown');
   await selectZone('zone-1');
   assert.deepEqual(totals(),['NLE 36','NLE 40','NLE 76']);

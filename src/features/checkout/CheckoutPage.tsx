@@ -397,17 +397,23 @@ export function CheckoutPage() {
               deliveryFee={deliveryFee}
             />
           </div>
-          <button
-            type="submit"
-            form="checkout-form"
-            className="button w-full"
-            disabled={!auth.session || submitting || cartStatus==='saving' || cartStatus==='loading' || cartStatus==='error' || recovering || deliveryFee===null}
-            aria-describedby="checkout-payment"
-          >
-            {submitting?'Placing order…':auth.session?'Place order':'Sign in to place order'}
-          </button>
+          {auth.session ? (
+            <button
+              type="submit"
+              form="checkout-form"
+              className="button w-full"
+              disabled={submitting || cartStatus==='saving' || cartStatus==='loading' || cartStatus==='error' || recovering || deliveryFee===null}
+              aria-describedby="checkout-payment"
+            >
+              {submitting?'Placing order…':'Place order'}
+            </button>
+          ) : auth.loading ? (
+            <p className="small-note" role="status">Restoring your session…</p>
+          ) : (
+            <Link className="button w-full" to="/account" aria-describedby="checkout-payment">Sign in to place your order</Link>
+          )}
           <p className="small-note">
-            {auth.session ? "Your checkout details will be saved with this order, independently of your profile." : "Sign in to place your order."}
+            {auth.session ? "Your checkout details will be saved with this order, independently of your profile." : auth.loading ? "Checking your session before order placement." : "An account is required before you can place your order."}
           </p>
           <Link to="/cart" className="text-link">
             Edit your Bag

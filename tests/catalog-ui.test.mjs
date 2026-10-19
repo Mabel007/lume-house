@@ -166,7 +166,7 @@ test("empty catalog does not fall back to demo products", () => {
   assert.match(html, /There are no available products/);
   assert.doesNotMatch(html, /product-card|Everyday ceramic mug/);
 });
-test("ready catalog feeds cards, cart prices and disabled checkout", () => {
+test("ready catalog feeds cards, cart prices and guest sign-in checkout", () => {
   const state = { status: "ready", products: [fixture] };
   assert.match(render(ShopPage, state), /Fixture mug/);
   assert.match(render(ShopPage, state), /Fixture category/);
@@ -174,7 +174,7 @@ test("ready catalog feeds cards, cart prices and disabled checkout", () => {
   assert.match(cart, /NLE 36/);
   assert.match(cart, /Choose at checkout/);
   const checkout = render(CheckoutPage, state);
-  assert.match(checkout, /disabled=""[^>]*>Sign in to place order/);
+  assert.match(checkout, /href="\/account"[^>]*>Sign in to place your order/);
   assert.match(checkout, /Use my contact phone number/);
   assert.match(
     render(CartPage, {
