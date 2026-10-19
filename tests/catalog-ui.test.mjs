@@ -307,13 +307,38 @@ test('storefront search has a labelled native search control and polite results 
  assert.doesNotMatch(html,/No pieces found|Reset search/);
 });
 
-test("global loading saving and failure feedback uses Bag without claiming persistence success", async () => {
+test("Add to Bag feedback waits for confirmed persistence before claiming success", async () => {
   assert.match(renderLayout("/", { items: [], status: "loading" }), /Loading your Bag/);
   assert.match(renderLayout("/", { items, status: "saving" }), /Saving your Bag/);
   assert.match(renderLayout("/", { items, status: "error", error: "Your Bag change was not saved.", retry() {} }), /Retry saved Bag/);
   const { readFileSync } = await import("node:fs");
-  assert.match(readFileSync("src/features/products/ShopPage.tsx", "utf8"), /Bag update requested/);
+  const shop = readFileSync("src/features/products/ShopPage.tsx", "utf8");
+  const details = readFileSync("src/features/products/ProductDetailsPage.tsx", "utf8");
+  const feedback = readFileSync("src/features/cart/bagFeedback.ts", "utf8");
+  assert.match(details, /await dispatch\(\{type:'add'/);
+  assert.match(feedback, /Added \$\{quantity\} × /);
+  assert.match(shop, /outcome\.kind==="confirmed"/);
+  assert.match(shop, /bagAddedText\(1,name,""\)/);
+  assert.doesNotMatch(shop, /Bag update requested/);
   assert.doesNotMatch(readFileSync("src/features/cart/CartProvider.tsx", "utf8"), /Your (?:saved )?cart/i);
+});
+
+test("Product Details groups add action, notice and Bag link in one stable actions row", async () => {
+  const { readFileSync } = await import("node:fs");
+  const details = readFileSync("src/features/products/ProductDetailsPage.tsx", "utf8");
+  const group = details.match(/<div className="product-details-actions">[\s\S]*?<\/div>/);
+  assert.ok(group, "actions group wraps button, status notice and View Bag link");
+  assert.match(group[0], /product-details-add/);
+  assert.match(group[0], /role="status" aria-live="polite"/);
+  assert.match(group[0], /to="\/cart">View your Bag/);
+  assert.ok(group[0].indexOf("product-details-add") < group[0].indexOf('to="/cart"'), "focus order: add button before Bag link");
+  const css = readFileSync("src/styles.css", "utf8");
+  assert.match(css, /\.product-details-actions \{ display: flex; flex-direction: column;/);
+  assert.match(css, /\.product-details-actions \.feedback \{ display: block; margin: 0; min-height: 5em; \}/);
+  assert.match(css, /@media \(max-width: 1000px\) \{ \.product-details-actions \.feedback \{ min-height: 6\.8em; \} \}/, "≤1000px reserves four feedback lines for long names");
+  assert.match(css, /@media \(max-width: 479px\) \{ \.product-details-actions \.feedback \{ min-height: 8\.8em; \} \}/, "≤479px reserves five feedback lines so long-name feedback cannot shift the Bag link");
+  assert.match(css, /\.product-details-actions \.feedback:empty \{ display: block; \}/, "notice space is reserved so the Bag link never shifts");
+  assert.match(css, /@media \(max-width: 479px\)[^@]*\.product-details-actions \.product-details-add \{ width: 100%;/);
 });
 
 test("account initials handle whitespace, single names, missing names and Unicode graphemes", () => {

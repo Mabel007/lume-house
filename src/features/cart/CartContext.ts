@@ -1,10 +1,14 @@
 import { createContext, useContext } from "react";
 import type { CartItem, CartAction } from "./cart";
-import type { Dispatch } from "react";
 
+export type CartOutcome =
+  | { kind: "confirmed"; items: CartItem[] }
+  | { kind: "rejected"; message: string }
+  | { kind: "superseded" };
+export type CartDispatch = (action: CartAction) => Promise<CartOutcome>;
 export const CartContext = createContext<{
   items: CartItem[];
-  dispatch: Dispatch<CartAction>;
+  dispatch: CartDispatch;
   status?: string;
   error?: string | null;
   retry?: () => void;

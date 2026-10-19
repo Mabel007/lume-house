@@ -1,6 +1,6 @@
 ﻿import {useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import {cartReducer,cartLineKey,getCartLines,type CartItem,type CartAction} from './cart';
-import {CartContext} from './CartContext';
+import {CartContext,type CartOutcome} from './CartContext';
 import {useAuth} from '../auth/AuthContext';
 import {useProducts} from '../products/ProductContext';
 import {getSupabaseClient} from '../../lib/supabase/client';
@@ -56,29 +56,44 @@ export function CartProvider({children}:{children:ReactNode}) {
     }
     void restore();return()=>{active=false;};
   },[userId,accessToken,auth.loading,catalog,revision]);
-  function dispatch(action:CartAction) {
-    if(auth.loading||locked.current)return;
-    if(!userId){storeGuest(cartReducer(guest.current,action));return;}
+  function dispatch(action:CartAction):Promise<CartOutcome> {
+    if(auth.loading||locked.current)return Promise.resolve({kind:'superseded'});
+    if(!userId){
+      const next=cartReducer(guest.current,action);
+      if(next===guest.current)return Promise.resolve({kind:'superseded'});
+      storeGuest(next);
+      return Promise.resolve({kind:'confirmed',items:guest.current});
+    }
     if(action.type==='remove'&&pendingGuest(guest.current,catalog.status==='ready'?catalog.products:[]).some(item=>cartLineKey(item)===cartLineKey(action))){
-      storeGuest(guest.current.filter(item=>cartLineKey(item)!==cartLineKey(action)));setRevision(value=>value+1);return;
+      storeGuest(guest.current.filter(item=>cartLineKey(item)!==cartLineKey(action)));setRevision(value=>value+1);
+      return Promise.resolve({kind:'confirmed',items:withPending(current.current,guest.current,catalog.status==='ready'?catalog.products:[])});
     }
     if(!action.variantId){
       if(action.type==='remove'){
         storeGuest(guest.current.filter(item=>cartLineKey(item)!==cartLineKey(action)));
         const items=current.current.filter(item=>cartLineKey(item)!==cartLineKey(action));current.current=items;setSaved({userId,items});setError(null);
+        return Promise.resolve({kind:'confirmed',items:withPending(items,guest.current,catalog.status==='ready'?catalog.products:[])});
       }
-      return;
+      return Promise.resolve({kind:'superseded'});
     }
-    if(!accessToken)return;
-    const before=current.current;const next=cartReducer(before,action);if(next===before)return;
+    if(!accessToken)return Promise.resolve({kind:'superseded'});
+    const before=current.current;const next=cartReducer(before,action);if(next===before)return Promise.resolve({kind:'superseded'});
     const existing=before.find(item=>cartLineKey(item)===cartLineKey(action));const generation=epoch.current;
     locked.current=true;setStatus('saving');setError(null);
     const mode=action.type==='add'?'add':action.type==='quantity'?'set':'remove';
     const quantity=action.type==='remove'?null:action.type==='add'?action.quantity??1:action.quantity;
-    void changeVariantCart(getSupabaseClient(),accessToken,action.variantId,mode,quantity,mode==='add'?null:existing?.quantity??0,crypto.randomUUID()).then(loaded=>{
-      if(identity.current===userId&&epoch.current===generation){const items=withPending(loaded.items,guest.current,catalog.status==='ready'?catalog.products:[]);current.current=items;setSaved({userId,items});}
-    }).catch(reason=>{
-      if(identity.current===userId&&epoch.current===generation)setError(reason instanceof VariantCartError?reason.message:'Your Bag change could not be confirmed. Refresh it before trying again.');
+    return changeVariantCart(getSupabaseClient(),accessToken,action.variantId,mode,quantity,mode==='add'?null:existing?.quantity??0,crypto.randomUUID()).then((loaded):CartOutcome=>{
+      if(identity.current===userId&&epoch.current===generation){
+        const items=withPending(loaded.items,guest.current,catalog.status==='ready'?catalog.products:[]);
+        current.current=items;setSaved({userId,items});
+        return {kind:'confirmed',items};
+      }
+      return {kind:'superseded'};
+    }).catch((reason):CartOutcome=>{
+      if(!(identity.current===userId&&epoch.current===generation))return {kind:'superseded'};
+      const message=reason instanceof VariantCartError?reason.message:'Your Bag change could not be confirmed. Refresh it before trying again.';
+      setError(message);
+      return {kind:'rejected',message};
     }).finally(()=>{if(identity.current===userId&&epoch.current===generation){locked.current=false;setStatus('ready');}});
   }
   const items=visibleCart(auth.loading,userId,saved,guestItems);
