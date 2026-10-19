@@ -991,6 +991,184 @@ test("repeated identical notices render a fresh node for the live region", async
   assert.ok(host.querySelector('.bag-notice-region[role="status"][aria-live="polite"]'), "the polite live region stays present for announcements");
 });
 
+// Focus-aware toast placement: jsdom has no layout engine, so tests stub the
+// rectangles the component measures and then exercise the real intersection math.
+function rectOf({ top, bottom, left, right }) {
+  return { top, bottom, left, right, x: left, y: top, width: right - left, height: bottom - top, toJSON() {} };
+}
+function stubLayout({ viewport = 800, toastHeight = 50 } = {}) {
+  const originalRect = dom.window.Element.prototype.getBoundingClientRect;
+  const originalInnerHeight = dom.window.innerHeight;
+  Object.defineProperty(dom.window, "innerHeight", { configurable: true, value: viewport });
+  dom.window.Element.prototype.getBoundingClientRect = function () {
+    if (this.classList?.contains("bag-notice")) return rectOf({ top: 0, bottom: toastHeight, left: 0, right: 300 });
+    return this.__box ? rectOf(this.__box) : rectOf({ top: 0, bottom: 0, left: 0, right: 0 });
+  };
+  return () => {
+    dom.window.Element.prototype.getBoundingClientRect = originalRect;
+    Object.defineProperty(dom.window, "innerHeight", { configurable: true, value: originalInnerHeight });
+  };
+}
+function setBox(element, box) {
+  element.__box = box;
+  return element;
+}
+function toastBand(region, viewport, toastHeight) {
+  return region.classList.contains("is-top")
+    ? { top: 20, bottom: 20 + toastHeight, left: 0, right: 300 }
+    : { top: viewport - 20 - toastHeight, bottom: viewport - 20, left: 0, right: 300 };
+}
+function intersects(a, b) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+function sizedNoticeHost(BagNotice, { first = "First message", second = "Second message" } = {}) {
+  return function NoticeHost() {
+    const [message, setMessage] = React.useState(null);
+    return React.createElement("div", null,
+      React.createElement("button", { type: "button", id: "bottom-control", onClick: () => setMessage({ id: 1, tone: "success", text: first }) }, "show"),
+      React.createElement("button", { type: "button", id: "top-control", onClick: () => setMessage({ id: 1, tone: "success", text: first }) }, "top"),
+      React.createElement("button", { type: "button", id: "replace", onClick: () => setMessage({ id: 2, tone: "failure", text: second }) }, "replace"),
+      React.createElement(BagNotice, { message, onExpire: () => setMessage(null) }));
+  };
+}
+
+test("a focused control at the viewport bottom lifts the notice into a clear top band", async () => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  const restore = stubLayout({ viewport: 800, toastHeight: 50 });
+  try {
+    await mount(React.createElement(sizedNoticeHost(BagNotice)));
+    const bottomControl = host.querySelector("#bottom-control");
+    setBox(bottomControl, { top: 740, bottom: 792, left: 18, right: 156 });
+    bottomControl.focus();
+    await click(bottomControl);
+    const region = host.querySelector(".bag-notice-region");
+    assert.ok(region.classList.contains("is-top"), "the notice moves to the top band");
+    assert.ok(!intersects(toastBand(region, 800, 50), { top: 740, bottom: 792, left: 18, right: 156 }),
+      "the top band does not cover the focused control");
+    assert.equal(document.activeElement, bottomControl, "placement never moves focus");
+    assert.equal(host.querySelectorAll(".bag-notice").length, 1, "a single message stays visible");
+    assert.ok(host.querySelector('.bag-notice-region[role="status"][aria-live="polite"]'));
+  } finally {
+    restore();
+  }
+});
+
+test("a focused control near the viewport top keeps the default bottom placement", async () => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  const restore = stubLayout({ viewport: 800, toastHeight: 50 });
+  try {
+    await mount(React.createElement(sizedNoticeHost(BagNotice)));
+    const topControl = host.querySelector("#top-control");
+    setBox(topControl, { top: 12, bottom: 68, left: 12, right: 149 });
+    topControl.focus();
+    await click(topControl);
+    const region = host.querySelector(".bag-notice-region");
+    assert.ok(!region.classList.contains("is-top"), "the default bottom band already clears the control");
+    assert.ok(!intersects(toastBand(region, 800, 50), { top: 12, bottom: 68, left: 12, right: 149 }));
+    assert.equal(document.activeElement, topControl);
+  } finally {
+    restore();
+  }
+});
+
+test("placement follows keyboard focus between top and bottom controls while the notice stays live", async () => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  const restore = stubLayout({ viewport: 800, toastHeight: 50 });
+  try {
+    await mount(React.createElement(sizedNoticeHost(BagNotice)));
+    const bottomControl = host.querySelector("#bottom-control");
+    const topControl = host.querySelector("#top-control");
+    setBox(bottomControl, { top: 740, bottom: 792, left: 18, right: 156 });
+    setBox(topControl, { top: 12, bottom: 68, left: 12, right: 149 });
+    bottomControl.focus();
+    await click(bottomControl);
+    assert.ok(host.querySelector(".bag-notice-region").classList.contains("is-top"));
+
+    await act(async () => { topControl.focus(); });
+    let region = host.querySelector(".bag-notice-region");
+    assert.ok(!region.classList.contains("is-top"), "focus moving to the top returns the toast to the bottom");
+    assert.ok(!intersects(toastBand(region, 800, 50), { top: 12, bottom: 68, left: 12, right: 149 }));
+    assert.equal(document.activeElement, topControl, "focus stays on the control the visitor chose");
+
+    await act(async () => { bottomControl.focus(); });
+    region = host.querySelector(".bag-notice-region");
+    assert.ok(region.classList.contains("is-top"), "focus returning to the bottom lifts the toast again");
+    assert.ok(!intersects(toastBand(region, 800, 50), { top: 740, bottom: 792, left: 18, right: 156 }));
+    assert.equal(document.activeElement, bottomControl);
+    assert.match(host.textContent, /First message/);
+  } finally {
+    restore();
+  }
+});
+
+test("placement is recomputed when the viewport is resized", async () => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  const restore = stubLayout({ viewport: 800, toastHeight: 50 });
+  try {
+    await mount(React.createElement(sizedNoticeHost(BagNotice)));
+    const control = host.querySelector("#bottom-control");
+    setBox(control, { top: 600, bottom: 650, left: 18, right: 156 });
+    control.focus();
+    await click(control);
+    assert.ok(!host.querySelector(".bag-notice-region").classList.contains("is-top"),
+      "at 800px tall the bottom band (730-780) misses a control ending at 650");
+
+    Object.defineProperty(dom.window, "innerHeight", { configurable: true, value: 667 });
+    await act(async () => { dom.window.dispatchEvent(new dom.window.Event("resize")); });
+    let region = host.querySelector(".bag-notice-region");
+    assert.ok(region.classList.contains("is-top"), "at 667px tall the bottom band (597-647) covers the control");
+    assert.ok(!intersects(toastBand(region, 667, 50), { top: 600, bottom: 650, left: 18, right: 156 }));
+
+    Object.defineProperty(dom.window, "innerHeight", { configurable: true, value: 800 });
+    await act(async () => { dom.window.dispatchEvent(new dom.window.Event("resize")); });
+    region = host.querySelector(".bag-notice-region");
+    assert.ok(!region.classList.contains("is-top"), "growing the viewport restores the bottom placement");
+  } finally {
+    restore();
+  }
+});
+
+test("replacement notices keep the newest message and re-run placement before expiring", async t => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  const restore = stubLayout({ viewport: 800, toastHeight: 50 });
+  try {
+    await mount(React.createElement(sizedNoticeHost(BagNotice, { first: "First message", second: "Second message" })));
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const control = host.querySelector("#bottom-control");
+    const replace = host.querySelector("#replace");
+    setBox(control, { top: 740, bottom: 792, left: 18, right: 156 });
+    control.focus();
+    await click(control);
+    assert.ok(host.querySelector(".bag-notice-region").classList.contains("is-top"));
+
+    await click(replace);
+    const toasts = host.querySelectorAll(".bag-notice");
+    assert.equal(toasts.length, 1, "newest message wins");
+    assert.match(toasts[0].textContent, /Second message/);
+    assert.ok(host.querySelector(".bag-notice-region").classList.contains("is-top"),
+      "replacement keeps the clear placement for the still-focused bottom control");
+    assert.equal(document.activeElement, control, "replacement does not steal focus");
+
+    await act(async () => { t.mock.timers.tick(4999); });
+    assert.ok(host.querySelector(".bag-notice"), "the replacement gets its own full expiry window");
+    await act(async () => { t.mock.timers.tick(1); });
+    assert.equal(host.querySelector(".bag-notice"), null);
+    assert.ok(!host.querySelector(".bag-notice-region").classList.contains("is-top"),
+      "clearing the message restores the default placement");
+  } finally {
+    t.mock.timers.reset();
+    restore();
+  }
+});
+
+test("focus-aware placement stays a single fixed live region with reduced-motion-safe styling", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync("src/styles.css", "utf8");
+  assert.match(css, /\.bag-notice-region\s*\{[^}]*position:\s*fixed;[^}]*pointer-events:\s*none;/);
+  assert.match(css, /\.bag-notice-region\.is-top\s*\{[^}]*top:\s*20px;[^}]*bottom:\s*auto;/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]{0,400}?animation:\s*none\s*!important/);
+});
+
 test("StrictMode double-mount keeps the details outcome guard live", async () => {
   bagClient(() => emptyCart());
   await mount(strictProviders(guestAuth, React.createElement(ProductDetails, { product })));

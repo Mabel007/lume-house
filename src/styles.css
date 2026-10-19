@@ -1092,6 +1092,7 @@ nav a,
 .feedback:empty { display: none; }
 .feedback.feedback-failure:not(:empty) { color: #8a4628; }
 .bag-notice-region { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 60; width: min(92vw, 420px); pointer-events: none; }
+.bag-notice-region.is-top { top: 20px; bottom: auto; }
 .bag-notice { margin: 0; padding: 14px 18px; background: #2f3a2d; color: #f7f5ef; font-size: 13px; line-height: 1.6; text-align: center; border: 1px solid #29382e; box-shadow: 0 10px 30px #29382e26; }
 .bag-notice.failure { background: #8a4628; border-color: #6f3820; }
 .account-note { background: #eaeade; padding: clamp(22px,3vw,36px); }
