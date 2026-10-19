@@ -62,9 +62,9 @@ function bagClient(handler) {
 }
 const emptyCart = () => Promise.resolve({ data: { id: "cart-1", items: [] }, error: null });
 function deferred() {
-  let resolve;
-  const promise = new Promise(done => { resolve = done; });
-  return { promise, resolve };
+  let resolve, reject;
+  const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
 }
 const readStored = () => JSON.parse(sessionStorage.getItem("lume-guest-cart") || "null");
 const button = text => [...host.querySelectorAll("button")].find(item => item.textContent === text || item.getAttribute("aria-label") === text);
@@ -80,20 +80,26 @@ async function click(element) {
 async function settle(deferredChange, value) {
   await act(async () => { deferredChange.resolve(value); await new Promise(resolve => setTimeout(resolve, 0)); });
 }
+async function settleError(deferredChange, reason) {
+  await act(async () => { deferredChange.reject(reason); await new Promise(resolve => setTimeout(resolve, 0)); });
+}
+async function flush() {
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+}
 function withProviders(auth, children) {
   return React.createElement(MemoryRouter, { initialEntries: ["/"] },
     React.createElement(AuthContext.Provider, { value: auth },
       React.createElement(ProductContext.Provider, { value: catalog },
         React.createElement(CartProvider, null, children))));
 }
-function layoutTree(auth) {
-  return React.createElement(MemoryRouter, { initialEntries: ["/"] },
+function layoutTree(auth, path = "/") {
+  return React.createElement(MemoryRouter, { initialEntries: [path] },
     React.createElement(AuthContext.Provider, { value: auth },
       React.createElement(ProductContext.Provider, { value: catalog },
         React.createElement(CartProvider, null,
           React.createElement(Routes, null,
             React.createElement(Route, { element: React.createElement(Layout) },
-              React.createElement(Route, { path: "/", element: React.createElement(ShopPage) })))))));
+              React.createElement(Route, { path, element: React.createElement(path === "/cart" ? CartPage : ShopPage) })))))));
 }
 function DoubleAddProbe() {
   const { items, dispatch } = useCart();
@@ -183,7 +189,8 @@ test("authenticated Add to Bag failure surfaces the global alert, keeps the Bag 
   assert.match(alert.textContent, /Retry saved Bag/);
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /Fixture mug was not added to your Bag\./);
+  assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Bag/);
+  assert.doesNotMatch(toast.textContent, /was not added/);
   assert.doesNotMatch(host.textContent, /Added 1 × Fixture mug to your Bag/);
   assert.equal(buttonByLabel("Add Fixture mug to Bag").disabled, false);
   assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Add to Bag/);
@@ -254,7 +261,8 @@ test("authenticated Bag page removal failure shows no success claim and keeps th
   await settle(change, { data: null, error: { code: "P0001", message: "fixture removal failure" } });
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /Fixture mug was not removed from your Bag\./);
+  assert.match(toast.textContent, /couldn't confirm removing Fixture mug from your Bag/);
+  assert.doesNotMatch(toast.textContent, /was not removed/);
   assert.doesNotMatch(host.textContent, /Removed Fixture mug from your Bag/);
   assert.match(host.textContent, /NLe 36/);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
@@ -332,6 +340,107 @@ test("Product Details actions group keeps the Bag link beside a reserved notice 
   const sameLink = group.querySelector('a[href="/cart"]');
   assert.equal(sameLink, link, "notice appearance must not replace or move the link within the group");
   assert.match(group.querySelector(".feedback").textContent, /Added 1 × Fixture mug to your Bag/);
+});
+
+test("uncertain add after a lost RPC response makes no definite claim and reload reconciles the applied line", async () => {
+  const change = deferred();
+  let loads = 0;
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart") {
+      loads += 1;
+      // The synthetic server committed the add, but the response was lost in transit.
+      return Promise.resolve(loads === 1
+        ? { data: { id: "cart-1", items: [] }, error: null }
+        : { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
+    }
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await settleError(change, new TypeError("Failed to fetch"));
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Bag/);
+  assert.match(toast.textContent, /Check your Bag before trying again/);
+  assert.doesNotMatch(host.textContent, /was not added|Added 1 × Fixture mug to your Bag/);
+  assert.ok(host.querySelector('[role="alert"]'), "global retry path stays available");
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "uncertain mutations are never repeated automatically");
+  await click(button("Retry saved Bag"));
+  await flush();
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "reload does not replay the uncertain mutation");
+  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(1\)/, "reload reconciles the actually-applied line");
+});
+
+test("uncertain add with a malformed saved-cart response after commit makes no definite claim and reload reconciles", async () => {
+  const change = deferred();
+  let loads = 0;
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart") {
+      loads += 1;
+      return Promise.resolve(loads === 1
+        ? { data: { id: "cart-1", items: [] }, error: null }
+        : { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
+    }
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await settle(change, { data: { unexpected: "shape" }, error: null });
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Bag/);
+  assert.doesNotMatch(host.textContent, /was not added|Added 1 × Fixture mug to your Bag/);
+  assert.ok(host.querySelector('[role="alert"]'));
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
+  await click(button("Retry saved Bag"));
+  await flush();
+  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(1\)/, "reload reconciles the actually-applied line");
+});
+
+test("uncertain removal after a lost RPC response makes no definite claim and reload reconciles the removed line", async () => {
+  const change = deferred();
+  let loads = 0;
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart") {
+      loads += 1;
+      // The synthetic server committed the removal, but the response was lost in transit.
+      return Promise.resolve({ data: { id: "cart-1", items: loads === 1 ? [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] : [] }, error: null });
+    }
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth, "/cart"));
+  assert.match(host.textContent, /NLe 36/);
+  await click(buttonByLabel("Remove Fixture mug"));
+  await settleError(change, new TypeError("Failed to fetch"));
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /couldn't confirm removing Fixture mug from your Bag/);
+  assert.match(toast.textContent, /Check your Bag before trying again/);
+  assert.doesNotMatch(host.textContent, /was not removed|Removed Fixture mug from your Bag/);
+  assert.ok(host.querySelector('[role="alert"]'));
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "uncertain removals are never repeated automatically");
+  await click(button("Retry saved Bag"));
+  await flush();
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
+  assert.match(host.textContent, /Your Bag is taking a slow day/, "reload reconciles the actually-removed line");
+  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(0\)/);
+});
+
+test("uncertain removal with a malformed saved-cart response makes no definite claim", async () => {
+  const change = deferred();
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart")
+      return Promise.resolve({ data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null });
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth, "/cart"));
+  await click(buttonByLabel("Remove Fixture mug"));
+  await settle(change, { data: null, error: null });
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /couldn't confirm removing Fixture mug from your Bag/);
+  assert.doesNotMatch(host.textContent, /was not removed|Removed Fixture mug from your Bag/);
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
 });
 
 test("bag notice auto-expires after five seconds", async t => {
