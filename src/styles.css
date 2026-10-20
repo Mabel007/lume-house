@@ -1210,6 +1210,10 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 .footer-staff-access { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; max-width: 100%; }
 .footer-staff-access a { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 44px; padding: .65rem 1rem; border: 1px solid #817d70; border-radius: 4px; background: var(--color-paper); color: var(--color-ink); font-size: .875rem; font-weight: 600; text-decoration: none; }
 .footer-staff-access a:hover { background: #eeeee4; }
+.site-header .main-nav .header-account { border-radius: 50%; }
+.site-header .main-nav .header-account::after { display: none; }
+.account-badge { display: inline-grid; place-items: center; width: 30px; height: 30px; border: 1px solid #cdd5c4; border-radius: 50%; background: #eaeade; color: #29382e; font: 12px/1 Georgia, serif; letter-spacing: .02em; transition: background var(--motion-time), border-color var(--motion-time); }
+.site-header .main-nav .header-account:hover .account-badge, .site-header .main-nav .header-account:focus-visible .account-badge { background: #e1e6d6; border-color: #9aa78f; }
 .footer-staff-access svg { flex-shrink: 0; }
 .footer-staff-access p { font-size: .75rem; color: #626c60; margin: 0; }
 @media (max-width: 1000px) { .footer-links { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

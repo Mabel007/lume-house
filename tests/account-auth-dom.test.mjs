@@ -13,13 +13,16 @@ for(const name of ['window','document','HTMLElement'])Object.defineProperty(glob
 globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 const {createRoot}=await import('react-dom/client');
 const host=dom.window.document.getElementById('root');
-let server,root,AuthContext;
+let server,root,AuthContext,ProductContext,CartContext,Layout;
 
 before(async()=>{
   server=await createServer({root:process.cwd(),configFile:false,envDir:false,server:{middlewareMode:true,hmr:false},plugins:[{name:'account-auth-fixture',enforce:'pre',load(id){
     if(id.replaceAll('\\','/').endsWith('/src/lib/supabase/client.ts'))return 'export function getSupabaseClient(){return globalThis.__accountAuthClient;}';
   }}]});
   ({AuthContext}=await server.ssrLoadModule('/src/features/auth/AuthContext.ts'));
+  ({ProductContext}=await server.ssrLoadModule('/src/features/products/ProductContext.ts'));
+  ({CartContext}=await server.ssrLoadModule('/src/features/cart/CartContext.ts'));
+  ({Layout}=await server.ssrLoadModule('/src/components/Layout.tsx'));
 });
 afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;host.replaceChildren();dom.window.sessionStorage.clear();delete globalThis.__accountAuthClient;});
 after(async()=>{await server.close();dom.window.close();});
@@ -36,6 +39,35 @@ function fakeClient(){
 const flush=async()=>{await act(async()=>{await new Promise(resolve=>setTimeout(resolve,0));});};
 async function mount(path,value,element){root=createRoot(host);await act(async()=>root.render(React.createElement(MemoryRouter,{initialEntries:[path]},React.createElement(AuthContext.Provider,{value},element))));}
 const auth=overrides=>({loading:false,session:null,error:null,signIn:async()=>{},signOut:async()=>{},...overrides});
+
+test('sign-out swaps the header initials badge for the guest Account link without navigating',async()=>{
+  const session={access_token:'synthetic-jwt',user:{id:'11111111-1111-4111-8111-111111111111',email:'fixture@example.invalid',user_metadata:{full_name:'Fixture Customer'}}};
+  let updateSession;
+  function Harness(){
+    const [sessionValue,setSessionValue]=React.useState(session);
+    updateSession=setSessionValue;
+    return React.createElement(AuthContext.Provider,{value:auth({session:sessionValue,signOut:async()=>setSessionValue(null)})},
+      React.createElement(ProductContext.Provider,{value:{state:{status:'loading'},refresh(){}}},
+        React.createElement(CartContext.Provider,{value:{items:[],dispatch(){},status:'ready',retry(){},beginCheckout:()=>1,finishCheckout(){}}},
+          React.createElement(MemoryRouter,{initialEntries:['/']},React.createElement(Routes,null,
+            React.createElement(Route,{element:React.createElement(Layout)},
+              React.createElement(Route,{path:'*',element:React.createElement('h1',null,'Page')})))))));
+  }
+  root=createRoot(host);
+  await act(async()=>root.render(React.createElement(Harness)));
+  const link=host.querySelector('a[href="/account"]');
+  assert.ok(link);
+  assert.equal(link.getAttribute('aria-label'),'Account, signed in');
+  assert.equal(link.querySelector('.account-badge')?.textContent,'FC');
+  assert.doesNotMatch(host.querySelector('header').textContent,/fixture@example\.invalid|Fixture Customer/);
+  await act(async()=>updateSession(null));
+  const guestLink=host.querySelector('a[href="/account"]');
+  assert.ok(guestLink);
+  assert.equal(guestLink.textContent,'Account');
+  assert.equal(guestLink.getAttribute('aria-label'),null);
+  assert.equal(guestLink.querySelector('.account-badge'),null);
+  assert.match(host.textContent,/Page/,'sign-out must not navigate away');
+});
 
 test('guest account renders the Google sign-in control and one click invokes the existing signIn once',async()=>{
   const {AccountPage}=await server.ssrLoadModule('/src/features/account/AccountPage.tsx');
