@@ -1,6 +1,6 @@
 import { FormField } from '../../components/FormField';
 import { variantLabel } from "../products/variants";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../cart/CartContext";
 import { getCartLines } from "../cart/cart";
@@ -14,11 +14,13 @@ import {
 } from "../../config/fulfilment";
 import {
   getPaymentPhone,
+  invalidPhoneMessage,
   normalizePhone,
   paymentProviders,
   validatePaymentPhone,
   type PaymentProvider,
 } from "./payment";
+import { checkoutMessages, cityProblem, isValidEmail } from "./validation";
 import { OrderSummary } from "./OrderSummary";
 import { EmptyCart } from "../../components/EmptyCart";
 import { useAuth } from "../auth/AuthContext";
@@ -46,6 +48,7 @@ export function CheckoutPage() {
   const requestId=useRef<string|null>(null);
   const [fulfilment, setFulfilment] = useState<Fulfilment>("delivery");
   const [city, setCity] = useState("");
+  const [cityTouched, setCityTouched] = useState(false);
   const [area, setArea] = useState("");
   const [address, setAddress] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -55,8 +58,20 @@ export function CheckoutPage() {
   const [provider, setProvider] = useState<PaymentProvider>("orange");
   const [phone, setPhone] = useState("");
   const [touched, setTouched] = useState(false);
+  const [contactTouched, setContactTouched] = useState(false);
+  const [attempted, setAttempted] = useState(false);
+  const [zoneTouched, setZoneTouched] = useState(false);
+  const [focusRequest, setFocusRequest] = useState(0);
+  const pendingFocus = useRef<string | null>(null);
   const userId = auth.session?.user.id;
   const userEmail = auth.session?.user.email;
+  useEffect(() => {
+    const target = pendingFocus.current;
+    if (!target) return;
+    pendingFocus.current = null;
+    const node = document.getElementById(target);
+    if (node && typeof node.focus === "function") node.focus();
+  }, [focusRequest]);
   useEffect(()=>{
     let active=true;
     const saved=userId?pendingRequest(userId):null;
@@ -90,14 +105,55 @@ export function CheckoutPage() {
     return () => { active = false; };
   }, [userId, userEmail]);
   const paymentPhone = getPaymentPhone(contactPhone, phone, reusePhone);
-  const error =
-    touched || reusePhone ? validatePaymentPhone(paymentPhone) : null;
+  // Ordered as the form renders so the first problem is also the first field to
+  // focus. Text rules mirror the trusted SQL; the database stays authoritative.
+  const problems: { id: string; message: string }[] = [];
+  if (!fullName.trim())
+    problems.push({ id: "full-name", message: checkoutMessages.fullName });
+  if (validatePaymentPhone(contactPhone))
+    problems.push({ id: "contact-phone", message: invalidPhoneMessage });
+  if (!email.trim())
+    problems.push({ id: "email", message: checkoutMessages.email });
+  else if (!isValidEmail(email))
+    problems.push({ id: "email", message: checkoutMessages.emailFormat });
+  if (fulfilment === "delivery") {
+    if (!address.trim())
+      problems.push({ id: "address", message: checkoutMessages.address });
+    if (!area.trim())
+      problems.push({ id: "area", message: checkoutMessages.area });
+    const cityMessage = cityProblem(city, deliveryConfig.serviceCity);
+    if (cityMessage) problems.push({ id: "city", message: cityMessage });
+    if (!zoneId)
+      problems.push({ id: "delivery-zone", message: checkoutMessages.zone });
+  }
+  if (validatePaymentPhone(paymentPhone))
+    problems.push({ id: "payment-phone", message: invalidPhoneMessage });
+  const problemFor = (id: string) =>
+    problems.find((problem) => problem.id === id)?.message;
+  const fullNameError = attempted ? problemFor("full-name") : undefined;
+  const emailError = attempted ? problemFor("email") : undefined;
+  const addressError = attempted ? problemFor("address") : undefined;
+  const areaError = attempted ? problemFor("area") : undefined;
+  const cityError =
+    cityTouched || attempted ? problemFor("city") : undefined;
+  const zoneError =
+    zoneTouched || attempted ? problemFor("delivery-zone") : undefined;
+  const paymentError =
+    touched || reusePhone ? problemFor("payment-phone") : undefined;
+  const contactError = contactTouched
+    ? problemFor("contact-phone")
+    : undefined;
   async function submit(event:React.FormEvent) {
     event.preventDefault();
     if(submittingRef.current||state.status!=='ready'||!userId)return;
-    setTouched(true);
-    if(validatePaymentPhone(paymentPhone)||validatePaymentPhone(contactPhone)){setOrderError('Enter valid Sierra Leone contact and payment numbers.');return;}
-    if(getDeliveryFee(fulfilment,city,zoneId)===null){setOrderError('Choose a supported Freetown delivery zone.');return;}
+    setTouched(true);setContactTouched(true);setAttempted(true);
+    if(problems.length){
+      pendingFocus.current=problems[0].id;
+      setFocusRequest(value=>value+1);
+      const phonesOnly=problems.every(problem=>problem.id==='contact-phone'||problem.id==='payment-phone');
+      setOrderError(phonesOnly?'Enter valid 8-digit Sierra Leone contact and payment numbers.':'Please check your contact and delivery details before placing your order.');
+      return;
+    }
     const checkoutTicket=beginCheckout?.();
     if(beginCheckout && checkoutTicket==null){setOrderError('Wait for your Bag changes to finish saving.');return;}
     submittingRef.current=true;setSubmitting(true);setOrderError('');
@@ -171,15 +227,20 @@ export function CheckoutPage() {
                 autoComplete="name"
                 value={fullName}
                 onChange={setFullName}
+                error={fullNameError}
                 wide
               />
               <Field
                 label="Phone number"
                 name="contact-phone"
                 type="tel"
+                inputMode="tel"
                 autoComplete="tel"
                 value={contactPhone}
                 onChange={setContactPhone}
+                onBlur={() => setContactTouched(true)}
+                hint="Enter an 8-digit Sierra Leone phone number, with or without 0 or +232. Example: 0XX XXX XXX."
+                error={contactError ?? undefined}
               />
               <Field
                 label="Email"
@@ -188,6 +249,7 @@ export function CheckoutPage() {
                 autoComplete="email"
                 value={email}
                 onChange={setEmail}
+                error={emailError}
               />
             </div>
             <p className="small-note" role="status">{profileNote || (!auth.session ? "Sign in to use your saved profile defaults. Online order placement will require an account." : "Checkout edits do not change your saved profile.")}</p>
@@ -223,6 +285,7 @@ export function CheckoutPage() {
                   autoComplete="address-line1"
                   value={address}
                   onChange={setAddress}
+                    error={addressError}
                     wide
                   />
                   <Field
@@ -231,6 +294,7 @@ export function CheckoutPage() {
                     autoComplete="address-level3"
                     value={area}
                     onChange={setArea}
+                    error={areaError}
                   />
                   <Field
                     label="City / town"
@@ -238,6 +302,10 @@ export function CheckoutPage() {
                     autoComplete="address-level2"
                     value={city}
                     onChange={setCity}
+                    list="delivery-city-options"
+                    aria-describedby="delivery-city-help"
+                    error={cityError}
+                    onBlur={() => setCityTouched(true)}
                   />
                   <div className="sm:col-span-2">
                     <label htmlFor="delivery-zone">Delivery zone *</label>
@@ -247,7 +315,11 @@ export function CheckoutPage() {
                       required
                       value={zoneId}
                       onChange={(event) => setZoneId(event.target.value)}
-                      aria-describedby="zone-help"
+                      onBlur={() => setZoneTouched(true)}
+                      aria-invalid={zoneError ? true : undefined}
+                      aria-describedby={
+                        zoneError ? "zone-help delivery-zone-error" : "zone-help"
+                      }
                     >
                       <option value="">Choose your delivery zone</option>
                       {deliveryConfig.zones
@@ -263,6 +335,11 @@ export function CheckoutPage() {
                         ? `${zone.coverage}. Delivery: ${formatMoney(zone.fee)}.`
                         : "Select a zone to calculate delivery and your total."}
                     </p>
+                    {zoneError && (
+                      <p className="field-error" id="delivery-zone-error">
+                        {zoneError}
+                      </p>
+                    )}
                   </div>
                   <div className="sm:col-span-2">
                     <label htmlFor="instructions">
@@ -278,11 +355,12 @@ export function CheckoutPage() {
                     />
                   </div>
                 </div>
-                {city.trim() && city.trim().toLowerCase() !== "freetown" && (
-                  <p className="field-error" role="status">
-                    Delivery is currently limited to Freetown.
-                  </p>
-                )}
+                <datalist id="delivery-city-options">
+                  <option value={deliveryConfig.serviceCity} />
+                </datalist>
+                <p className="small-note" id="delivery-city-help">
+                  We currently deliver within {deliveryConfig.serviceCity} only.
+                </p>
               </div>
             ) : (
               <p key="pickup" className="checkout-notice fulfilment-panel">
@@ -315,6 +393,7 @@ export function CheckoutPage() {
                   name="payment-phone"
                   type="tel"
                   autoComplete="off"
+                  inputMode="tel"
                   required
                   maxLength={30}
                   value={paymentPhone}
@@ -324,7 +403,7 @@ export function CheckoutPage() {
                     setTouched(true);
                     if (!reusePhone) setPhone(normalizePhone(phone));
                   }}
-                  aria-invalid={error ? true : undefined}
+                  aria-invalid={paymentError ? true : undefined}
                   aria-describedby="payment-help payment-error"
                 />
                 <label className="phone-reuse" htmlFor="reuse-phone">
@@ -337,16 +416,16 @@ export function CheckoutPage() {
                   Use my contact phone number
                 </label>
                 <p className="small-note" id="payment-help">
-                  Enter a Sierra Leone mobile number, for example +23276521208.
-                  Number format only; this does not verify registration with the
-                  selected provider.
+                  Any Sierra Leone mobile network is accepted. Use 8 digits, with
+                  or without 0 or +232. Example: 0XX XXX XXX. Number format only;
+                  this does not verify registration with the selected provider.
                 </p>
                 <p className="small-note">
                   When selected, this follows your contact number. Turning it
                   off restores your separately entered payment number.
                 </p>
-                <p id="payment-error" className="field-error" role="status">
-                  {error}
+                <p id="payment-error" className="field-error">
+                  {paymentError}
                 </p>
               </div>
             </div>
@@ -381,17 +460,23 @@ export function CheckoutPage() {
               deliveryFee={deliveryFee}
             />
           </div>
-          <button
-            type="submit"
-            form="checkout-form"
-            className="button w-full"
-            disabled={!auth.session || submitting || cartStatus==='saving' || cartStatus==='loading' || cartStatus==='error' || recovering || deliveryFee===null}
-            aria-describedby="checkout-payment"
-          >
-            {submitting?'Placing order…':auth.session?'Place order':'Sign in to place order'}
-          </button>
+          {auth.session ? (
+            <button
+              type="submit"
+              form="checkout-form"
+              className="button w-full"
+              disabled={submitting || cartStatus==='saving' || cartStatus==='loading' || cartStatus==='error' || recovering || deliveryFee===null}
+              aria-describedby="checkout-payment"
+            >
+              {submitting?'Placing order…':'Place order'}
+            </button>
+          ) : auth.loading ? (
+            <p className="small-note" role="status">Restoring your session…</p>
+          ) : (
+            <Link className="button w-full" to="/account" aria-describedby="checkout-payment">Sign in to place your order</Link>
+          )}
           <p className="small-note">
-            {auth.session ? "Your checkout details will be saved with this order, independently of your profile." : "Sign in to place your order."}
+            {auth.session ? "Your checkout details will be saved with this order, independently of your profile." : auth.loading ? "Checking your session before order placement." : "An account is required before you can place your order."}
           </p>
           <Link to="/cart" className="text-link">
             Edit your Bag
@@ -409,6 +494,9 @@ function Field({
   wide = false,
   value,
   onChange,
+  hint,
+  error,
+  ...rest
 }: {
   label: string;
   name: string;
@@ -417,6 +505,11 @@ function Field({
   wide?: boolean;
   value?: string;
   onChange?: (value: string) => void;
-}) {
-  return <FormField label={label} name={name} id={name} type={type} autoComplete={autoComplete} wide={wide} required maxLength={200} value={value} onChange={onChange ? event=>onChange(event.target.value) : undefined}/>;
+  hint?: string;
+  error?: string;
+} & Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "label" | "name" | "type" | "autoComplete" | "wide" | "value" | "onChange" | "hint" | "error"
+>) {
+  return <FormField label={label} name={name} id={name} type={type} autoComplete={autoComplete} wide={wide} required maxLength={200} value={value} onChange={onChange ? event=>onChange(event.target.value) : undefined} hint={hint} error={error} {...rest}/>;
 }

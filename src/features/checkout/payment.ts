@@ -13,11 +13,14 @@ export function normalizePhone(value: string): string {
   if (/^\d{8}$/.test(compact)) return "+232" + compact;
   return compact;
 }
+// Network-neutral, example-free guidance shared by checkout and profile validation.
+export const invalidPhoneMessage =
+  "Enter a valid 8-digit Sierra Leone phone number.";
 // Product format only: eight national digits, no provider/account verification.
 export function validatePaymentPhone(value: string): string | null {
   return /^\+232\d{8}$/.test(normalizePhone(value))
     ? null
-    : "Enter a Sierra Leone mobile number, for example +23276521208.";
+    : invalidPhoneMessage;
 }
 export function getPaymentPhone(
   contact: string,

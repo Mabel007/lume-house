@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useCart } from "./CartContext";
 import { getCartLines, cartLineKey, MAX_QUANTITY } from "./cart";
+import { bagRemovedText, bagRemoveFailedText } from "./bagFeedback";
+import { BagNotice, type BagNoticeMessage } from "../../components/BagNotice";
 import { useProducts } from "../products/ProductContext";
 import { ProductStatus } from "../products/ProductStatus";
 import { UnavailableItems } from "./UnavailableItems";
@@ -15,10 +18,25 @@ import { UiStatus } from '../../components/UiStatus';
 export function CartPage() {
   const { items, dispatch, status } = useCart();
   const auth = useAuth();
+  const [notice, setNotice] = useState<BagNoticeMessage | null>(null);
+  const noticeSeq = useRef(0);
+  const alive = useRef(true);
+  // Reset on (re)mount: StrictMode dev runs cleanup then re-runs the effect,
+  // and the guard must stay live for the remounted component.
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const clearNotice = useCallback(() => setNotice(null), []);
+  async function removeLine(product: { id: string; name: string }, variantId: string | undefined, variantDetail: string) {
+    noticeSeq.current += 1;
+    const operation = noticeSeq.current;
+    const outcome = await dispatch({ type: "remove", productId: product.id, variantId });
+    if (!alive.current || operation !== noticeSeq.current) return;
+    if (outcome.kind === "confirmed") setNotice({ id: operation, tone: "success", text: bagRemovedText(product.name, variantDetail) });
+    else if (outcome.kind === "rejected") setNotice({ id: operation, tone: "failure", text: bagRemoveFailedText(product.name) });
+  }
   const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
   const { state, refresh } = useProducts();
   if (status === "loading" || status === "error" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind={status==='error'?'error':'loading'}>Your saved Bag is not ready yet.</UiStatus></section>;
-  if (!items.length) return <EmptyCart />;
+  if (!items.length) return <><EmptyCart /><BagNotice message={notice} onExpire={clearNotice} /></>;
   if (state.status !== "ready")
     return (
       <section className="wrap page-section">
@@ -117,9 +135,7 @@ export function CartPage() {
                     className="remove-button"
                     disabled={busy}
                     aria-label={`Remove ${label}`}
-                    onClick={() =>
-                      dispatch({ type: "remove", productId: product.id, variantId: item.variantId })
-                    }
+                    onClick={() => { void removeLine(product, item.variantId, variant && variantLabel(variant) ? variantLabel(variant) : ""); }}
                   >
                     Remove
                   </button>
@@ -159,6 +175,7 @@ export function CartPage() {
       <p className="sr-only" role="status">
         Bag subtotal {formatMoney(subtotal)}.
       </p>
+      <BagNotice message={notice} onExpire={clearNotice} />
     </section>
   );
 }

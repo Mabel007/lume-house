@@ -1,19 +1,21 @@
-﻿import { test } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { formatMoney, shop } from "../../config/shop.ts";
 import { deliveryConfig, getDeliveryFee } from "../../config/fulfilment.ts";
 import {
   getPaymentPhone,
+  invalidPhoneMessage,
   normalizePhone,
   validatePaymentPhone,
 } from "./payment.ts";
 import { catalog } from "../products/catalog.ts";
 import { getCartLines } from "../cart/cart.ts";
-test("NLE formatting uses consistent NLe and integer minor units", () => {
-  assert.equal(formatMoney(45000), "NLe 450");
-  assert.equal(formatMoney(125000), "NLe 1,250");
-  assert.equal(formatMoney(45050), "NLe 450.50");
-  assert.equal(formatMoney(0), "NLe 0");
+import { checkoutMessages, cityProblem, isValidEmail } from "./validation.ts";
+test("NLE formatting uses consistent NLE and integer minor units", () => {
+  assert.equal(formatMoney(45000), "NLE 450");
+  assert.equal(formatMoney(125000), "NLE 1,250");
+  assert.equal(formatMoney(45050), "NLE 450.50");
+  assert.equal(formatMoney(0), "NLE 0");
   assert.throws(() => formatMoney(1.5));
 });
 test("20 active local pieces have unique stable IDs and NLE minor prices", () => {
@@ -106,6 +108,8 @@ test("payment format allows non-exhaustive ranges without provider claims", () =
     "+23288790011",
     "+23230521208",
     "+23290521208",
+    "+23277521208",
+    "+23231521208",
   ])
     assert.equal(validatePaymentPhone(value), null);
   for (const value of [
@@ -113,9 +117,42 @@ test("payment format allows non-exhaustive ranges without provider claims", () =
     "+232765212080",
     "",
     "+23376521208",
+    "0023376521208",
+    "0276521208",
+    "+232076521208",
     "+23276abc521208",
   ])
     assert.ok(validatePaymentPhone(value));
+});
+test("phone guidance stays network-neutral with a shared masked message", () => {
+  assert.equal(
+    invalidPhoneMessage,
+    "Enter a valid 8-digit Sierra Leone phone number.",
+  );
+  assert.doesNotMatch(invalidPhoneMessage, /Orange|\+232\d/i);
+  for (const value of [
+    "76521208",
+    "076521208",
+    "+23276521208",
+    "0023276521208",
+    "23276521208",
+    "+232 88 790011",
+    "031521208",
+    "(+232) 77-521208",
+  ])
+    assert.equal(validatePaymentPhone(value), null);
+  for (const value of [
+    "7652120",
+    "765212080",
+    "+23376521208",
+    "0023376521208",
+    "0276521208",
+    "+232076521208",
+    "+23276abc521208",
+    "",
+    "   ",
+  ])
+    assert.equal(validatePaymentPhone(value), invalidPhoneMessage);
 });
 test("contact reuse derives synchronized input and preserves independent payer", () => {
   const independent = "+23288790011";
@@ -135,4 +172,33 @@ test("contact reuse derives synchronized input and preserves independent payer",
     assert.ok(
       validatePaymentPhone(getPaymentPhone(missing, independent, true)),
     );
+});
+test("checkout city validation mirrors the trusted Freetown-only rule", () => {
+  assert.equal(cityProblem("Freetown", "Freetown"), undefined);
+  assert.equal(cityProblem("  freetown  ", "Freetown"), undefined);
+  assert.equal(cityProblem("", "Freetown"), checkoutMessages.city);
+  assert.equal(cityProblem("   ", "Freetown"), checkoutMessages.city);
+  assert.equal(
+    cityProblem("Bo", "Freetown"),
+    "Delivery is currently limited to Freetown.",
+  );
+});
+test("checkout email check accepts native-shaped addresses and rejects malformed input", () => {
+  for (const value of [
+    "customer@example.com",
+    "a.b+tag@sub.example.co",
+    "  customer@example.com  ",
+  ])
+    assert.equal(isValidEmail(value), true);
+  for (const value of [
+    "",
+    "   ",
+    "customer",
+    "customer@example",
+    "customer@ example.com",
+    "@example.com",
+    "customer@.com",
+    "customer @example.com",
+  ])
+    assert.equal(isValidEmail(value), false);
 });

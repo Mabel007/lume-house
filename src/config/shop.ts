@@ -5,5 +5,5 @@ export const shop = {
 };
 export function formatMoney(minorUnits: number): string {
  if (!Number.isSafeInteger(minorUnits)) throw new Error("Money must use integer minor units");
- return `NLe ${new Intl.NumberFormat("en-GB", { minimumFractionDigits: minorUnits % 100 === 0 ? 0 : 2, maximumFractionDigits: 2 }).format(minorUnits / 100)}`;
+ return `${shop.currency} ${new Intl.NumberFormat("en-GB", { minimumFractionDigits: minorUnits % 100 === 0 ? 0 : 2, maximumFractionDigits: 2 }).format(minorUnits / 100)}`;
 }

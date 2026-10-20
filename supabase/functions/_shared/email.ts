@@ -9,7 +9,8 @@ export type EmailOrder = {
 export function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
 }
-const money = (value: number) => `NLe ${new Intl.NumberFormat('en-GB', { minimumFractionDigits: value % 100 ? 2 : 0, maximumFractionDigits: 2 }).format(value / 100)}`;
+// Presentation label only; the stored currency code remains 'NLE'.
+const money = (value: number) => `NLE ${new Intl.NumberFormat('en-GB', { minimumFractionDigits: value % 100 ? 2 : 0, maximumFractionDigits: 2 }).format(value / 100)}`;
 const itemOptions = (item: EmailItem) => Object.entries(item.variant_options ?? {}).map(([key,value])=>`${key}: ${value}`).join(" · ");
 export function renderConfirmation(order: EmailOrder) {
   const fulfilment = order.fulfilment_method === 'pickup'

@@ -8,7 +8,7 @@ Modern home and lifestyle ecommerce for Sierra Leone, based in Lumley, Freetown.
 
 **Production:** https://lume-house-delta.vercel.app
 
-Market: Sierra Leone. Currency: NLE, displayed as **NLe**. Current catalogue: **20 active products**. Fulfilment: Freetown delivery and Lumley pickup. Money uses integer minor units (100 per leone).
+Market: Sierra Leone. Currency: NLE, displayed as **NLE**. Current catalogue: **20 active products**. Fulfilment: Freetown delivery and Lumley pickup. Money uses integer minor units (100 per leone).
 
 This milestone fulfils the HNG individual ecommerce task; Lumé House continues beyond HNG. The roadmap below describes future work.
 
@@ -78,11 +78,11 @@ Provisional owner configuration—not researched courier rates or precise geogra
 
 | Zone | Coverage | Fee |
 |---|---|---|
-| zone-1 | Goderich to Lumley | NLe 40 |
-| zone-2 | Lumley to Congo Cross, including Aberdeen | NLe 50 |
-| zone-3 | Congo Cross to Central Freetown | NLe 60 |
+| zone-1 | Goderich to Lumley | NLE 40 |
+| zone-2 | Lumley to Congo Cross, including Aberdeen | NLE 50 |
+| zone-3 | Congo Cross to Central Freetown | NLE 60 |
 
-Delivery requires Freetown address and zone. Pickup in Lumley, Freetown costs NLe 0 and needs no delivery address. The trusted transaction derives and snapshots fee/zone information.
+Delivery requires Freetown address and zone. Pickup in Lumley, Freetown costs NLE 0 and needs no delivery address. The trusted transaction derives and snapshots fee/zone information.
 
 ## Orders and Order History
 

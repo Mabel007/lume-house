@@ -166,22 +166,22 @@ test("empty catalog does not fall back to demo products", () => {
   assert.match(html, /There are no available products/);
   assert.doesNotMatch(html, /product-card|Everyday ceramic mug/);
 });
-test("ready catalog feeds cards, cart prices and disabled checkout", () => {
+test("ready catalog feeds cards, cart prices and guest sign-in checkout", () => {
   const state = { status: "ready", products: [fixture] };
   assert.match(render(ShopPage, state), /Fixture mug/);
   assert.match(render(ShopPage, state), /Fixture category/);
   const cart = render(CartPage, state);
-  assert.match(cart, /NLe 36/);
+  assert.match(cart, /NLE 36/);
   assert.match(cart, /Choose at checkout/);
   const checkout = render(CheckoutPage, state);
-  assert.match(checkout, /disabled=""[^>]*>Sign in to place order/);
+  assert.match(checkout, /href="\/account"[^>]*>Sign in to place your order/);
   assert.match(checkout, /Use my contact phone number/);
   assert.match(
     render(CartPage, {
       status: "ready",
       products: [{ ...fixture, price: 2000 }],
     }),
-    /NLe 40/,
+    /NLE 40/,
   );
 });
 test("unavailable products can be removed and cannot proceed to checkout", () => {
@@ -216,15 +216,32 @@ test("checkout localizes fields and honestly distinguishes delivery and payment"
   assert.match(html, /Delivery details needed/);
   assert.match(html, /Payment awaits confirmation/);
   assert.match(html, /aria-describedby="payment-help payment-error"/);
+  assert.match(html, /aria-describedby="contact-phone-help"/);
+  assert.match(html, /id="contact-phone-help"/);
+  assert.match(
+    html,
+    /Enter an 8-digit Sierra Leone phone number, with or without 0 or \+232\. Example: 0XX XXX XXX\./,
+  );
+  assert.match(
+    html,
+    /Any Sierra Leone mobile network is accepted\. Use 8 digits/,
+  );
+  assert.match(html, /Example: 0XX XXX XXX\./);
+  assert.equal((html.match(/inputmode="tel"/gi) ?? []).length, 2);
+  assert.doesNotMatch(html, /for example \+232|76521208/);
   assert.doesNotMatch(
     html,
     /State \/ region|Postal code|ZIP|Demo delivery|payment successful|order confirmed/i,
   );
   assert.doesNotMatch(html, /chrisbarbz17|Naj Flex|Sheriff Drive/);
   assert.match(html, /name="delivery-zone" required/);
-  assert.match(html, /NLe 40/);
-  assert.match(html, /NLe 50/);
-  assert.match(html, /NLe 60/);
+  assert.match(html, /list="delivery-city-options"/);
+  assert.match(html, /<datalist id="delivery-city-options">/);
+  assert.match(html, /aria-describedby="delivery-city-help"/);
+  assert.match(html, /id="delivery-city-help">We currently deliver within Freetown only\./);
+  assert.match(html, /NLE 40/);
+  assert.match(html, /NLE 50/);
+  assert.match(html, /NLE 60/);
   assert.doesNotMatch(html, /then 76|then 88|PIN|USSD/);
 });
 
@@ -307,13 +324,38 @@ test('storefront search has a labelled native search control and polite results 
  assert.doesNotMatch(html,/No pieces found|Reset search/);
 });
 
-test("global loading saving and failure feedback uses Bag without claiming persistence success", async () => {
+test("Add to Bag feedback waits for confirmed persistence before claiming success", async () => {
   assert.match(renderLayout("/", { items: [], status: "loading" }), /Loading your Bag/);
   assert.match(renderLayout("/", { items, status: "saving" }), /Saving your Bag/);
   assert.match(renderLayout("/", { items, status: "error", error: "Your Bag change was not saved.", retry() {} }), /Retry saved Bag/);
   const { readFileSync } = await import("node:fs");
-  assert.match(readFileSync("src/features/products/ShopPage.tsx", "utf8"), /Bag update requested/);
+  const shop = readFileSync("src/features/products/ShopPage.tsx", "utf8");
+  const details = readFileSync("src/features/products/ProductDetailsPage.tsx", "utf8");
+  const feedback = readFileSync("src/features/cart/bagFeedback.ts", "utf8");
+  assert.match(details, /await dispatch\(\{type:'add'/);
+  assert.match(feedback, /Added \$\{quantity\} × /);
+  assert.match(shop, /outcome\.kind==="confirmed"/);
+  assert.match(shop, /bagAddedText\(1,name,""\)/);
+  assert.doesNotMatch(shop, /Bag update requested/);
   assert.doesNotMatch(readFileSync("src/features/cart/CartProvider.tsx", "utf8"), /Your (?:saved )?cart/i);
+});
+
+test("Product Details groups add action, notice and Bag link in one stable actions row", async () => {
+  const { readFileSync } = await import("node:fs");
+  const details = readFileSync("src/features/products/ProductDetailsPage.tsx", "utf8");
+  const group = details.match(/<div className="product-details-actions">[\s\S]*?<\/div>/);
+  assert.ok(group, "actions group wraps button, status notice and View Bag link");
+  assert.match(group[0], /product-details-add/);
+  assert.match(group[0], /role="status" aria-live="polite"/);
+  assert.match(group[0], /to="\/cart">View your Bag/);
+  assert.ok(group[0].indexOf("product-details-add") < group[0].indexOf('to="/cart"'), "focus order: add button before Bag link");
+  const css = readFileSync("src/styles.css", "utf8");
+  assert.match(css, /\.product-details-actions \{ display: flex; flex-direction: column;/);
+  assert.match(css, /\.product-details-actions \.feedback \{ display: block; margin: 0; min-height: 5em; \}/);
+  assert.match(css, /@media \(max-width: 1000px\) \{ \.product-details-actions \.feedback \{ min-height: 6\.8em; \} \}/, "≤1000px reserves four feedback lines for long names");
+  assert.match(css, /@media \(max-width: 479px\) \{ \.product-details-actions \.feedback \{ min-height: 8\.8em; \} \}/, "≤479px reserves five feedback lines so long-name feedback cannot shift the Bag link");
+  assert.match(css, /\.product-details-actions \.feedback:empty \{ display: block; \}/, "notice space is reserved so the Bag link never shifts");
+  assert.match(css, /@media \(max-width: 479px\)[^@]*\.product-details-actions \.product-details-add \{ width: 100%;/);
 });
 
 test("account initials handle whitespace, single names, missing names and Unicode graphemes", () => {
@@ -377,8 +419,8 @@ test("Product Details default-only renders a normal purchase without meaningless
 test("Product Details meaningful options require an explicit valid selection", () => {
   const product={id:'fixture',name:'Test piece',category:'Test',description:'Existing description',price:1800,image:'/images/mug.svg',color:'#e9e3d8',variants:[{id:'blue',productId:'fixture',options:{Color:'Blue'},isDefault:false,price:2000,currency:'NLE',inventoryPolicy:'untracked'}]};
   const html=renderDetails(product);
-  assert.match(html,/<legend>Choose your options/);assert.match(html,/type="radio"/);assert.match(html,/Color: Blue/);assert.match(html,/NLe 20/);assert.match(html,/disabled=""/);assert.doesNotMatch(html,/checked=""/);
-  assert.match(html,/class="product-details-price">From NLe 20/);
+  assert.match(html,/<legend>Choose your options/);assert.match(html,/type="radio"/);assert.match(html,/Color: Blue/);assert.match(html,/NLE 20/);assert.match(html,/disabled=""/);assert.doesNotMatch(html,/checked=""/);
+  assert.match(html,/class="product-details-price">From NLE 20/);
   assert.equal(routeTitle('/products/fixture'),'Product details');assert.equal(routeTitle('/products/fixture','Test piece'),'Test piece');
 });
 test('tracked Product Details refuses unverified or unavailable stock without showing fictional quantities',()=>{
@@ -397,7 +439,7 @@ test('Bag and checkout show separate variant options and variant-derived prices 
  const lines=[{productId:fixture.id,variantId:'blue',quantity:2},{productId:fixture.id,variantId:'red',quantity:1}];
  for(const page of [CartPage,CheckoutPage]){
   const html=render(page,state,lines);
-  assert.match(html,/Color: Blue/);assert.match(html,/Color: Red/);assert.match(html,/NLe 65/);
+  assert.match(html,/Color: Blue/);assert.match(html,/Color: Red/);assert.match(html,/NLE 65/);
  }
  const bag=render(CartPage,state,lines);
  assert.match(bag,/quantity-v:blue/);assert.match(bag,/quantity-v:red/);

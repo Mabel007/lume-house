@@ -3,7 +3,7 @@ import { sendResend, type EmailOrder } from './email.ts';
 export async function deliverConfirmation(admin: SupabaseClient, orderId: string): Promise<string> {
   const apiKey = Deno.env.get('RESEND_API_KEY');
   if (!apiKey) return 'queued'; // No claim/send attempt without server configuration.
-  const sender = Deno.env.get('RESEND_FROM') || 'LumÃ© House <onboarding@resend.dev>';
+  const sender = Deno.env.get('RESEND_FROM') || 'Lumé House <onboarding@resend.dev>';
   const replyTo = Deno.env.get('RESEND_REPLY_TO')?.trim() || undefined;
   const claim = await admin.rpc('claim_order_confirmation', { p_order_id: orderId, p_sender: sender });
   if (claim.error) return 'queued';
