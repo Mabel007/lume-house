@@ -30,6 +30,11 @@ import { checkoutDefaults } from "./profileDefaults";
 import { CheckoutError, findCheckout, placeOrder } from '../orders/orderRepository';
 import { clearRequest,pendingRequest,rememberRequest } from '../orders/pendingCheckout';
 
+function phoneProblem(value: string, emptyMessage: string): string | undefined {
+  if (!value.trim()) return emptyMessage;
+  return validatePaymentPhone(value) ? invalidPhoneMessage : undefined;
+}
+
 export function CheckoutPage() {
   const { items, status: cartStatus, retry, beginCheckout, finishCheckout } = useCart();
   const navigate = useNavigate();
@@ -48,7 +53,6 @@ export function CheckoutPage() {
   const requestId=useRef<string|null>(null);
   const [fulfilment, setFulfilment] = useState<Fulfilment>("delivery");
   const [city, setCity] = useState("");
-  const [cityTouched, setCityTouched] = useState(false);
   const [area, setArea] = useState("");
   const [address, setAddress] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -57,10 +61,8 @@ export function CheckoutPage() {
   const [reusePhone, setReusePhone] = useState(false);
   const [provider, setProvider] = useState<PaymentProvider>("orange");
   const [phone, setPhone] = useState("");
-  const [touched, setTouched] = useState(false);
-  const [contactTouched, setContactTouched] = useState(false);
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
   const [attempted, setAttempted] = useState(false);
-  const [zoneTouched, setZoneTouched] = useState(false);
   const [focusRequest, setFocusRequest] = useState(0);
   const pendingFocus = useRef<string | null>(null);
   const userId = auth.session?.user.id;
@@ -110,8 +112,9 @@ export function CheckoutPage() {
   const problems: { id: string; message: string }[] = [];
   if (!fullName.trim())
     problems.push({ id: "full-name", message: checkoutMessages.fullName });
-  if (validatePaymentPhone(contactPhone))
-    problems.push({ id: "contact-phone", message: invalidPhoneMessage });
+  const contactPhoneProblem = phoneProblem(contactPhone, checkoutMessages.contactPhone);
+  if (contactPhoneProblem)
+    problems.push({ id: "contact-phone", message: contactPhoneProblem });
   if (!email.trim())
     problems.push({ id: "email", message: checkoutMessages.email });
   else if (!isValidEmail(email))
@@ -126,27 +129,29 @@ export function CheckoutPage() {
     if (!zoneId)
       problems.push({ id: "delivery-zone", message: checkoutMessages.zone });
   }
-  if (validatePaymentPhone(paymentPhone))
-    problems.push({ id: "payment-phone", message: invalidPhoneMessage });
+  const paymentPhoneProblem = phoneProblem(paymentPhone, checkoutMessages.paymentPhone);
+  if (paymentPhoneProblem)
+    problems.push({ id: "payment-phone", message: paymentPhoneProblem });
   const problemFor = (id: string) =>
     problems.find((problem) => problem.id === id)?.message;
-  const fullNameError = attempted ? problemFor("full-name") : undefined;
-  const emailError = attempted ? problemFor("email") : undefined;
-  const addressError = attempted ? problemFor("address") : undefined;
-  const areaError = attempted ? problemFor("area") : undefined;
-  const cityError =
-    cityTouched || attempted ? problemFor("city") : undefined;
-  const zoneError =
-    zoneTouched || attempted ? problemFor("delivery-zone") : undefined;
+  const markTouched = (id: string) =>
+    setTouchedFields(current => current[id] ? current : { ...current, [id]: true });
+  const showsError = (id: string) => attempted || touchedFields[id] === true;
+  const fullNameError = showsError("full-name") ? problemFor("full-name") : undefined;
+  const emailError = showsError("email") ? problemFor("email") : undefined;
+  const addressError = showsError("address") ? problemFor("address") : undefined;
+  const areaError = showsError("area") ? problemFor("area") : undefined;
+  const cityError = showsError("city") ? problemFor("city") : undefined;
+  const zoneError = showsError("delivery-zone") ? problemFor("delivery-zone") : undefined;
   const paymentError =
-    touched || reusePhone ? problemFor("payment-phone") : undefined;
-  const contactError = contactTouched
+    reusePhone || showsError("payment-phone") ? problemFor("payment-phone") : undefined;
+  const contactError = showsError("contact-phone")
     ? problemFor("contact-phone")
     : undefined;
   async function submit(event:React.FormEvent) {
     event.preventDefault();
     if(submittingRef.current||state.status!=='ready'||!userId)return;
-    setTouched(true);setContactTouched(true);setAttempted(true);
+    setAttempted(true);
     if(problems.length){
       pendingFocus.current=problems[0].id;
       setFocusRequest(value=>value+1);
@@ -211,6 +216,7 @@ export function CheckoutPage() {
       <div className="checkout-grid">
         <form
           id="checkout-form"
+          noValidate
           onChange={() => { dirty.current = true; }}
           onSubmit={event=>void submit(event)}
           aria-busy={submitting}
@@ -227,6 +233,7 @@ export function CheckoutPage() {
                 autoComplete="name"
                 value={fullName}
                 onChange={setFullName}
+                onBlur={() => markTouched("full-name")}
                 error={fullNameError}
                 wide
               />
@@ -238,7 +245,10 @@ export function CheckoutPage() {
                 autoComplete="tel"
                 value={contactPhone}
                 onChange={setContactPhone}
-                onBlur={() => setContactTouched(true)}
+                onBlur={event => {
+                  markTouched("contact-phone");
+                  setContactPhone(normalizePhone(event.currentTarget.value));
+                }}
                 hint="Enter an 8-digit Sierra Leone phone number, with or without 0 or +232. Example: 0XX XXX XXX."
                 error={contactError ?? undefined}
               />
@@ -249,6 +259,7 @@ export function CheckoutPage() {
                 autoComplete="email"
                 value={email}
                 onChange={setEmail}
+                onBlur={() => markTouched("email")}
                 error={emailError}
               />
             </div>
@@ -285,6 +296,7 @@ export function CheckoutPage() {
                   autoComplete="address-line1"
                   value={address}
                   onChange={setAddress}
+                    onBlur={() => markTouched("address")}
                     error={addressError}
                     wide
                   />
@@ -294,6 +306,7 @@ export function CheckoutPage() {
                     autoComplete="address-level3"
                     value={area}
                     onChange={setArea}
+                    onBlur={() => markTouched("area")}
                     error={areaError}
                   />
                   <Field
@@ -305,7 +318,7 @@ export function CheckoutPage() {
                     list="delivery-city-options"
                     aria-describedby="delivery-city-help"
                     error={cityError}
-                    onBlur={() => setCityTouched(true)}
+                    onBlur={() => markTouched("city")}
                   />
                   <div className="sm:col-span-2">
                     <label htmlFor="delivery-zone">Delivery zone *</label>
@@ -315,7 +328,7 @@ export function CheckoutPage() {
                       required
                       value={zoneId}
                       onChange={(event) => setZoneId(event.target.value)}
-                      onBlur={() => setZoneTouched(true)}
+                      onBlur={() => markTouched("delivery-zone")}
                       aria-invalid={zoneError ? true : undefined}
                       aria-describedby={
                         zoneError ? "zone-help delivery-zone-error" : "zone-help"
@@ -399,9 +412,9 @@ export function CheckoutPage() {
                   value={paymentPhone}
                   readOnly={reusePhone}
                   onChange={(event) => setPhone(event.target.value)}
-                  onBlur={() => {
-                    setTouched(true);
-                    if (!reusePhone) setPhone(normalizePhone(phone));
+                  onBlur={(event) => {
+                    markTouched("payment-phone");
+                    if (!reusePhone) setPhone(normalizePhone(event.currentTarget.value));
                   }}
                   aria-invalid={paymentError ? true : undefined}
                   aria-describedby="payment-help payment-error"

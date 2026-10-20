@@ -1150,7 +1150,7 @@ nav a,
 .quantity-control button:hover:not(:disabled) { background: #e6eadd; }
 .form-grid input, .form-grid textarea, .form-grid select { transition: background var(--motion-time), border-color var(--motion-time), box-shadow var(--motion-time); }
 .form-grid input:focus, .form-grid textarea:focus, .form-grid select:focus { background: #fffdf8; border-color: #657b5d; box-shadow: 0 0 0 2px #657b5d15; }
-.form-grid input[aria-invalid="true"] { border-color: #9a542e; }
+.form-grid input[aria-invalid="true"], .form-grid select[aria-invalid="true"], .form-grid textarea[aria-invalid="true"] { border-color: #9a542e; }
 .checkout-grid > form > fieldset { padding: 20px 24px 28px; border: 1px solid var(--surface-border); background: #fffdf745; }
 .checkout-grid > form > fieldset > legend { padding-inline: 8px; margin-left: -8px; margin-bottom: 8px; }
 .choice-group label { transition: background var(--motion-time), border-color var(--motion-time); border-radius: 2px; }
