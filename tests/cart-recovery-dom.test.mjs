@@ -264,6 +264,33 @@ test("a failed refresh keeps the guidance truthful and never claims reconciliati
   assert.match(alert.textContent, /Retry saved Bag/);
 });
 
+test("the recovery control can be retried after a failed reconciliation", async () => {
+  const change = deferred();
+  let loads = 0;
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart") {
+      loads += 1;
+      return loads === 1 ? emptyCart() : Promise.resolve({ data: null, error: { code: "57014", message: "statement timeout" } });
+    }
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await settleError(change, new TypeError("Failed to fetch"));
+  await click(button("Refresh saved Bag"));
+  await flush();
+  assert.match(host.querySelector(".cart-recovery").textContent, /couldn't refresh your saved Bag/);
+  const loadsBefore = loads;
+  // The control is offered again after the failed reconciliation.
+  await click(button("Refresh saved Bag"));
+  await flush();
+  assert.equal(loads, loadsBefore + 1, "the recovery control can be retried after a failed reconciliation");
+  // The failed reconciliation still keeps the Bag locked for changes.
+  const outcome = await dom.window.__cart.dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default" });
+  assert.equal(outcome.kind, "superseded", "a change stays blocked until the saved Bag is reconciled");
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "the blocked change never reaches the server");
+});
+
 test("repeated refresh activation is guarded and cannot overlap restores", async () => {
   const change = deferred();
   const load = deferred();

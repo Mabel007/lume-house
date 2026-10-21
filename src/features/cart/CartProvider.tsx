@@ -27,6 +27,11 @@ export function CartProvider({children}:{children:ReactNode}) {
   // change. A change of an earlier session can never overlap a read of this
   // session, so the pending change carries the session it belongs to.
   const changeTickets=useRef(0);const pendingChange=useRef<{epoch:number;ticket:number}|null>(null);
+  // The trusted requests that are running right now. The mutation lock below is
+  // deliberately kept after a failed restore, so the ownership of a running
+  // request is tracked separately: it decides what may start next, while the
+  // lock decides what may change the saved Bag.
+  const requestsInFlight=useRef(0);
   // A recovery belongs to the session that raised it: after a sign-in change the
   // previous session's request can no longer touch the new customer's Bag.
   const recovery=recoveryRecord&&recoveryRecord.owner===(userId??null)?recoveryRecord.value:null;
@@ -48,15 +53,6 @@ export function CartProvider({children}:{children:ReactNode}) {
   useEffect(()=>{
     let active=true;current.current=[];locked.current=true;
     async function restore() {
-      setError(null);setStatus('loading');
-      if(auth.loading)return;
-      if(catalog.status!=='ready'){
-        if(!userId){setStatus(catalog.status==='error'?'ready':'loading');locked.current=catalog.status!=='error';}
-        else if(catalog.status==='error'){setStatus('error');setError('Load current products before restoring your Bag.');}
-        return;
-      }
-      storeGuest(resolveGuestCart(guest.current,catalog.products));
-      if(!userId||!accessToken){setSaved(null);setStatus('ready');locked.current=false;return;}
       const generation=epoch.current;
       const isCurrent=()=>active&&identity.current===userId&&epoch.current===generation;
       // A read can answer with a snapshot taken before a change that overlaps
@@ -65,7 +61,18 @@ export function CartProvider({children}:{children:ReactNode}) {
       const readTicket=changeTickets.current;
       const readOverlapped=pendingChange.current!==null&&pendingChange.current.epoch===generation;
       const superseded=()=>readOverlapped||changeTickets.current!==readTicket;
+      let ownsRequest=false;
       try{
+        setError(null);setStatus('loading');
+        if(auth.loading)return;
+        if(catalog.status!=='ready'){
+          if(!userId){setStatus(catalog.status==='error'?'ready':'loading');locked.current=catalog.status!=='error';}
+          else if(catalog.status==='error'){setStatus('error');setError('Load current products before restoring your Bag.');}
+          return;
+        }
+        storeGuest(resolveGuestCart(guest.current,catalog.products));
+        if(!userId||!accessToken){setSaved(null);setStatus('ready');locked.current=false;return;}
+        ownsRequest=true;requestsInFlight.current+=1;
         let loaded=await loadVariantCart(getSupabaseClient(),accessToken);
         if(!isCurrent())return;
         for(const item of [...guest.current]) {
@@ -100,7 +107,15 @@ export function CartProvider({children}:{children:ReactNode}) {
         }
         setError(reason instanceof VariantCartError&&reason.code==='SCHEMA_NOT_READY'?reason.message:'Your saved Bag could not be restored or merged. Unsaved guest items are retained. Please retry.');setStatus('error');patchRecovery(userId??null,value=>({...value,status:'failed'}));
       }
-      finally{if(isCurrent())refreshing.current=false;}
+      finally{
+        if(ownsRequest)requestsInFlight.current-=1;
+        if(isCurrent()){
+          refreshing.current=false;
+          // A reconciliation that never reached the server must not keep
+          // claiming that it is refreshing the saved Bag.
+          if(!ownsRequest)patchRecovery(userId??null,value=>value.status==='refreshing'?{...value,status:'required'}:value);
+        }
+      }
     }
     void restore();return()=>{active=false;};
   },[userId,accessToken,auth.loading,catalog,revision]);
@@ -131,6 +146,7 @@ export function CartProvider({children}:{children:ReactNode}) {
     // it can never overwrite the confirmed result.
     const ticket=++changeTickets.current;pendingChange.current={epoch:generation,ticket};
     locked.current=true;setStatus('saving');setError(null);
+    requestsInFlight.current+=1;
     const mode=action.type==='add'?'add':action.type==='quantity'?'set':'remove';
     const quantity=action.type==='remove'?null:action.type==='add'?action.quantity??1:action.quantity;
     return changeVariantCart(getSupabaseClient(),accessToken,action.variantId,mode,quantity,mode==='add'?null:existing?.quantity??0,crypto.randomUUID()).then((loaded):CartOutcome=>{
@@ -152,6 +168,7 @@ export function CartProvider({children}:{children:ReactNode}) {
       else if(bagFailureNeedsRefresh(failure))applyRecovery({owner:userId??null,value:{status:'required',message:bagRecoveryNote(failure)}});
       return {kind:'rejected',message,failure};
     }).finally(()=>{
+      requestsInFlight.current-=1;
       if(pendingChange.current&&pendingChange.current.ticket===ticket)pendingChange.current=null;
       if(identity.current===userId&&epoch.current===generation&&changeTickets.current===ticket){locked.current=false;setStatus('ready');}
     });
@@ -163,9 +180,12 @@ export function CartProvider({children}:{children:ReactNode}) {
    */
   function refreshSavedCart(){
     if(!userId||!accessToken)return;
-    // The shared guard is taken synchronously, so a change that is started in
-    // the same turn can never run beside the re-read.
-    if(locked.current||refreshing.current)return;
+    // The reconciliation is refused while a trusted request owns the saved Bag,
+    // while another reconciliation runs and while a checkout is open. The
+    // mutation lock is deliberately kept after a failed restore, so it is not
+    // consulted here: a settled reconciliation must always be retryable.
+    if(refreshing.current||requestsInFlight.current>0||checkout.current)return;
+    if(catalog.status!=='ready')return;
     const record=recoveryRef.current;
     if(!record||record.owner!==(userId??null))return;
     refreshing.current=true;locked.current=true;
