@@ -1242,7 +1242,7 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 .account-menu-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; color: #4f5a49; flex-shrink: 0; }
 .account-menu-popover a:hover .account-menu-icon, .account-menu-popover button:hover:not(:disabled) .account-menu-icon, .account-menu-popover a:focus-visible .account-menu-icon, .account-menu-popover button:focus-visible .account-menu-icon { color: var(--color-ink); }
 .account-menu-label { line-height: 1.4; }
-.account-menu-signout { margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e0d4 !important; border-radius: 0 0 4px 4px; }
+.account-menu .account-menu-popover .account-menu-signout { margin-top: 4px; padding: 4px 12px 0 12px; border-top: 1px solid #e2e0d4 !important; border-radius: 0 0 4px 4px; }
 .account-menu-error { position: absolute; top: calc(100% + 10px); right: 0; z-index: 41; width: 220px; margin: 0; padding: 10px 12px; border: 1px solid #d9b9a4; border-radius: 4px; background: #fff8f2; color: #8a4628; font-size: var(--type-meta); box-shadow: 0 10px 24px #29382e14; }
 @media (max-width: 700px) { .account-menu-popover { right: 0; left: auto; max-width: calc(100vw - 32px); } }
 .footer-staff-access svg { flex-shrink: 0; }
