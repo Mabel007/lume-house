@@ -1,6 +1,6 @@
 import { test, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import React, { act } from "react";
+import React, { act, useEffect } from "react";
 import { JSDOM } from "jsdom";
 import { createServer } from "vite";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
@@ -12,7 +12,7 @@ for (const name of ["window", "document", "HTMLElement", "Element", "sessionStor
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const { createRoot } = await import("react-dom/client");
 const host = document.getElementById("root");
-let server, root, CartProvider, ShopPage, ProductDetails, CartPage, Layout, AuthContext, ProductContext, NotificationProvider;
+let server, root, CartProvider, ShopPage, ProductDetails, CartPage, Layout, AuthContext, ProductContext, NotificationProvider, classifyCartFailure, useCart;
 
 const product = {
   id: "fixture-mug", name: "Fixture mug", description: "Fixture description", category: "Fixture category",
@@ -42,10 +42,12 @@ before(async () => {
   ({ AuthContext } = await server.ssrLoadModule("/src/features/auth/AuthContext.ts"));
   ({ ProductContext } = await server.ssrLoadModule("/src/features/products/ProductContext.ts"));
   ({ NotificationProvider } = await server.ssrLoadModule("/src/components/NotificationProvider.tsx"));
+  ({ classifyCartFailure } = await server.ssrLoadModule("/src/features/cart/variantCartRepository.ts"));
+  ({ useCart } = await server.ssrLoadModule("/src/features/cart/CartContext.ts"));
 });
 afterEach(async () => {
   if (root) await act(async () => root.unmount());
-  root = null; host.replaceChildren(); sessionStorage.clear(); delete globalThis.__bagClient;
+  root = null; host.replaceChildren(); sessionStorage.clear(); delete globalThis.__bagClient; delete dom.window.__cart;
 });
 after(async () => { await server.close(); dom.window.close(); });
 
@@ -88,16 +90,33 @@ async function rerender(element) {
   await act(async () => { root.render(element); await new Promise(resolve => setTimeout(resolve, 0)); });
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 }
-function layoutTree(auth, path = "/", page) {
+function layoutTree(auth, path = "/", page, catalogValue = catalog) {
   const element = page ?? (path === "/cart" ? CartPage : ShopPage);
   return React.createElement(MemoryRouter, { initialEntries: [path] },
     React.createElement(AuthContext.Provider, { value: auth },
-      React.createElement(ProductContext.Provider, { value: catalog },
+      React.createElement(ProductContext.Provider, { value: catalogValue },
         React.createElement(CartProvider, null,
           React.createElement(NotificationProvider, null,
+            React.createElement(CartProbe, null),
             React.createElement(Routes, null,
               React.createElement(Route, { element: React.createElement(Layout) },
                 React.createElement(Route, { path, element: React.isValidElement(element) ? element : React.createElement(element) }))))))));
+}
+
+/**
+ * The published Bag context, so a test can start a change and a refresh in the
+ * same event turn, the way a customer can act before React commits the next
+ * render.
+ */
+function CartProbe() {
+  const cart = useCart();
+  useEffect(() => { dom.window.__cart = cart; }, [cart]);
+  return null;
+}
+
+/** A catalogue state with a new identity, which re-reads the saved Bag. */
+function nextCatalog() {
+  return { state: { status: "ready", products: [product] }, refresh() {} };
 }
 
 test("a stale Bag response keeps its specific guidance and offers an in-app saved Bag refresh", async () => {
@@ -290,7 +309,7 @@ test("a stale session result cannot reconcile a different customer's Bag", async
   await settle(load, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 4 }] }, error: null });
   await flush();
   assert.equal(host.querySelector(".cart-recovery"), null, "the recovery request belonged to the previous session");
-  assert.doesNotMatch(host.textContent, /Bag \(4\)/, "a stale response must not update the new customer's Bag");
+  assert.doesNotMatch(host.textContent, /Bag\(4\)/, "a stale response must not update the new customer's Bag");
 });
 
 test("a saved Bag refresh keeps the guest merge receipt and never replays the unconfirmed change", async () => {
@@ -349,4 +368,281 @@ test("a quantity failure keeps its own global recovery and never opens the saved
   const alert = host.querySelector('[role="alert"]');
   assert.ok(alert);
   assert.match(alert.textContent, /Retry saved Bag/);
+});
+
+test("only a failure that is known to have rolled back is a definite refusal", () => {
+  const table = [
+    // The completion of the statement or the transaction is unknown.
+    ["08007", "uncertain"],
+    ["40003", "uncertain"],
+    ["08006", "uncertain"],
+    ["08003", "uncertain"],
+    ["57P01", "uncertain"],
+    ["PGRST116", "uncertain"],
+    ["", "uncertain"],
+    // The statement was refused and the transaction was rolled back.
+    ["23505", "rejected"],
+    ["23503", "rejected"],
+    ["23514", "rejected"],
+    ["22003", "rejected"],
+    ["42P01", "rejected"],
+    // A raise the trusted function did not name is not a known refusal.
+    ["P0001", "uncertain"],
+    // The trusted function never ran.
+    ["PGRST202", "schema_not_ready"],
+  ];
+  for (const [code, expected] of table) {
+    assert.equal(classifyCartFailure({ code, message: "fixture" }), expected, `SQLSTATE ${code || "(none)"}`);
+  }
+  assert.equal(classifyCartFailure({ code: "P0001", message: "CART_CHANGED" }), "cart_changed");
+  assert.equal(classifyCartFailure({ code: "P0001", message: "PRODUCT_UNAVAILABLE" }), "rejected");
+});
+
+test("a failure whose completion is unknown is never reported as a definite refusal", async () => {
+  const change = deferred();
+  bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
+  await mount(layoutTree(userAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await settle(change, { data: null, error: { code: "08007", message: "could not receive response from the server" } });
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Bag/);
+  assert.doesNotMatch(toast.textContent, /08007|could not receive response/, "no raw server detail reaches the customer");
+  assert.ok(host.querySelector(".cart-recovery"), "an unknown completion can leave the saved Bag out of date");
+});
+
+test("a failure that rolled back asks for no reconciliation the customer does not need", async () => {
+  const change = deferred();
+  bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
+  await mount(layoutTree(userAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await settle(change, { data: null, error: { code: "23505", message: "fixture failure" } });
+  assert.match(host.querySelector(".bag-notice").textContent, /couldn't add Fixture mug to your Bag/);
+  assert.equal(host.querySelectorAll(".cart-recovery").length, 0, "a rolled back refusal leaves the saved Bag unchanged");
+});
+
+test("a change started in the same turn as a saved Bag refresh never runs beside it", async () => {
+  const change = deferred();
+  const load = deferred();
+  let loads = 0;
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart") { loads += 1; return loads === 1 ? emptyCart() : load.promise; }
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await settleError(change, new TypeError("Failed to fetch"));
+  assert.ok(host.querySelector(".cart-recovery"), "the unconfirmed change asks for reconciliation");
+  // The customer refreshes the saved Bag and acts again before React commits
+  // the next render.
+  await act(async () => {
+    dom.window.__cart.refreshSavedCart();
+    await dom.window.__cart.dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default" });
+    await Promise.resolve();
+  });
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "the second change never reaches the server beside the refresh");
+  assert.equal(calls.filter(call => call.name === "load_variant_cart").length, 2, "the saved Bag is re-read once");
+  await settle(load, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
+  await flush();
+  assert.match(host.textContent, /Bag\(1\)/, "the refreshed saved Bag is what the customer sees");
+  assert.match(host.querySelector(".cart-recovery").textContent, /Your saved Bag is up to date/);
+});
+
+test("a removal started in the same turn as a saved Bag refresh keeps the saved line", async () => {
+  const change = deferred();
+  const load = deferred();
+  let loads = 0;
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart") {
+      loads += 1;
+      return loads === 1
+        ? Promise.resolve({ data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null })
+        : load.promise;
+    }
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth, "/cart"));
+  await click(buttonByLabel("Remove Fixture mug"));
+  await settleError(change, new TypeError("Failed to fetch"));
+  assert.ok(host.querySelector(".cart-recovery"), "the unconfirmed removal asks for reconciliation");
+  await act(async () => {
+    dom.window.__cart.refreshSavedCart();
+    await dom.window.__cart.dispatch({ type: "remove", productId: "fixture-mug", variantId: "v-default" });
+    await Promise.resolve();
+  });
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "the second removal never reaches the server beside the refresh");
+  await settle(load, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null });
+  await flush();
+  assert.ok(buttonByLabel("Remove Fixture mug"), "the saved line is still there");
+  assert.match(host.querySelector(".cart-recovery").textContent, /Your saved Bag is up to date/);
+});
+
+test("a quantity change started in the same turn as a saved Bag refresh is refused and can be made afterwards", async () => {
+  const first = deferred();
+  const second = deferred();
+  const load = deferred();
+  let loads = 0;
+  let changes = 0;
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart") {
+      loads += 1;
+      return loads === 1
+        ? Promise.resolve({ data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null })
+        : load.promise;
+    }
+    changes += 1;
+    return changes === 1 ? first.promise : second.promise;
+  });
+  await mount(layoutTree(userAuth, "/cart"));
+  await click(buttonByLabel("Remove Fixture mug"));
+  await settleError(first, new TypeError("Failed to fetch"));
+  assert.ok(host.querySelector(".cart-recovery"), "the unconfirmed removal asks for reconciliation");
+  await act(async () => {
+    dom.window.__cart.refreshSavedCart();
+    dom.window.__cart.dispatch({ type: "quantity", productId: "fixture-mug", variantId: "v-default", quantity: 5 });
+    await Promise.resolve();
+  });
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "the quantity change never reaches the server beside the refresh");
+  await settle(load, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null });
+  await flush();
+  assert.equal(host.querySelector('input[type="number"]').value, "2", "the saved quantity is unchanged");
+  // Once the reconciliation has settled the customer can change the quantity.
+  await act(async () => {
+    dom.window.__cart.dispatch({ type: "quantity", productId: "fixture-mug", variantId: "v-default", quantity: 3 });
+    await Promise.resolve();
+  });
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 2, "the later change is sent");
+  const operationIds = calls.filter(call => call.name === "change_variant_cart").map(call => call.args.p_operation_id);
+  assert.equal(new Set(operationIds).size, 2, "each explicit change carries its own operation id");
+  await settle(second, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 3 }] }, error: null });
+  await flush();
+  assert.equal(host.querySelector('input[type="number"]').value, "3", "the confirmed quantity is shown");
+});
+
+test("a saved Bag refresh that crosses an identity change never reaches the next customer", async () => {
+  const change = deferred();
+  const load = deferred();
+  let loads = 0;
+  bagClient(name => {
+    if (name === "load_variant_cart") { loads += 1; return loads === 1 ? emptyCart() : load.promise; }
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await settleError(change, new TypeError("Failed to fetch"));
+  await act(async () => {
+    dom.window.__cart.refreshSavedCart();
+    root.render(layoutTree(guestAuth));
+    await Promise.resolve();
+  });
+  await settle(load, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 4 }] }, error: null });
+  await flush();
+  assert.equal(host.querySelectorAll(".cart-recovery").length, 0, "the recovery belonged to the previous session");
+  assert.doesNotMatch(host.textContent, /Bag\(4\)/, "the previous session's saved Bag never reaches the next customer");
+});
+
+test("two saved Bag refreshes started in the same turn re-read the saved Bag once", async () => {
+  const change = deferred();
+  const load = deferred();
+  let loads = 0;
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart") { loads += 1; return loads === 1 ? emptyCart() : load.promise; }
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await settleError(change, new TypeError("Failed to fetch"));
+  await act(async () => {
+    dom.window.__cart.refreshSavedCart();
+    dom.window.__cart.refreshSavedCart();
+    await Promise.resolve();
+  });
+  assert.equal(calls.filter(call => call.name === "load_variant_cart").length, 2, "the saved Bag is re-read once");
+  await settle(load, { data: { id: "cart-1", items: [] }, error: null });
+  await flush();
+  assert.match(host.querySelector(".cart-recovery").textContent, /Your saved Bag is up to date/);
+});
+
+test("a saved Bag read that fails after a newer confirmed change never reopens the recovery", async () => {
+  const first = deferred();
+  const second = deferred();
+  const load = deferred();
+  let loads = 0;
+  let changes = 0;
+  bagClient(name => {
+    if (name === "load_variant_cart") { loads += 1; return loads === 1 ? emptyCart() : load.promise; }
+    changes += 1;
+    return changes === 1 ? first.promise : second.promise;
+  });
+  await mount(layoutTree(userAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await settleError(first, new TypeError("Failed to fetch"));
+  assert.ok(host.querySelector(".cart-recovery"), "the unconfirmed change asks for reconciliation");
+  await act(async () => {
+    dom.window.__cart.dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default" });
+    await Promise.resolve();
+  });
+  // A catalogue refresh re-reads the saved Bag while the change is still in
+  // flight, so the read can answer with a snapshot from before the change.
+  await rerender(layoutTree(userAuth, "/", undefined, nextCatalog()));
+  await settle(second, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
+  await flush();
+  const recoveryAfterChange = host.querySelectorAll(".cart-recovery").length;
+  // The overlapping read then fails.
+  await settleError(load, { code: "57014", message: "statement timeout" });
+  await flush();
+  assert.equal(recoveryAfterChange, 0, "the confirmed change supersedes the recovery");
+  assert.equal(host.querySelectorAll(".cart-recovery").length, 0, "the superseded read never reopens the recovery");
+  assert.equal(host.querySelectorAll('[role="alert"]').length, 0, "the superseded read never claims the saved Bag is broken");
+  assert.match(host.textContent, /Bag\(1\)/, "the confirmed change is still the customer's saved Bag");
+});
+
+test("a saved Bag read that overlaps a newer confirmed change never overwrites it", async () => {
+  const change = deferred();
+  const load = deferred();
+  let loads = 0;
+  bagClient(name => {
+    if (name === "load_variant_cart") { loads += 1; return loads === 1 ? emptyCart() : load.promise; }
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth));
+  await act(async () => {
+    dom.window.__cart.dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default" });
+    await Promise.resolve();
+  });
+  await rerender(layoutTree(userAuth, "/", undefined, nextCatalog()));
+  await settle(change, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
+  await flush();
+  assert.match(host.textContent, /Bag\(1\)/, "the confirmed change is visible");
+  // The overlapping read answers afterwards with the snapshot from before the
+  // change was applied.
+  await settle(load, { data: { id: "cart-1", items: [] }, error: null });
+  await flush();
+  assert.match(host.textContent, /Bag\(1\)/, "the older read never overwrites the newer confirmed change");
+});
+
+test("a confirmed change supersedes a pending saved Bag recovery", async () => {
+  const first = deferred();
+  const second = deferred();
+  let changes = 0;
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart") return emptyCart();
+    changes += 1;
+    return changes === 1 ? first.promise : second.promise;
+  });
+  await mount(layoutTree(userAuth));
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await settleError(first, new TypeError("Failed to fetch"));
+  assert.ok(host.querySelector(".cart-recovery"), "the unconfirmed change asks for reconciliation");
+  await act(async () => {
+    dom.window.__cart.dispatch({ type: "add", productId: "fixture-mug", variantId: "v-default" });
+    await Promise.resolve();
+  });
+  await settle(second, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
+  await flush();
+  assert.equal(host.querySelectorAll(".cart-recovery").length, 0, "the confirmed change clears the pending recovery");
+  assert.match(host.textContent, /Bag\(1\)/);
+  const operationIds = calls.filter(call => call.name === "change_variant_cart").map(call => call.args.p_operation_id);
+  assert.equal(operationIds.length, 2);
+  assert.notEqual(operationIds[0], operationIds[1], "the unconfirmed change is never replayed under its own operation id");
 });

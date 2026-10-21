@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useInsertionEffect,
   useMemo,
   useRef,
   useState,
@@ -37,6 +38,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const activeRef = useRef<ActiveNotification | null>(null);
   const nextId = useRef(0);
   const previousPath = useRef(pathname);
+  // The route the customer is on. It is written during the commit, before any
+  // route can announce itself, so a notifier captured on an earlier route can
+  // be recognised as stale at the moment it is called.
+  const currentPath = useRef(pathname);
+  useInsertionEffect(() => {
+    currentPath.current = pathname;
+  }, [pathname]);
 
   const dismiss = useCallback((id?: NotificationId) => {
     const current = activeRef.current;
@@ -49,6 +57,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const notify = useCallback((input: NotifyInput) => {
+    // A notifier that was captured on a route the customer has left is stale.
+    // Creating a notification from it would show an old route's message and
+    // would bring that message back the next time the same pathname becomes
+    // current again.
+    if (currentPath.current !== pathname) return 0;
     const message = input.message.trim();
     if (!message) return 0;
 
@@ -84,7 +97,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (previousPath.current === pathname) return;
     previousPath.current = pathname;
-    if (!activeRef.current) return;
+    const current = activeRef.current;
+    // Only the notification that belonged to the departed route is removed. A
+    // notification the destination route created for itself stays, because it
+    // belongs to the route the customer is on now.
+    if (!current || current.path === pathname) return;
     activeRef.current = null;
     setActive(null);
     // The route change removed the toast. If that removal dropped focus, return

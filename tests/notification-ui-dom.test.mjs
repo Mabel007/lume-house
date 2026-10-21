@@ -66,6 +66,21 @@ function NotificationProbe() {
   );
 }
 
+function ArrivalProbe() {
+  const { notify } = useNotifications();
+  // A destination route can announce its own arrival. That notification
+  // belongs to the route the customer is on, so the route change must not
+  // remove it.
+  useEffect(() => {
+    notify({ tone: "success", message: "Arrived safely" });
+  }, [notify]);
+  return React.createElement(
+    "main",
+    { id: "main", tabIndex: -1 },
+    React.createElement("button", { id: "stay", onClick: () => {} }, "stay"),
+  );
+}
+
 async function mount() {
   root = createRoot(host);
   await act(async () => {
@@ -86,6 +101,32 @@ async function mount() {
     );
     await new Promise(resolve => setTimeout(resolve, 0));
   });
+}
+async function mountArrival() {
+  root = createRoot(host);
+  await act(async () => {
+    root.render(
+      React.createElement(
+        MemoryRouter,
+        { initialEntries: ["/"] },
+        React.createElement(
+          NotificationProvider,
+          null,
+          React.createElement(
+            Routes,
+            null,
+            React.createElement(Route, { path: "/", element: React.createElement(NotificationProbe) }),
+            React.createElement(Route, { path: "/arrival", element: React.createElement(ArrivalProbe) }),
+            React.createElement(Route, { path: "*", element: React.createElement(NotificationProbe) }),
+          ),
+        ),
+      ),
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+}
+async function settle() {
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 }
 async function click(element) {
   await act(async () => {
@@ -312,6 +353,63 @@ test("only plain text is rendered and only one live region carries the active me
   assert.equal(activeNotice().textContent, "<b>Not markup</b>");
   assert.equal(activeNotice().querySelector("b"), null);
   assert.equal(carryingRegions().length, 1);
+});
+
+test("a notification the destination route creates for itself survives the route change", async () => {
+  await mountArrival();
+  await click(button("success"));
+  assert.ok(activeNotice(), "the origin route shows its own notification");
+  await act(async () => {
+    dom.window.__notifications.navigate("/arrival");
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  await settle();
+  const notice = activeNotice();
+  assert.ok(notice, "the route cleanup never removes a notification that belongs to the route the customer is on");
+  assert.match(notice.textContent, /Arrived safely/);
+});
+
+test("a notification from a route the customer left never reappears when they come back", async () => {
+  await mount();
+  // A notifier captured on the route the customer is leaving.
+  const originNotify = dom.window.__notifications.notify;
+  await click(button("next"));
+  await settle();
+  assert.equal(activeNotice(), null, "the departed route's notification is gone");
+  // A delayed action that started on the departed route finishes now.
+  await act(async () => {
+    originNotify({ tone: "error", message: "Late origin action" });
+    await Promise.resolve();
+  });
+  await settle();
+  await act(async () => {
+    dom.window.__notifications.navigate(-1);
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  await settle();
+  const frames = dom.window.__frames ?? [];
+  const back = frames[frames.length - 1];
+  assert.equal(back.path, "/", "the customer returned to the route the action came from");
+  assert.equal(back.toast, false, "the first committed render of that route carries no obsolete notification");
+  assert.equal(activeNotice(), null, "the obsolete notification never comes back");
+});
+
+test("a notification created after the customer returns to a route still works", async () => {
+  await mount();
+  await click(button("next"));
+  await settle();
+  await act(async () => {
+    dom.window.__notifications.navigate(-1);
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  await settle();
+  await act(async () => {
+    dom.window.__notifications.notify({ tone: "success", message: "Back again" });
+    await Promise.resolve();
+  });
+  const notice = activeNotice();
+  assert.ok(notice, "a notification for the route the customer returned to still works");
+  assert.match(notice.textContent, /Back again/);
 });
 
 test("the shared styles keep safe-area placement and reduced-motion behavior", () => {

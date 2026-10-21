@@ -31,13 +31,31 @@ const REFUSED_MESSAGES = new Set([
   'AUTH_REQUIRED',
 ]);
 
+/**
+ * SQLSTATE classes that are known to abort the transaction before anything
+ * could be committed:
+ *
+ * - `22` data exception,
+ * - `23` integrity constraint violation,
+ * - `42` syntax error or access rule violation, raised while the statement is
+ *   parsed or planned, before it runs.
+ *
+ * A code outside this list is not proof that nothing was applied. `08`
+ * (connection exception) and `40` (transaction rollback) can leave the
+ * completion of the statement or of the transaction unknown, so they are never
+ * treated as a definite refusal. A raised refusal is only a definite refusal
+ * when the trusted function names it, which is handled above.
+ */
+const ROLLED_BACK_CLASSES = new Set(['22', '23', '42']);
+
 type RawError = { code?: string | null; message?: string | null };
 
 /**
  * Classifies a PostgREST/Postgres error without trusting anything the browser
  * can influence. An empty code means no server answer reached the client, so the
- * outcome of the mutation is unknown; a database error code means the request was
- * refused and rolled back.
+ * outcome of the mutation is unknown. A database error code is only proof of a
+ * refusal when the code is known to roll the transaction back; every other code,
+ * including an unknown completion, leaves the outcome uncertain.
  */
 export function classifyCartFailure(error: RawError): CartFailureKind {
   const code = (error.code ?? '').trim();
@@ -47,7 +65,7 @@ export function classifyCartFailure(error: RawError): CartFailureKind {
   if (code === '') return 'uncertain';
   if (code === 'PGRST116') return 'uncertain';
   if (REFUSED_MESSAGES.has(message)) return 'rejected';
-  if (/^\d{5}$/.test(code)) return 'rejected';
+  if (ROLLED_BACK_CLASSES.has(code.slice(0, 2))) return 'rejected';
   return 'uncertain';
 }
 
