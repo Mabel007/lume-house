@@ -365,6 +365,49 @@ test("guest Bag page updates quantities and removals in local storage with deriv
   assert.match(toast.textContent, /Removed Fixture mug from your Bag/);
 });
 
+function RecoveringCatalog({ children }) {
+  const [state, setState] = React.useState({ status: "error" });
+  return React.createElement(ProductContext.Provider, {
+    value: { state, refresh: () => setState({ status: "ready", products: [product] }) },
+  }, children);
+}
+
+test("loaded Bag omits the manual price-refresh control while retaining checkout guidance", async () => {
+  bagClient(() => emptyCart());
+  sessionStorage.setItem("lume-guest-cart", JSON.stringify({
+    version: 2,
+    items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 2, mergeId: "11111111-1111-4111-8111-111111111111" }],
+  }));
+  await mount(withProviders(guestAuth, React.createElement(CartPage)));
+  assert.match(host.textContent, /NLE 36/);
+  assert.equal([...host.querySelectorAll("button")].filter(item => /refresh/i.test(item.textContent || "")).length, 0, "the loaded Bag must not offer a redundant price refresh");
+  assert.doesNotMatch(host.textContent, /Refresh product prices/);
+  assert.ok(host.querySelector('a[href="/checkout"]'), "checkout remains available");
+  assert.match(host.textContent, /Order totals are confirmed securely at checkout\. Payment awaits confirmation\./);
+});
+
+test("Bag catalogue failure keeps an explicit retry that recovers current prices without a manual refresh control", async () => {
+  bagClient(() => emptyCart());
+  sessionStorage.setItem("lume-guest-cart", JSON.stringify({
+    version: 2,
+    items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 2, mergeId: "11111111-1111-4111-8111-111111111111" }],
+  }));
+  await mount(React.createElement(MemoryRouter, { initialEntries: ["/"] },
+    React.createElement(AuthContext.Provider, { value: guestAuth },
+      React.createElement(RecoveringCatalog, null,
+        React.createElement(CartProvider, null, React.createElement(CartPage))))));
+  assert.match(host.textContent, /The collection is unavailable\./);
+  assert.match(host.textContent, /couldn.t load the products/);
+  assert.doesNotMatch(host.textContent, /Refresh product prices/);
+  const retry = [...host.querySelectorAll("button")].find(item => item.textContent === "Try again");
+  assert.ok(retry, "a failed catalogue read exposes an explicit retry");
+  await click(retry);
+  assert.match(host.textContent, /Fixture mug/);
+  assert.match(host.textContent, /NLE 36/);
+  assert.doesNotMatch(host.textContent, /The collection is unavailable\./);
+  assert.doesNotMatch(host.textContent, /Refresh product prices/);
+});
+
 test("cart quantity input ignores empty, zero, negative, decimal and over-limit typing and commits valid values", async () => {
   bagClient(() => emptyCart());
   sessionStorage.setItem("lume-guest-cart", JSON.stringify({

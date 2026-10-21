@@ -36,15 +36,15 @@ function fakeClient(invoke){return {
   functions:{invoke:invoke??(async()=>({data:null,error:null}))},
 };}
 
-async function mount({authSession=null,cartStatus='ready',items=[{productId:fixture.id,quantity:2}],products=[fixture],client}={}){
+async function mount({authSession=null,cartStatus='ready',items=[{productId:fixture.id,quantity:2}],products=[fixture],client,refreshProducts=noop,retryCart=noop}={}){
   globalThis.__checkoutDeliveryClient=client??fakeClient();
   if(root){await act(async()=>root.unmount());root=undefined;host.replaceChildren();}
   root=createRoot(host);
   await act(async()=>root.render(
     React.createElement(MemoryRouter,null,
       React.createElement(AuthContext.Provider,{value:{loading:false,session:authSession,error:null,signIn:async()=>{},signOut:async()=>{}}},
-        React.createElement(ProductContext.Provider,{value:{state:{status:'ready',products},refresh(){}}},
-          React.createElement(CartContext.Provider,{value:{items,dispatch:noop,status:cartStatus,retry:noop,beginCheckout:()=>1,finishCheckout:noop}},
+        React.createElement(ProductContext.Provider,{value:{state:{status:'ready',products},refresh:refreshProducts}},
+          React.createElement(CartContext.Provider,{value:{items,dispatch:noop,status:cartStatus,retry:retryCart,beginCheckout:()=>1,finishCheckout:noop}},
             React.createElement(CheckoutPage)))))));
 }
 
@@ -145,6 +145,29 @@ test('invalid trusted delivery responses surface safe guidance and never claim p
   assert.doesNotMatch(host.textContent,/payment successful|order confirmed/i);
   assert.ok(host.querySelector('form#checkout-form'));
   assert.equal(button().disabled,false);
+});
+
+test('a changed-price rejection refreshes the Bag and requires an explicit second submit with the same request id', async()=>{
+  const calls=[]; let refreshes=0, retries=0;
+  const client=fakeClient(async(name,options)=>{calls.push({name,options});return {data:null,error:{context:new Response(JSON.stringify({error:'CART_CHANGED'}),{status:409,headers:{'Content-Type':'application/json'}})}};});
+  await mount({authSession:session,client,refreshProducts:()=>{refreshes+=1;},retryCart:()=>{retries+=1;}});
+  await fillRequired();
+  await setValue(host.querySelector('[name="contact-phone"]'),'76521208');
+  await toggle(host.querySelector('#reuse-phone'));
+  await submit();
+  assert.equal(calls.length,1,'one placement attempt');
+  assert.match(alertTexts().join(' '),/Your Bag or current prices changed\. Review the refreshed Bag before placing your order\./);
+  assert.equal(refreshes,1,'current catalogue prices are re-read');
+  assert.equal(retries,1,'the saved Bag is re-read');
+  assert.equal(button().disabled,false,'the customer can review and submit again');
+  assert.equal(calls[0].options.body.expected_cart[0].unit_price,1800,'the displayed unit price is still submitted for server comparison');
+  const requestId=calls[0].options.body.request_id;
+  await new Promise(resolve=>setTimeout(resolve,20));
+  assert.equal(calls.length,1,'a rejected price change never resubmits automatically');
+  await submit();
+  assert.equal(calls.length,2,'a second explicit submit is required and allowed');
+  assert.equal(calls[1].options.body.request_id,requestId,'the retry keeps the owner-scoped idempotency key');
+  assert.doesNotMatch(host.textContent,/payment successful|order confirmed/i);
 });
 
 test('contact phone exposes network-neutral help, a telephone keypad and field-associated validation', async()=>{

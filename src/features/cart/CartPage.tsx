@@ -34,7 +34,7 @@ export function CartPage() {
     else if (outcome.kind === "rejected") setNotice({ id: operation, tone: "failure", text: bagRemoveFailedText(product.name) });
   }
   const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
-  const { state, refresh } = useProducts();
+  const { state } = useProducts();
   if (status === "loading" || status === "error" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind={status==='error'?'error':'loading'}>Your saved Bag is not ready yet.</UiStatus></section>;
   if (!items.length) return <><EmptyCart /><BagNotice message={notice} onExpire={clearNotice} /></>;
   if (state.status !== "ready")
@@ -164,9 +164,6 @@ export function CartPage() {
               shopping.
             </p>
           )}
-          <button className="text-link" onClick={refresh}>
-            Refresh product prices
-          </button>
           <p className="small-note">
             Order totals are confirmed securely at checkout. Payment awaits confirmation.
           </p>
