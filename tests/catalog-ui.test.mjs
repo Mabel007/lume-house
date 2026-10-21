@@ -10,6 +10,7 @@ let server;
 let ProductContext, CartContext, AuthContext, ShopPage, CartPage, CheckoutPage;
 let contentPages, routeTitle, aboutFragmentTarget;
 let Layout, SiteFooter, AccountExperience, accountInitials, ProductDetails, ProductDetailsPage;
+let NotificationProvider;
 before(async () => {
   server = await createServer({
     server: { middlewareMode: true, hmr: false },
@@ -25,6 +26,7 @@ before(async () => {
     "/src/features/auth/AuthContext.ts",
   ));
   ({ ProductDetails, ProductDetailsPage } = await server.ssrLoadModule("/src/features/products/ProductDetailsPage.tsx"));
+  ({ NotificationProvider } = await server.ssrLoadModule("/src/components/NotificationProvider.tsx"));
   ({ ShopPage } = await server.ssrLoadModule(
     "/src/features/products/ShopPage.tsx",
   ));
@@ -146,7 +148,7 @@ function render(Page, state, cart = items) {
         React.createElement(
           CartContext.Provider,
           { value: { items: cart, dispatch() {} } },
-          React.createElement(Page),
+          React.createElement(NotificationProvider, null, React.createElement(Page)),
         ),
       ),
     ),
@@ -275,7 +277,7 @@ function renderLayout(path, cartState = { items, status: "ready", error: null, r
             React.createElement(Route,{path:"*",element:React.createElement("h1",null,"Page")}))))))));
 }
 function renderDetails(product) {
-  return renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(CartContext.Provider,{value:{items:[],dispatch(){},status:"ready"}},React.createElement(ProductDetails,{product}))));
+  return renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(CartContext.Provider,{value:{items:[],dispatch(){},status:"ready"}},React.createElement(NotificationProvider,null,React.createElement(ProductDetails,{product})))));
 }
 
 test("primary navigation has five destinations, account/help descendant active states and Bag count", () => {
@@ -376,21 +378,18 @@ test("Add to Bag feedback waits for confirmed persistence before claiming succes
   assert.doesNotMatch(readFileSync("src/features/cart/CartProvider.tsx", "utf8"), /Your (?:saved )?cart/i);
 });
 
-test("Product Details groups add action, notice and Bag link in one stable actions row", async () => {
+test("Product Details groups add action and Bag link in one stable actions row", async () => {
   const { readFileSync } = await import("node:fs");
   const details = readFileSync("src/features/products/ProductDetailsPage.tsx", "utf8");
   const group = details.match(/<div className="product-details-actions">[\s\S]*?<\/div>/);
-  assert.ok(group, "actions group wraps button, status notice and View Bag link");
+  assert.ok(group, "actions group wraps the add button and View Bag link");
   assert.match(group[0], /product-details-add/);
-  assert.match(group[0], /role="status" aria-live="polite"/);
+  assert.doesNotMatch(group[0], /role="status"|className="feedback"/, "the migrated inline feedback slot is removed");
   assert.match(group[0], /to="\/cart">View your Bag/);
   assert.ok(group[0].indexOf("product-details-add") < group[0].indexOf('to="/cart"'), "focus order: add button before Bag link");
   const css = readFileSync("src/styles.css", "utf8");
   assert.match(css, /\.product-details-actions \{ display: flex; flex-direction: column;/);
-  assert.match(css, /\.product-details-actions \.feedback \{ display: block; margin: 0; min-height: 5em; \}/);
-  assert.match(css, /@media \(max-width: 1000px\) \{ \.product-details-actions \.feedback \{ min-height: 6\.8em; \} \}/, "≤1000px reserves four feedback lines for long names");
-  assert.match(css, /@media \(max-width: 479px\) \{ \.product-details-actions \.feedback \{ min-height: 8\.8em; \} \}/, "≤479px reserves five feedback lines so long-name feedback cannot shift the Bag link");
-  assert.match(css, /\.product-details-actions \.feedback:empty \{ display: block; \}/, "notice space is reserved so the Bag link never shifts");
+  assert.doesNotMatch(css, /\.product-details-actions \.feedback/, "feedback no longer reserves vertical space in the actions row");
   assert.match(css, /@media \(max-width: 479px\)[^@]*\.product-details-actions \.product-details-add \{ width: 100%;/);
 });
 

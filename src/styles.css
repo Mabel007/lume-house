@@ -1091,19 +1091,23 @@ nav a,
 .feedback { font-size: 13px; line-height: 1.7; color: #485c47; }
 .feedback:empty { display: none; }
 .feedback.feedback-failure:not(:empty) { color: #8a4628; }
-.bag-notice-region { position: fixed; left: 50%; transform: translateX(-50%); width: min(360px, calc(100vw - 32px)); top: var(--bag-notice-top, 20px); z-index: 60; pointer-events: none; }
+.bag-notice-region { position: fixed; left: 50%; transform: translateX(-50%); width: min(360px, calc(100vw - 32px)); top: max(calc(20px + env(safe-area-inset-top, 0px)), var(--bag-notice-top, 20px)); z-index: 60; pointer-events: none; }
 .bag-notice-region.is-bottom { top: auto; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
 .bag-notice { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 10px; margin: 0; padding: 8px 6px 10px 12px; background: #fffdf7; color: #29382e; font-size: 13px; line-height: 1.5; text-align: left; border: 1px solid var(--surface-border); border-radius: 3px; box-shadow: 0 10px 30px #29382e1f, 0 1px 3px #29382e0f; pointer-events: auto; }
 .bag-notice-icon { display: grid; place-items: center; align-self: start; margin-top: 2px; color: #4d6b47; }
 .bag-notice.failure .bag-notice-icon { color: #9a542e; }
+.bag-notice.warning .bag-notice-icon { color: #8a6a2f; }
+.bag-notice.info .bag-notice-icon { color: #4b6474; }
 .bag-notice-message { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .bag-notice-dismiss { position: relative; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #626c60; cursor: pointer; transition: background-color var(--motion-time) var(--motion-ease), color var(--motion-time) var(--motion-ease); }
 /* Expands the pointer target to 44px without inflating the compact card. */
 .bag-notice-dismiss::after { content: ""; position: absolute; inset: -6px; }
 .bag-notice-dismiss:hover { background: #f0f0e6; color: #29382e; }
 .bag-notice-progress { position: absolute; left: 12px; right: 12px; bottom: 0; height: 2px; overflow: hidden; background: #e8e7dc; border-radius: 1px; }
-.bag-notice-progress-bar { display: block; height: 100%; transform-origin: left center; background: #6f8a66; animation: bag-notice-countdown 5000ms linear forwards; }
+.bag-notice-progress-bar { display: block; height: 100%; transform-origin: left center; background: #6f8a66; animation: bag-notice-countdown var(--bag-notice-duration, 5000ms) linear forwards; }
 .bag-notice.failure .bag-notice-progress-bar { background: #b3714a; }
+.bag-notice.warning .bag-notice-progress-bar { background: #b58a45; }
+.bag-notice.info .bag-notice-progress-bar { background: #6f838a; }
 @keyframes bag-notice-countdown {
   from { transform: scaleX(1); }
   to { transform: scaleX(0); }
@@ -1316,14 +1320,7 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 .product-details-quantity { margin-top: 20px; max-width: fit-content; }
 .product-details-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin: 16px 0; }
 .product-details-actions .product-details-add { margin: 0; }
-.product-details-actions .feedback { display: block; margin: 0; min-height: 5em; }
-.product-details-actions .feedback:empty { display: block; }
 .product-details-actions .text-link { margin-top: 0; }
-/* Feedback reserve: sized to the longest measured feedback lines at each
-   breakpoint (3 lines above 1000px, 4 lines ≤1000px, 5 lines ≤479px) so the
-   View your Bag link does not shift when a long product name wraps. */
-@media (max-width: 1000px) { .product-details-actions .feedback { min-height: 6.8em; } }
-@media (max-width: 479px) { .product-details-actions .feedback { min-height: 8.8em; } }
 .variant-options { min-width: 0; padding: 0; border: 0; margin: 28px 0; }
 .variant-options legend { font: 24px Georgia,serif; margin-bottom: 16px; }
 .variant-options label { display: flex; gap: 12px; align-items: center; min-height: 48px; padding: 14px; margin: 10px 0; border: 1px solid var(--surface-border); cursor: pointer; overflow-wrap: anywhere; }

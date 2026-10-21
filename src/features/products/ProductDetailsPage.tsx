@@ -8,6 +8,7 @@ import { requiresOptions, variantLabel, variantAvailable, cataloguePrice } from 
 import { useCart } from '../cart/CartContext';
 import { defaultVariant, MAX_QUANTITY } from '../cart/cart';
 import { bagAddedText, bagAddFailedText } from '../cart/bagFeedback';
+import { useNotifications } from '../../components/notifications';
 import { formatMoney } from '../../config/shop';
 
 export function ProductDetailsPage() {
@@ -21,8 +22,8 @@ export function ProductDetailsPage() {
 
 export function ProductDetails({product}:{product:Product}) {
   const {items,dispatch,status}=useCart();
+  const {notify}=useNotifications();
   const [selection,setSelection]=useState('');
-  const [notice,setNotice]=useState<{tone:'success'|'failure';text:string}|null>(null);
   const [amount,setAmount]=useState(1);
   const [pending,setPending]=useState(false);
   const pendingSeq=useRef(0);
@@ -46,8 +47,8 @@ export function ProductDetails({product}:{product:Product}) {
     const outcome=await dispatch({type:'add',productId:product.id,variantId:variant.id,quantity:addedAmount});
     if(!alive.current||operation!==pendingSeq.current)return;
     setPending(false);
-    if(outcome.kind==='confirmed')setNotice({tone:'success',text:bagAddedText(addedAmount,name,detail)});
-    else if(outcome.kind==='rejected')setNotice({tone:'failure',text:bagAddFailedText(name)});
+    if(outcome.kind==='confirmed')notify({tone:'success',message:bagAddedText(addedAmount,name,detail)});
+    else if(outcome.kind==='rejected')notify({tone:'error',message:bagAddFailedText(name)});
   }
   return <section className="wrap page-section product-details">
     <Link className="back-link" to="/">← Back to the collection</Link>
@@ -93,7 +94,6 @@ export function ProductDetails({product}:{product:Product}) {
         </div>
         <div className="product-details-actions">
           <button className="button product-details-add" disabled={!compatible||busy||pending||quantity+amount>MAX_QUANTITY} aria-label={`Add ${product.name} to Bag`} onClick={addToBag}>{pending?'Adding…':quantity+amount>MAX_QUANTITY?'Quantity limit reached':'Add to Bag'}</button>
-          <p role="status" aria-live="polite" className={`feedback${notice?.tone==='failure'?' feedback-failure':''}`}>{notice?.text??''}</p>
           <Link className="text-link" to="/cart">View your Bag →</Link>
         </div>
         <p className="small-note">Payment awaits confirmation after order placement.</p>

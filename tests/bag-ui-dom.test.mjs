@@ -12,7 +12,7 @@ for (const name of ["window", "document", "HTMLElement", "Element", "sessionStor
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const { createRoot } = await import("react-dom/client");
 const host = document.getElementById("root");
-let server, root, CartProvider, useCart, ShopPage, ProductDetails, CartPage, Layout, AuthContext, ProductContext;
+let server, root, CartProvider, useCart, ShopPage, ProductDetails, CartPage, Layout, AuthContext, ProductContext, NotificationProvider;
 
 const product = {
   id: "fixture-mug", name: "Fixture mug", description: "Fixture description", category: "Fixture category",
@@ -49,6 +49,7 @@ before(async () => {
   ({ Layout } = await server.ssrLoadModule("/src/components/Layout.tsx"));
   ({ AuthContext } = await server.ssrLoadModule("/src/features/auth/AuthContext.ts"));
   ({ ProductContext } = await server.ssrLoadModule("/src/features/products/ProductContext.ts"));
+  ({ NotificationProvider } = await server.ssrLoadModule("/src/components/NotificationProvider.tsx"));
 });
 afterEach(async () => {
   if (root) await act(async () => root.unmount());
@@ -82,6 +83,12 @@ async function mount(element) {
   root = createRoot(host);
   await act(async () => { root.render(element); await new Promise(resolve => setTimeout(resolve, 0)); });
 }
+async function remount(element) {
+  if (root) await act(async () => { root.unmount(); });
+  root = null;
+  host.replaceChildren();
+  await mount(element);
+}
 async function click(element) {
   await act(async () => { element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); await Promise.resolve(); });
 }
@@ -102,7 +109,8 @@ function withProviders(auth, children, catalogValue = catalog) {
   return React.createElement(MemoryRouter, { initialEntries: ["/"] },
     React.createElement(AuthContext.Provider, { value: auth },
       React.createElement(ProductContext.Provider, { value: catalogValue },
-        React.createElement(CartProvider, null, children))));
+        React.createElement(CartProvider, null,
+          React.createElement(NotificationProvider, null, children)))));
 }
 async function rerender(element) {
   await act(async () => { root.render(element); await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -113,9 +121,10 @@ function layoutTree(auth, path = "/") {
     React.createElement(AuthContext.Provider, { value: auth },
       React.createElement(ProductContext.Provider, { value: catalog },
         React.createElement(CartProvider, null,
-          React.createElement(Routes, null,
-            React.createElement(Route, { element: React.createElement(Layout) },
-              React.createElement(Route, { path, element: React.createElement(path === "/cart" ? CartPage : ShopPage) })))))));
+          React.createElement(NotificationProvider, null,
+            React.createElement(Routes, null,
+              React.createElement(Route, { element: React.createElement(Layout) },
+                React.createElement(Route, { path, element: React.createElement(path === "/cart" ? CartPage : ShopPage) }))))))));
 }
 // StrictMode reproduces the dev double-mount that plays effect cleanup then
 // re-runs effects; the alive guards must survive the replay.
@@ -292,17 +301,14 @@ test("authenticated Add to Bag saves once through the RPC, stays busy and cannot
   assert.match(host.textContent, /Added 1 × Fixture mug to your Bag/);
 });
 
-test("authenticated Add to Bag failure surfaces the global alert, keeps the Bag unchanged and recovers", async () => {
+test("authenticated Add to Bag failure shows one action toast, keeps the Bag unchanged and recovers", async () => {
   const change = deferred();
   const calls = bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
   await mount(layoutTree(userAuth));
   const add = buttonByLabel("Add Fixture mug to Bag");
   await click(add);
   await settle(change, { data: null, error: { code: "23505", message: "fixture failure" } });
-  const alert = host.querySelector('[role="alert"]');
-  assert.ok(alert);
-  assert.match(alert.textContent, /Your Bag change could not be confirmed/);
-  assert.match(alert.textContent, /Retry saved Bag/);
+  assert.equal(host.querySelector('[role="alert"]'), null, "the action failure is not also published by the Bag header");
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
   assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Bag/);
@@ -310,9 +316,10 @@ test("authenticated Add to Bag failure surfaces the global alert, keeps the Bag 
   assert.doesNotMatch(host.textContent, /Added 1 × Fixture mug to your Bag/);
   assert.equal(buttonByLabel("Add Fixture mug to Bag").disabled, false);
   assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Add to Bag/);
-  await click(button("Retry saved Bag"));
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
-  assert.equal(calls.filter(call => call.name === "load_variant_cart").length, 2);
+  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await flush();
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 2, "the same action can be retried locally");
+  assert.equal(host.querySelectorAll(".bag-notice").length, 1);
   assert.equal(host.querySelector('[role="alert"]'), null);
 });
 
@@ -395,7 +402,8 @@ test("Bag catalogue failure keeps an explicit retry that recovers current prices
   await mount(React.createElement(MemoryRouter, { initialEntries: ["/"] },
     React.createElement(AuthContext.Provider, { value: guestAuth },
       React.createElement(RecoveringCatalog, null,
-        React.createElement(CartProvider, null, React.createElement(CartPage))))));
+        React.createElement(CartProvider, null,
+          React.createElement(NotificationProvider, null, React.createElement(CartPage)))))));
   assert.match(host.textContent, /The collection is unavailable\./);
   assert.match(host.textContent, /couldn.t load the products/);
   assert.doesNotMatch(host.textContent, /Refresh product prices/);
@@ -417,7 +425,8 @@ test("signed-in Bag catalogue failure exposes a retry that restores the saved Ba
   await mount(React.createElement(MemoryRouter, { initialEntries: ["/"] },
     React.createElement(AuthContext.Provider, { value: userAuth },
       React.createElement(RecoveringCatalog, null,
-        React.createElement(CartProvider, null, React.createElement(CartPage))))));
+        React.createElement(CartProvider, null,
+          React.createElement(NotificationProvider, null, React.createElement(CartPage)))))));
   assert.match(host.textContent, /The collection is unavailable\./);
   assert.match(host.textContent, /Try again/);
   assert.doesNotMatch(host.textContent, /Your saved Bag is not ready yet\./);
@@ -531,6 +540,49 @@ test("authenticated Bag page removal failure shows no success claim and keeps th
   assert.match(host.textContent, /NLE 36/);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
   assert.equal(buttonByLabel("Remove Fixture mug").disabled, false);
+  assert.equal(host.querySelector('[role="alert"]'), null, "the action failure is not duplicated by a global Bag alert");
+});
+
+test("quantity update failure keeps the global Bag error and retry without an action toast", async () => {
+  const change = deferred();
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart")
+      return Promise.resolve({ data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null });
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth, "/cart"));
+  await typeQuantity(host.querySelector('input[type="number"]'), "3");
+  assert.equal(calls.find(call => call.name === "change_variant_cart").args.p_mode, "set");
+  await settle(change, { data: null, error: { code: "P0001", message: "fixture quantity failure" } });
+  assert.equal(host.querySelector(".bag-notice"), null, "quantity changes keep their existing global feedback");
+  const alert = host.querySelector('[role="alert"]');
+  assert.ok(alert);
+  assert.match(alert.textContent, /Your Bag change could not be confirmed/);
+  assert.match(alert.textContent, /Retry saved Bag/);
+  await click(button("Retry saved Bag"));
+  await flush();
+  assert.equal(calls.filter(call => call.name === "load_variant_cart").length, 2);
+});
+
+test("unavailable-item removal failure keeps truthful accessible feedback", async () => {
+  const change = deferred();
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart")
+      return Promise.resolve({ data: { id: "cart-1", items: [{ product_id: "fixture-missing", variant_id: "v-missing", quantity: 2 }] }, error: null });
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth, "/cart"));
+  assert.match(host.textContent, /Some items are no longer available/);
+  await click(buttonByLabel("Remove unavailable item 1"));
+  await settle(change, { data: null, error: { code: "P0001", message: "fixture unavailable removal failure" } });
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /Unavailable item 1 could not be removed/);
+  assert.match(toast.textContent, /Check your Bag before trying again/);
+  assert.doesNotMatch(host.textContent, /Removed unavailable item/);
+  assert.match(host.textContent, /Some items are no longer available/, "the unavailable-item state remains visible");
+  assert.equal(host.querySelector('[role="alert"]'), null);
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
 });
 
 test("authenticated Bag page quantity and removal use set and remove RPC modes", async () => {
@@ -591,7 +643,7 @@ test("shop toast keeps only the newest confirmation", async () => {
   assert.match(toasts[0].textContent, /Added 1 × Fixture mug to your Bag/);
 });
 
-test("Product Details actions group keeps the Bag link beside a reserved notice slot", async () => {
+test("Product Details actions group keeps the Bag link and uses the shared notice", async () => {
   bagClient(() => emptyCart());
   await mount(withProviders(guestAuth, React.createElement(ProductDetails, { product })));
   const group = host.querySelector(".product-details-actions");
@@ -599,11 +651,14 @@ test("Product Details actions group keeps the Bag link beside a reserved notice 
   const link = group.querySelector('a[href="/cart"]');
   assert.ok(link);
   assert.match(link.textContent, /View your Bag/);
-  assert.equal(group.querySelector(".feedback").textContent, "");
+  assert.equal(group.querySelector(".feedback"), null, "the migrated inline feedback slot is gone");
+  assert.equal(group.querySelector('[role="status"]'), null, "Product Details does not keep a duplicate live region");
   await click(buttonByLabel("Add Fixture mug to Bag"));
   const sameLink = group.querySelector('a[href="/cart"]');
   assert.equal(sameLink, link, "notice appearance must not replace or move the link within the group");
-  assert.match(group.querySelector(".feedback").textContent, /Added 1 × Fixture mug to your Bag/);
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /Added 1 × Fixture mug to your Bag/);
 });
 
 test("an obsolete add failure after switching accounts shows no feedback under the new identity", async () => {
@@ -871,10 +926,9 @@ test("uncertain add after a lost RPC response makes no definite claim and reload
   assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Bag/);
   assert.match(toast.textContent, /Check your Bag before trying again/);
   assert.doesNotMatch(host.textContent, /was not added|Added 1 × Fixture mug to your Bag/);
-  assert.ok(host.querySelector('[role="alert"]'), "global retry path stays available");
+  assert.equal(host.querySelector('[role="alert"]'), null, "the action failure does not also claim the global Bag alert");
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "uncertain mutations are never repeated automatically");
-  await click(button("Retry saved Bag"));
-  await flush();
+  await remount(layoutTree(userAuth));
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "reload does not replay the uncertain mutation");
   assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(1\)/, "reload reconciles the actually-applied line");
 });
@@ -898,10 +952,9 @@ test("uncertain add with a malformed saved-cart response after commit makes no d
   assert.ok(toast);
   assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Bag/);
   assert.doesNotMatch(host.textContent, /was not added|Added 1 × Fixture mug to your Bag/);
-  assert.ok(host.querySelector('[role="alert"]'));
+  assert.equal(host.querySelector('[role="alert"]'), null);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
-  await click(button("Retry saved Bag"));
-  await flush();
+  await remount(layoutTree(userAuth));
   assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(1\)/, "reload reconciles the actually-applied line");
 });
 
@@ -925,10 +978,9 @@ test("uncertain removal after a lost RPC response makes no definite claim and re
   assert.match(toast.textContent, /couldn't confirm removing Fixture mug from your Bag/);
   assert.match(toast.textContent, /Check your Bag before trying again/);
   assert.doesNotMatch(host.textContent, /was not removed|Removed Fixture mug from your Bag/);
-  assert.ok(host.querySelector('[role="alert"]'));
+  assert.equal(host.querySelector('[role="alert"]'), null);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "uncertain removals are never repeated automatically");
-  await click(button("Retry saved Bag"));
-  await flush();
+  await remount(layoutTree(userAuth, "/cart"));
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
   assert.match(host.textContent, /Your Bag is taking a slow day/, "reload reconciles the actually-removed line");
   assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(0\)/);
@@ -1387,7 +1439,7 @@ test("dismissing with focus on the control returns keyboard focus to the page, n
 test("focus-aware placement stays a single fixed live region with reduced-motion-safe styling", async () => {
   const { readFileSync } = await import("node:fs");
   const css = readFileSync("src/styles.css", "utf8");
-  assert.match(css, /\.bag-notice-region\s*\{[^}]*position:\s*fixed;[^}]*left:\s*50%;[^}]*transform:\s*translateX\(-50%\);[^}]*width:\s*min\(360px,\s*calc\(100vw - 32px\)\);[^}]*top:\s*var\(--bag-notice-top,\s*20px\);[^}]*pointer-events:\s*none;/);
+  assert.match(css, /\.bag-notice-region\s*\{[^}]*position:\s*fixed;[^}]*left:\s*50%;[^}]*transform:\s*translateX\(-50%\);[^}]*width:\s*min\(360px,\s*calc\(100vw - 32px\)\);[^}]*top:\s*max\(calc\(20px \+ env\(safe-area-inset-top,[^}]*pointer-events:\s*none;/);
   assert.match(css, /\.bag-notice-region\.is-bottom\s*\{[^}]*top:\s*auto;[^}]*bottom:\s*calc\(20px \+ env\(safe-area-inset-bottom/);
   assert.match(css, /prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]{0,600}?animation:\s*none\s*!important/);
   assert.match(css, /prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]{0,600}?\.bag-notice-progress\s*\{\s*display:\s*none;/);
@@ -1402,7 +1454,7 @@ test("the notice uses a light Lumé House surface with a slim, tone-coloured cou
   assert.doesNotMatch(css, /\.bag-notice(?!-)[^{]*\{[^}]*background:\s*#2f3a2d/, "the old dark green fill is gone");
   assert.doesNotMatch(css, /\.bag-notice\.failure\s*\{[^}]*background:\s*#8a4628/, "the old solid rust fill is gone");
   assert.match(css, /\.bag-notice-progress\s*\{[^}]*height:\s*2px;/);
-  assert.match(css, /\.bag-notice-progress-bar\s*\{[^}]*animation:\s*bag-notice-countdown 5000ms linear forwards;/);
+  assert.match(css, /\.bag-notice-progress-bar\s*\{[^}]*animation:\s*bag-notice-countdown var\(--bag-notice-duration,\s*5000ms\) linear forwards;/);
   assert.match(css, /@keyframes bag-notice-countdown\s*\{\s*from\s*\{\s*transform:\s*scaleX\(1\);\s*\}\s*to\s*\{\s*transform:\s*scaleX\(0\);\s*\}\s*\}/);
   assert.match(component, /BAG_NOTICE_MS = 5000;/, "the runtime timeout and the CSS countdown stay in step");
   assert.match(css, /\.bag-notice-dismiss::after\s*\{[^}]*inset:\s*-6px;/, "the dismissal keeps a 44px touch target");
@@ -1414,7 +1466,9 @@ test("StrictMode double-mount keeps the details outcome guard live", async () =>
   await click(buttonByLabel("Add Fixture mug to Bag"));
   const add = buttonByLabel("Add Fixture mug to Bag");
   assert.match(add.textContent, /^Add to Bag$/, "pending state clears when the confirmed outcome returns");
-  assert.match(host.querySelector(".feedback").textContent, /Added 1 × Fixture mug to your Bag/,
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /Added 1 × Fixture mug to your Bag/,
     "confirmation renders after StrictMode replays the mount effect");
 });
 

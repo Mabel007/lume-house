@@ -92,7 +92,9 @@ export function CartProvider({children}:{children:ReactNode}) {
     }).catch((reason):CartOutcome=>{
       if(!(identity.current===userId&&epoch.current===generation))return {kind:'superseded'};
       const message=reason instanceof VariantCartError?reason.message:'Your Bag change could not be confirmed. Refresh it before trying again.';
-      setError(message);
+      // Quantity changes keep the Bag-level error and retry action. Add/remove
+      // action callers own their single action-specific notification.
+      if(action.type==='quantity')setError(message);
       return {kind:'rejected',message};
     }).finally(()=>{if(identity.current===userId&&epoch.current===generation){locked.current=false;setStatus('ready');}});
   }

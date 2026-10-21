@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useCart } from "./CartContext";
 import { getCartLines, cartLineKey, MAX_QUANTITY } from "./cart";
 import { bagRemovedText, bagRemoveFailedText } from "./bagFeedback";
-import { BagNotice, type BagNoticeMessage } from "../../components/BagNotice";
+import { useNotifications } from "../../components/notifications";
 import { useProducts } from "../products/ProductContext";
 import { ProductStatus } from "../products/ProductStatus";
 import { UnavailableItems } from "./UnavailableItems";
@@ -17,21 +17,20 @@ import { UiStatus } from '../../components/UiStatus';
 
 export function CartPage() {
   const { items, dispatch, status } = useCart();
+  const { notify } = useNotifications();
   const auth = useAuth();
-  const [notice, setNotice] = useState<BagNoticeMessage | null>(null);
   const noticeSeq = useRef(0);
   const alive = useRef(true);
   // Reset on (re)mount: StrictMode dev runs cleanup then re-runs the effect,
   // and the guard must stay live for the remounted component.
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const clearNotice = useCallback(() => setNotice(null), []);
   async function removeLine(product: { id: string; name: string }, variantId: string | undefined, variantDetail: string) {
     noticeSeq.current += 1;
     const operation = noticeSeq.current;
     const outcome = await dispatch({ type: "remove", productId: product.id, variantId });
     if (!alive.current || operation !== noticeSeq.current) return;
-    if (outcome.kind === "confirmed") setNotice({ id: operation, tone: "success", text: bagRemovedText(product.name, variantDetail) });
-    else if (outcome.kind === "rejected") setNotice({ id: operation, tone: "failure", text: bagRemoveFailedText(product.name) });
+    if (outcome.kind === "confirmed") notify({ tone: "success", message: bagRemovedText(product.name, variantDetail) });
+    else if (outcome.kind === "rejected") notify({ tone: "error", message: bagRemoveFailedText(product.name) });
   }
   const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
   const { state } = useProducts();
@@ -44,7 +43,7 @@ export function CartPage() {
       </section>
     );
   if (status === "error") return <section className="wrap page-section"><PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind="error">Your saved Bag is not ready yet.</UiStatus></section>;
-  if (!items.length) return <><EmptyCart /><BagNotice message={notice} onExpire={clearNotice} /></>;
+  if (!items.length) return <EmptyCart />;
   if (state.status !== "ready")
     return (
       <section className="wrap page-section">
@@ -180,7 +179,6 @@ export function CartPage() {
       <p className="sr-only" role="status">
         Bag subtotal {formatMoney(subtotal)}.
       </p>
-      <BagNotice message={notice} onExpire={clearNotice} />
     </section>
   );
 }

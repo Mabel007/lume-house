@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 
-export type BagNoticeMessage = { id: number; tone: "success" | "failure"; text: string };
+export type BagNoticeTone = "success" | "failure" | "warning" | "info";
+export type BagNoticeMessage = { id: number; tone: BagNoticeTone; text: string; durationMs?: number };
 
-/** Mirrors the `bag-notice-countdown` animation duration in styles.css. */
+/** Default matches the `bag-notice-countdown` fallback in styles.css. */
 const BAG_NOTICE_MS = 5000;
 /** Mirrors the 20px viewport edge offset of .bag-notice-region in styles.css. */
 const EDGE_OFFSET = 20;
@@ -13,13 +14,34 @@ function covers(band: Box, target: Box): boolean {
   return band.left < target.right && band.right > target.left && band.top < target.bottom && band.bottom > target.top;
 }
 
-function statusIcon(tone: "success" | "failure") {
-  return tone === "success" ? (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M8.4 12.3l2.5 2.5 4.7-5.3" />
-    </svg>
-  ) : (
+function statusIcon(tone: BagNoticeTone) {
+  if (tone === "success") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M8.4 12.3l2.5 2.5 4.7-5.3" />
+      </svg>
+    );
+  }
+  if (tone === "warning") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+        <path d="M12 3.8 21 20H3L12 3.8Z" />
+        <path d="M12 9v4.6" />
+        <path d="M12 17h.01" />
+      </svg>
+    );
+  }
+  if (tone === "info") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 10.4v5.5" />
+        <path d="M12 7.3h.01" />
+      </svg>
+    );
+  }
+  return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7.4v5.6" />
@@ -32,6 +54,7 @@ export function BagNotice({ message, onExpire }: { message: BagNoticeMessage | n
   const regionRef = useRef<HTMLDivElement>(null);
   const restoreFocus = useRef(false);
   const [atBottom, setAtBottom] = useState(false);
+  const duration = message?.durationMs ?? BAG_NOTICE_MS;
 
   // Clearing the message can remove the control the visitor is using (the
   // dismiss button), which would drop focus onto <body>. Remember that state
@@ -44,11 +67,11 @@ export function BagNotice({ message, onExpire }: { message: BagNoticeMessage | n
 
   useEffect(() => {
     if (!message) return;
-    const timer = setTimeout(expire, BAG_NOTICE_MS);
+    const timer = setTimeout(expire, duration);
     return () => clearTimeout(timer);
-    // `expire` is recreated per render but only reads refs; the timer is keyed to the message.
+    // `expire` is recreated per render but only reads refs; the timer is keyed to the message and duration.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message, onExpire]);
+  }, [message, onExpire, duration]);
 
   useLayoutEffect(() => {
     if (!message) {
@@ -117,9 +140,10 @@ export function BagNotice({ message, onExpire }: { message: BagNoticeMessage | n
   }, [message]);
 
   const assertive = message?.tone === "failure";
+  const cardStyle = { "--bag-notice-duration": `${duration}ms` } as CSSProperties;
 
   const card = message ? (
-    <div key={message.id} className={`bag-notice ${message.tone}`}>
+    <div key={message.id} className={`bag-notice ${message.tone}`} style={cardStyle}>
       <span className="bag-notice-icon">{statusIcon(message.tone)}</span>
       <p className="bag-notice-message">{message.text}</p>
       <button type="button" className="bag-notice-dismiss" aria-label="Dismiss notification" onClick={expire}>
@@ -145,6 +169,7 @@ export function BagNotice({ message, onExpire }: { message: BagNoticeMessage | n
         className={`bag-notice-region${atBottom && message ? " is-bottom" : ""}`}
         role="status"
         aria-live="polite"
+        aria-atomic="true"
       >
         {!assertive && card}
       </div>
