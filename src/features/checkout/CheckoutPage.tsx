@@ -160,7 +160,7 @@ export function CheckoutPage() {
       return;
     }
     const checkoutTicket=beginCheckout?.();
-    if(beginCheckout && checkoutTicket==null){setOrderError('Wait for your Bag changes to finish saving.');return;}
+    if(beginCheckout && checkoutTicket==null){setOrderError('Wait for your Cart changes to finish saving.');return;}
     submittingRef.current=true;setSubmitting(true);setOrderError('');
     requestId.current ||= pendingRequest(userId)||crypto.randomUUID();
     rememberRequest(userId,requestId.current);
@@ -172,14 +172,14 @@ export function CheckoutPage() {
     }catch(error){
       finishCheckout?.(false,checkoutTicket);
       const code=error instanceof CheckoutError?error.code:'ORDER_UNAVAILABLE';
-      if(['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART','OUT_OF_STOCK'].includes(code)){setOrderError(code==='OUT_OF_STOCK'?'A selected quantity is no longer available. Review your Bag and current availability before trying again.':'Your Bag or current prices changed. Review the refreshed Bag before placing your order.');refresh();retry?.();}
+      if(['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART','OUT_OF_STOCK'].includes(code)){setOrderError(code==='OUT_OF_STOCK'?'A selected quantity is no longer available. Review your Cart and current availability before trying again.':'Your Cart or current prices changed. Review the refreshed Cart before placing your order.');refresh();retry?.();}
       else if(code==='AUTH_REQUIRED')setOrderError('Your session expired. Please sign in again before placing your order.');
       else if(code.startsWith('INVALID_'))setOrderError('Please check your contact, payment and Freetown delivery details.');
       else setOrderError('We could not confirm order placement. Your retry uses the same request to prevent duplicates. Check My Orders or try again.');
     }finally{submittingRef.current=false;setSubmitting(false);}
   }
   if(recovering)return <section className="wrap page-section"><h1>Checking your order…</h1><p role="status">Restoring the result of your previous checkout.</p></section>;
-  if (cartStatus === "loading" || cartStatus === "error") return <section className="wrap page-section"><h1>Checkout.</h1><p>Waiting for your saved Bag.</p></section>;
+  if (cartStatus === "loading" || cartStatus === "error") return <section className="wrap page-section"><h1>Checkout.</h1><p>Waiting for your saved Cart.</p></section>;
   if (!items.length) return orderError ? <section className="wrap page-section"><p role="alert">{orderError}</p><Link to="/account/orders">Check My Orders</Link></section> : <EmptyCart />;
   if (state.status !== "ready")
     return (
@@ -192,13 +192,13 @@ export function CheckoutPage() {
   if (lines.length !== items.length)
     return (
       <section className="empty-state">
-        <h1>Your Bag needs a quick update.</h1>
+        <h1>Your Cart needs a quick update.</h1>
         <p>
           Some products are no longer available. Please remove them before
           continuing.
         </p>
         <Link className="button" to="/cart">
-          Review your Bag
+          Review your Cart
         </Link>
       </section>
     );
@@ -207,7 +207,7 @@ export function CheckoutPage() {
   return (
     <section className="wrap page-section">
       <Link to="/cart" className="back-link">
-        Back to Bag
+        Back to Cart
       </Link>
       <p className="eyebrow">YOUR HOME, CONSIDERED</p>
       <h1>Checkout.</h1>
@@ -492,7 +492,7 @@ export function CheckoutPage() {
             {auth.session ? "Your checkout details will be saved with this order, independently of your profile." : auth.loading ? "Checking your session before order placement." : "An account is required before you can place your order."}
           </p>
           <Link to="/cart" className="text-link">
-            Edit your Bag
+            Edit your Cart
           </Link>
         </aside>
       </div>

@@ -76,9 +76,9 @@ export function Layout() {
           ) : (
             <NavLink to="/account">Account</NavLink>
           )}
-          <NavLink to="/cart" className="cart-link" aria-label={`Bag (${count})`}>
+          <NavLink to="/cart" className="cart-link" aria-label={`Cart (${count})`}>
             <BagIcon />
-            <span>Bag</span>
+            <span>Cart</span>
             <span aria-hidden="true">(</span>
             <span key={count} className="cart-count">
               {count}
@@ -89,22 +89,22 @@ export function Layout() {
       </header>
       </>}
       <main id="main" ref={main} tabIndex={-1}>
-        {!administration && status === "loading" && <p className="wrap" role="status">Loading your Bag…</p>}
-        {!administration && status === "saving" && <p className="wrap" role="status">Saving your Bag…</p>}
-        {!administration && error && <div className="wrap" role="alert">{error} <button onClick={retry}>Retry saved Bag</button></div>}
+        {!administration && status === "loading" && <p className="wrap" role="status">Loading your Cart…</p>}
+        {!administration && status === "saving" && <p className="wrap" role="status">Saving your Cart…</p>}
+        {!administration && error && <div className="wrap" role="alert">{error} <button onClick={retry}>Retry saved Cart</button></div>}
         {!administration && recovery && (
           <div className="wrap cart-recovery" aria-busy={recovery.status === "refreshing"}>
             {recovery.status === "required" && <p className="cart-recovery-note">{recovery.message}</p>}
-            {recovery.status === "refreshing" && <p className="cart-recovery-note">Refreshing your saved Bag…</p>}
-            {recovery.status === "completed" && <p className="cart-recovery-note" role="status">Your saved Bag is up to date. Review the items and quantities before continuing.</p>}
-            {recovery.status === "failed" && <p className="cart-recovery-note">We couldn&apos;t refresh your saved Bag, so it may still be out of date.</p>}
+            {recovery.status === "refreshing" && <p className="cart-recovery-note">Refreshing your saved Cart…</p>}
+            {recovery.status === "completed" && <p className="cart-recovery-note" role="status">Your saved Cart is up to date. Review the items and quantities before continuing.</p>}
+            {recovery.status === "failed" && <p className="cart-recovery-note">We couldn&apos;t refresh your saved Cart, so it may still be out of date.</p>}
             <button
               type="button"
               className="cart-recovery-action"
               aria-disabled={recovery.status === "refreshing"}
               onClick={() => refreshSavedCart?.()}
             >
-              Refresh saved Bag
+              Refresh saved Cart
             </button>
           </div>
         )}

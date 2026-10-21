@@ -202,15 +202,15 @@ export function ShopPage() {
                       className="add-button"
                       disabled={!variantAvailable(variant) || quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out" || addingId === product.id}
                       onClick={() => { void addToBag(product, variant!.id); }}
-                      aria-label={`Add ${product.name} to Bag`}
+                      aria-label={`Add ${product.name} to Cart`}
                     >
                       {addingId === product.id
                         ? "Adding…"
                         : quantity >= MAX_QUANTITY
                           ? "Quantity limit reached"
                           : quantity > 0
-                            ? `Add another · ${quantity} in Bag`
-                            : "Add to Bag"}
+                            ? `Add another · ${quantity} in Cart`
+                            : "Add to Cart"}
                       <span aria-hidden="true">+</span>
                     </button>}
                   </article>

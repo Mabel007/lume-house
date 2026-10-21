@@ -5,7 +5,7 @@ import { hngEvaluation } from "../config/hngEvaluation";
 import { LockIcon } from "./Icon";
 
 const groups = [
-  { title: "Shop", links: [["Shop All", "/"], ["Bag", "/cart"]] },
+  { title: "Shop", links: [["Shop All", "/"], ["Cart", "/cart"]] },
   { title: "About", links: [["Our Story", "/about#our-story"], ["Our Values", "/about#our-values"]] },
   { title: "Help", links: [["Help & Contact", "/help"], ["My Orders", "/account/orders"], ["Delivery & Pickup", "/help/delivery-pickup"], ["Returns & Refunds", "/help/returns-refunds"]] },
   { title: "Legal", links: [["Privacy Policy", "/privacy"], ["Terms & Conditions", "/terms"]] },

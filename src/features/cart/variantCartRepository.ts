@@ -6,21 +6,21 @@ import type {CartItem} from './cart.ts';
  *
  * - `schema_not_ready`: the trusted cart function is not deployed yet, so the
  *   request never ran. Nothing was applied and a refresh cannot help.
- * - `cart_changed`: the server refused because the saved Bag changed in another
+ * - `cart_changed`: the server refused because the saved Cart changed in another
  *   session. Nothing was applied, but the local snapshot is stale.
  * - `rejected`: the server answered with a database error, so the request was
  *   refused and rolled back. Nothing was applied.
  * - `uncertain`: no server answer was received. The request may or may not have
- *   been applied, so the saved Bag must be re-read before anything else.
+ *   been applied, so the saved Cart must be re-read before anything else.
  */
 export type CartFailureKind = 'schema_not_ready' | 'cart_changed' | 'rejected' | 'uncertain';
 
 const FAILURE_MESSAGES: Record<CartFailureKind, string> = {
   schema_not_ready:
-    'Your saved Bag is waiting for the commerce update. Guest items are retained. Please retry after the update.',
-  cart_changed: 'Your Bag changed in another session. Refresh it and review before continuing.',
-  rejected: 'Your Bag change could not be confirmed. Please try again.',
-  uncertain: 'Your Bag change could not be confirmed. Refresh it before trying again.',
+    'Your saved Cart is waiting for the commerce update. Guest items are retained. Please retry after the update.',
+  cart_changed: 'Your Cart changed in another session. Refresh it and review before continuing.',
+  rejected: 'Your Cart change could not be confirmed. Please try again.',
+  uncertain: 'Your Cart change could not be confirmed. Refresh it before trying again.',
 };
 
 /** Application-level refusals raised by the trusted cart function. */
@@ -90,10 +90,10 @@ function variantCartError(error: RawError): VariantCartError {
   return new VariantCartError(code, kind);
 }
 export function parseVariantCart(value:unknown):{id:string;items:CartItem[]} {
-  if(!value||typeof value!=='object'||!('id' in value)||typeof value.id!=='string'||!('items' in value)||!Array.isArray(value.items))throw new Error('Your saved Bag could not be loaded.');
+  if(!value||typeof value!=='object'||!('id' in value)||typeof value.id!=='string'||!('items' in value)||!Array.isArray(value.items))throw new Error('Your saved Cart could not be loaded.');
   const ids=new Set<string>();
   const items=value.items.map(row=>{
-    if(!row||typeof row!=='object'||typeof row.product_id!=='string'||typeof row.variant_id!=='string'||!row.variant_id||ids.has(row.variant_id)||!Number.isInteger(row.quantity)||row.quantity<1||row.quantity>99)throw new Error('Your saved Bag contains invalid items.');
+    if(!row||typeof row!=='object'||typeof row.product_id!=='string'||typeof row.variant_id!=='string'||!row.variant_id||ids.has(row.variant_id)||!Number.isInteger(row.quantity)||row.quantity<1||row.quantity>99)throw new Error('Your saved Cart contains invalid items.');
     ids.add(row.variant_id);return {productId:row.product_id,variantId:row.variant_id,quantity:row.quantity} as CartItem;
   });
   return {id:value.id,items};

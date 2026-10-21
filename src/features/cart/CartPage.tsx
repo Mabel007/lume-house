@@ -34,20 +34,20 @@ export function CartPage() {
   }
   const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
   const { state } = useProducts();
-  if (status === "loading" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind="loading">Your saved Bag is not ready yet.</UiStatus></section>;
+  if (status === "loading" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Cart." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind="loading">Your saved Cart is not ready yet.</UiStatus></section>;
   if (status === "error" && state.status !== "ready")
     return (
       <section className="wrap page-section">
-        <PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/>
+        <PageHeader title="Your Cart." breadcrumb={{label:'Shop',to:'/'}}/>
         <ProductStatus />
       </section>
     );
-  if (status === "error") return <section className="wrap page-section"><PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind="error">Your saved Bag is not ready yet.</UiStatus></section>;
+  if (status === "error") return <section className="wrap page-section"><PageHeader title="Your Cart." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind="error">Your saved Cart is not ready yet.</UiStatus></section>;
   if (!items.length) return <EmptyCart />;
   if (state.status !== "ready")
     return (
       <section className="wrap page-section">
-        <h1>Your Bag.</h1>
+        <h1>Your Cart.</h1>
         <ProductStatus />
       </section>
     );
@@ -63,9 +63,9 @@ export function CartPage() {
         ← Continue shopping
       </Link>
       <p className="eyebrow">YOUR EVERYDAY FINDS</p>
-      <PageHeader title="Your Bag." description="Review your pieces before checkout."/>
+      <PageHeader title="Your Cart." description="Review your pieces before checkout."/>
       <p className="muted mb-8">
-        {auth.session ? items.some(item=>!item.variantId) ? "Available selections are saved to your account. Unavailable guest items are retained in this browser until removed." : "Your Bag is saved to your account." : "Sign in to save your Bag across visits. Guest items are kept only in this browser tab."}
+        {auth.session ? items.some(item=>!item.variantId) ? "Available selections are saved to your account. Unavailable guest items are retained in this browser until removed." : "Your Cart is saved to your account." : "Sign in to save your Cart across visits. Guest items are kept only in this browser tab."}
       </p>
       <div className="checkout-grid">
         <div>
@@ -177,7 +177,7 @@ export function CartPage() {
         </aside>
       </div>
       <p className="sr-only" role="status">
-        Bag subtotal {formatMoney(subtotal)}.
+        Cart subtotal {formatMoney(subtotal)}.
       </p>
     </section>
   );

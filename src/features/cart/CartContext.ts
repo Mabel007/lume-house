@@ -8,7 +8,7 @@ export type CartOutcome =
   | { kind: "superseded" };
 export type CartDispatch = (action: CartAction) => Promise<CartOutcome>;
 /**
- * A saved Bag that may be out of date after a refused or unconfirmed change.
+ * A saved Cart that may be out of date after a refused or unconfirmed change.
  * `required` asks the customer to reconcile, `refreshing` is in flight,
  * `completed` means the trusted restore resolved, `failed` keeps the action
  * available without claiming reconciliation.

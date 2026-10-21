@@ -55,7 +55,7 @@ export function ProductDetails({product}:{product:Product}) {
     <div className="product-details-grid"><ProductGallery key={product.id} product={product}/>
       <div className="product-details-copy"><p className="eyebrow">{product.category}</p><h1>{product.name}</h1><p className="product-details-price">{!variant&&optionsRequired?'From ':''}{formatMoney(price)}</p><p className="product-details-description">{product.description}</p>
         {optionsRequired && <fieldset className="variant-options"><legend>Choose your options</legend>{choices.map(choice=><label key={choice.id}><input type="radio" name={`variant-${product.id}`} value={choice.id} disabled={!variantAvailable(choice)} checked={selection===choice.id} onChange={()=>setSelection(choice.id)}/><span>{variantLabel(choice)}{!variantAvailable(choice)&&' — Unavailable'}<span className="variant-option-price">{formatMoney(choice.price)}</span></span></label>)}</fieldset>}
-        <p className="small-note">{compatible?'Available to add to your Bag.':optionsRequired && !variant ? 'Choose an available combination.':'This piece is currently unavailable.'}</p>
+        <p className="small-note">{compatible?'Available to add to your Cart.':optionsRequired && !variant ? 'Choose an available combination.':'This piece is currently unavailable.'}</p>
         <div className="product-details-quantity">
           <div className="quantity-control">
             <button
@@ -93,8 +93,8 @@ export function ProductDetails({product}:{product:Product}) {
           </div>
         </div>
         <div className="product-details-actions">
-          <button className="button product-details-add" disabled={!compatible||busy||pending||quantity+amount>MAX_QUANTITY} aria-label={`Add ${product.name} to Bag`} onClick={addToBag}>{pending?'Adding…':quantity+amount>MAX_QUANTITY?'Quantity limit reached':'Add to Bag'}</button>
-          <Link className="text-link" to="/cart">View your Bag →</Link>
+          <button className="button product-details-add" disabled={!compatible||busy||pending||quantity+amount>MAX_QUANTITY} aria-label={`Add ${product.name} to Cart`} onClick={addToBag}>{pending?'Adding…':quantity+amount>MAX_QUANTITY?'Quantity limit reached':'Add to Cart'}</button>
+          <Link className="text-link" to="/cart">View your Cart →</Link>
         </div>
         <p className="small-note">Payment awaits confirmation after order placement.</p>
       </div>

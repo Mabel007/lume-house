@@ -23,17 +23,17 @@ export function CartProvider({children}:{children:ReactNode}) {
   const recoveryRef=useRef<{owner:string|null;value:CartRecovery}|null>(null);
   // Trusted requests are answered in completion order, which is not the order
   // they were sent in. A change of this session that overlaps a read owns the
-  // saved Bag, because such a read can answer with a snapshot taken before the
+  // saved Cart, because such a read can answer with a snapshot taken before the
   // change. A change of an earlier session can never overlap a read of this
   // session, so the pending change carries the session it belongs to.
   const changeTickets=useRef(0);const pendingChange=useRef<{epoch:number;ticket:number}|null>(null);
   // The trusted requests that are running right now. The mutation lock below is
   // deliberately kept after a failed restore, so the ownership of a running
   // request is tracked separately: it decides what may start next, while the
-  // lock decides what may change the saved Bag.
+  // lock decides what may change the saved Cart.
   const requestsInFlight=useRef(0);
   // A recovery belongs to the session that raised it: after a sign-in change the
-  // previous session's request can no longer touch the new customer's Bag.
+  // previous session's request can no longer touch the new customer's Cart.
   const recovery=recoveryRecord&&recoveryRecord.owner===(userId??null)?recoveryRecord.value:null;
   useLayoutEffect(()=>{identity.current=userId;epoch.current+=1;checkout.current=null;},[userId]);
   const [guestItems,setGuestItems]=useState(readGuest);const guest=useRef<CartItem[]>(guestItems);const current=useRef<CartItem[]>([]);
@@ -56,7 +56,7 @@ export function CartProvider({children}:{children:ReactNode}) {
       const generation=epoch.current;
       const isCurrent=()=>active&&identity.current===userId&&epoch.current===generation;
       // A read can answer with a snapshot taken before a change that overlaps
-      // it, so the read only owns the saved Bag while no change of this session
+      // it, so the read only owns the saved Cart while no change of this session
       // overlaps it.
       const readTicket=changeTickets.current;
       const readOverlapped=pendingChange.current!==null&&pendingChange.current.epoch===generation;
@@ -67,7 +67,7 @@ export function CartProvider({children}:{children:ReactNode}) {
         if(auth.loading)return;
         if(catalog.status!=='ready'){
           if(!userId){setStatus(catalog.status==='error'?'ready':'loading');locked.current=catalog.status!=='error';}
-          else if(catalog.status==='error'){setStatus('error');setError('Load current products before restoring your Bag.');}
+          else if(catalog.status==='error'){setStatus('error');setError('Load current products before restoring your Cart.');}
           return;
         }
         storeGuest(resolveGuestCart(guest.current,catalog.products));
@@ -78,7 +78,7 @@ export function CartProvider({children}:{children:ReactNode}) {
         for(const item of [...guest.current]) {
           if(!item.variantId||getCartLines([item],catalog.products).length===0)continue;
           if(!isCurrent())return;
-          // The guest intent stays pending while a change owns the saved Bag.
+          // The guest intent stays pending while a change owns the saved Cart.
           if(superseded())break;
           loaded=await changeVariantCart(getSupabaseClient(),accessToken,item.variantId,'merge',item.quantity,null,item.mergeId!);
           if(!isCurrent())return;
@@ -86,33 +86,33 @@ export function CartProvider({children}:{children:ReactNode}) {
         }
         if(isCurrent()){
           if(superseded()){
-            // The overlapping change owns the visible Bag. The read is dropped,
+            // The overlapping change owns the visible Cart. The read is dropped,
             // so it can never overwrite a newer confirmed change and it never
-            // claims that the saved Bag was reconciled.
+            // claims that the saved Cart was reconciled.
             if(pendingChange.current===null){locked.current=false;setStatus('ready');}
             return;
           }
           const items=withPending(loaded.items,guest.current,catalog.products);current.current=items;setSaved({userId,items});setStatus('ready');locked.current=false;
-          if(pendingGuest(guest.current,catalog.products).length)setError('Some guest items are unavailable. Remove them from your Bag to continue; their browser intent has been retained.');
+          if(pendingGuest(guest.current,catalog.products).length)setError('Some guest items are unavailable. Remove them from your Cart to continue; their browser intent has been retained.');
           // The trusted restore resolved, so a pending reconciliation is complete.
           patchRecovery(userId??null,value=>({...value,status:'completed'}));
         }
       }catch(reason){
         if(!isCurrent())return;
         if(superseded()){
-          // The overlapping change owns the visible Bag, so a read that fails
-          // late never claims that the saved Bag is broken.
+          // The overlapping change owns the visible Cart, so a read that fails
+          // late never claims that the saved Cart is broken.
           if(pendingChange.current===null){locked.current=false;setStatus('ready');}
           return;
         }
-        setError(reason instanceof VariantCartError&&reason.code==='SCHEMA_NOT_READY'?reason.message:'Your saved Bag could not be restored or merged. Unsaved guest items are retained. Please retry.');setStatus('error');patchRecovery(userId??null,value=>({...value,status:'failed'}));
+        setError(reason instanceof VariantCartError&&reason.code==='SCHEMA_NOT_READY'?reason.message:'Your saved Cart could not be restored or merged. Unsaved guest items are retained. Please retry.');setStatus('error');patchRecovery(userId??null,value=>({...value,status:'failed'}));
       }
       finally{
         if(ownsRequest)requestsInFlight.current-=1;
         if(isCurrent()){
           refreshing.current=false;
           // A reconciliation that never reached the server must not keep
-          // claiming that it is refreshing the saved Bag.
+          // claiming that it is refreshing the saved Cart.
           if(!ownsRequest)patchRecovery(userId??null,value=>value.status==='refreshing'?{...value,status:'required'}:value);
         }
       }
@@ -142,7 +142,7 @@ export function CartProvider({children}:{children:ReactNode}) {
     if(!accessToken)return Promise.resolve({kind:'superseded'});
     const before=current.current;const next=cartReducer(before,action);if(next===before)return Promise.resolve({kind:'superseded'});
     const existing=before.find(item=>cartLineKey(item)===cartLineKey(action));const generation=epoch.current;
-    // The change owns the saved Bag until it answers, so a read that overlaps
+    // The change owns the saved Cart until it answers, so a read that overlaps
     // it can never overwrite the confirmed result.
     const ticket=++changeTickets.current;pendingChange.current={epoch:generation,ticket};
     locked.current=true;setStatus('saving');setError(null);
@@ -161,8 +161,8 @@ export function CartProvider({children}:{children:ReactNode}) {
     }).catch((reason):CartOutcome=>{
       if(!(identity.current===userId&&epoch.current===generation&&changeTickets.current===ticket))return {kind:'superseded'};
       const failure=reason instanceof VariantCartError?reason.kind:'uncertain';
-      const message=reason instanceof VariantCartError?reason.message:'Your Bag change could not be confirmed. Refresh it before trying again.';
-      // Quantity changes keep the Bag-level error and retry action. Add/remove
+      const message=reason instanceof VariantCartError?reason.message:'Your Cart change could not be confirmed. Refresh it before trying again.';
+      // Quantity changes keep the Cart-level error and retry action. Add/remove
       // action callers own their single action-specific notification.
       if(action.type==='quantity')setError(message);
       else if(bagFailureNeedsRefresh(failure))applyRecovery({owner:userId??null,value:{status:'required',message:bagRecoveryNote(failure)}});
@@ -174,13 +174,13 @@ export function CartProvider({children}:{children:ReactNode}) {
     });
   }
   /**
-   * Reconciles the saved Bag by re-reading the trusted server state. It never
+   * Reconciles the saved Cart by re-reading the trusted server state. It never
    * repeats the change that could not be confirmed, never mints a replacement
    * operation id for it, and never runs beside another trusted request.
    */
   function refreshSavedCart(){
     if(!userId||!accessToken)return;
-    // The reconciliation is refused while a trusted request owns the saved Bag,
+    // The reconciliation is refused while a trusted request owns the saved Cart,
     // while another reconciliation runs and while a checkout is open. The
     // mutation lock is deliberately kept after a failed restore, so it is not
     // consulted here: a settled reconciliation must always be retryable.

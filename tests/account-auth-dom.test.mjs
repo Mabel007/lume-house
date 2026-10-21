@@ -13,7 +13,7 @@ for(const name of ['window','document','HTMLElement'])Object.defineProperty(glob
 globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 const {createRoot}=await import('react-dom/client');
 const host=dom.window.document.getElementById('root');
-let server,root,AuthContext,ProductContext,CartContext,Layout,AccountPage,useCart,useAuth,createSignOutController;
+let server,root,AuthContext,ProductContext,CartContext,Layout,AccountPage,NotificationProvider,useCart,useAuth,createSignOutController;
 
 before(async()=>{
   server=await createServer({root:process.cwd(),configFile:false,envDir:false,server:{middlewareMode:true,hmr:false},plugins:[{name:'account-auth-fixture',enforce:'pre',load(id){
@@ -26,6 +26,7 @@ before(async()=>{
   ({useCart}=await server.ssrLoadModule('/src/features/cart/CartContext.ts'));
   ({Layout}=await server.ssrLoadModule('/src/components/Layout.tsx'));
   ({AccountPage}=await server.ssrLoadModule('/src/features/account/AccountPage.tsx'));
+  ({NotificationProvider}=await server.ssrLoadModule('/src/components/NotificationProvider.tsx'));
 });
 afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;host.replaceChildren();dom.window.sessionStorage.clear();delete globalThis.__accountAuthClient;});
 after(async()=>{await server.close();dom.window.close();});
@@ -40,7 +41,7 @@ function fakeClient(){
   return {client,calls};
 }
 const flush=async()=>{await act(async()=>{await new Promise(resolve=>setTimeout(resolve,0));});};
-async function mount(path,value,element){root=createRoot(host);await act(async()=>root.render(React.createElement(MemoryRouter,{initialEntries:[path]},React.createElement(AuthContext.Provider,{value},element))));}
+async function mount(path,value,element){root=createRoot(host);await act(async()=>root.render(React.createElement(MemoryRouter,{initialEntries:[path]},React.createElement(NotificationProvider,null,React.createElement(AuthContext.Provider,{value},element)))));}
 // The context carries the shared single-in-flight sign-out controller. Harnesses
 // override `signOut` with a stub; deriving the controller from the effective
 // stub keeps them exercising the same guarantee the real AuthProvider provides.
@@ -110,7 +111,7 @@ test('a restored customer session at /auth/callback continues into the customer 
   await mount('/auth/callback',auth({session:{user:{id:'customer-fixture',email:'customer@example.invalid'}}}),
     React.createElement(Routes,null,
       React.createElement(Route,{path:'/auth/callback',element:React.createElement(AuthCallback)}),
-      React.createElement(Route,{path:'/account',element:React.createElement(AccountPage)})));
+      React.createElement(Route,{path:'/account',element:React.createElement(NotificationProvider,null,React.createElement(AccountPage))})));
   await flush();
   assert.match(host.textContent,/Signed in with Google/);
   assert.match(host.textContent,/Sign Out/);
@@ -337,7 +338,7 @@ async function mountAccountPage({signOut=async()=>({ok:true})}={}){
       React.createElement(ProductContext.Provider,{value:{state:{status:'loading'},refresh(){}}},
         React.createElement(CartContext.Provider,{value:{items:[],dispatch(){},status:'ready',retry(){},beginCheckout:()=>1,finishCheckout(){}}},
           React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(Routes,null,
-            React.createElement(Route,{path:'/account',element:React.createElement(AccountPage)}))))));
+            React.createElement(Route,{path:'/account',element:React.createElement(NotificationProvider,null,React.createElement(AccountPage))}))))));
   }
   globalThis.__accountAuthClient=fakeClient().client;
   root=createRoot(host);
@@ -393,7 +394,7 @@ async function mountHeaderAndPage(signOut){
         React.createElement(CartContext.Provider,{value:{items:[],dispatch(){},status:'ready',retry(){},beginCheckout:()=>1,finishCheckout(){}}},
           React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(Routes,null,
             React.createElement(Route,{element:React.createElement(Layout)},
-              React.createElement(Route,{path:'/account',element:React.createElement(AccountPage)})))))));
+              React.createElement(Route,{path:'/account',element:React.createElement(NotificationProvider,null,React.createElement(AccountPage))})))))));
   }
   globalThis.__accountAuthClient=fakeClient().client;
   root=createRoot(host);
@@ -473,24 +474,24 @@ test('a shared sign-out failure preserves the session on both surfaces and stays
   assert.equal(attempts,2,'a retry after failure must issue a fresh provider request');
 });
 
-// --- Batch 1I: Bag privacy across sign-out ------------------------------------
+// --- Batch 1I: Cart privacy across sign-out ------------------------------------
 
-test('the Bag privacy rule never exposes a saved Bag to a guest or guest items to a signed-in user',async()=>{
+test('the Cart privacy rule never exposes a saved Cart to a guest or guest items to a signed-in user',async()=>{
   const {visibleCart}=await server.ssrLoadModule('/src/features/cart/cartRepository.ts');
   const saved={userId:'user-1',items:[{productId:'lamp',quantity:2,variantId:'lamp-oak',unitMinor:12500}]};
   const guest=[{productId:'vase',quantity:1,variantId:'vase-sand',unitMinor:8000}];
-  // Guests only ever see guest items; a signed-in user only ever sees their own saved Bag.
+  // Guests only ever see guest items; a signed-in user only ever sees their own saved Cart.
   assert.deepEqual(visibleCart(false,null,saved,guest),guest,'a guest must only see guest items');
-  assert.deepEqual(visibleCart(false,'user-1',saved,guest),saved.items,'a signed-in user must only see their saved Bag');
-  // A different account's saved Bag is never shown.
-  assert.deepEqual(visibleCart(false,'user-2',saved,guest),[],'another account\'s saved Bag must never be shown');
-  // While the session is still restoring nothing is shown, so no Bag flashes.
-  assert.deepEqual(visibleCart(true,'user-1',saved,guest),[],'no Bag is exposed while the session is unresolved');
+  assert.deepEqual(visibleCart(false,'user-1',saved,guest),saved.items,'a signed-in user must only see their saved Cart');
+  // A different account's saved Cart is never shown.
+  assert.deepEqual(visibleCart(false,'user-2',saved,guest),[],'another account\'s saved Cart must never be shown');
+  // While the session is still restoring nothing is shown, so no Cart flashes.
+  assert.deepEqual(visibleCart(true,'user-1',saved,guest),[],'no Cart is exposed while the session is unresolved');
 });
 
-test('signing out leaves the guest Bag untouched and clears no cart data',async()=>{
+test('signing out leaves the guest Cart untouched and clears no cart data',async()=>{
   const seen=[];
-  function Probe(){const {items}=useCart();seen.push(items.length);return React.createElement('p',{className:'bag-count'},`Bag ${items.length}`);}
+  function Probe(){const {items}=useCart();seen.push(items.length);return React.createElement('p',{className:'bag-count'},`Cart ${items.length}`);}
   function Harness(){
     const [session,setSession]=React.useState(signedInSession);
     return React.createElement(AuthContext.Provider,{value:auth({session,signOut:async()=>{setSession(null);return {ok:true};}})},
@@ -502,15 +503,15 @@ test('signing out leaves the guest Bag untouched and clears no cart data',async(
   }
   root=createRoot(host);
   await act(async()=>root.render(React.createElement(Harness)));
-  // The Bag surface stays present and unchanged after sign-out; nothing clears it.
-  assert.match(host.textContent,/Bag 0/);
+  // The Cart surface stays present and unchanged after sign-out; nothing clears it.
+  assert.match(host.textContent,/Cart 0/);
   const trigger=host.querySelector('header button[aria-haspopup="menu"]');
   await openWithClick(trigger);
   const signOutItem=menuItems().find(node=>node.textContent==='Sign out');
   await act(async()=>signOutItem.click());
   assert.equal(host.querySelector('header button[aria-haspopup="menu"]'),null);
-  assert.match(host.textContent,/Bag 0/,'the Bag must remain after sign-out');
-  assert.deepEqual(seen,[0,0],'the Bag contents must not change across sign-out');
+  assert.match(host.textContent,/Cart 0/,'the Cart must remain after sign-out');
+  assert.deepEqual(seen,[0,0],'the Cart contents must not change across sign-out');
 });
 
 // --- Batch 1I: provider failure contract (real AuthProvider) ------------------
@@ -565,4 +566,58 @@ test('the real AuthProvider clears the session only when Supabase confirms sign-
   assert.deepEqual(result,{ok:true});
   assert.equal(observed.session,null,'a confirmed sign-out must clear the session');
   assert.equal(observed.error,null);
+});
+
+// --- Batch 1G Slice 2: profile save notifications --------------------------------
+
+// The profile form confirms a save through the shared notification, while a
+// failed save stays inline and assertive. Both are exercised with the real
+// AccountPage and a synthetic profiles table.
+function profileClient({fail=false}={}){
+  const calls=[];
+  return {calls,client:{
+    from(table){
+      calls.push({table});
+      return {
+        select(){return this},eq(){return this},
+        maybeSingle:async()=>({data:null,error:null}),
+        insert:async(values)=>{calls.push({insert:values});return fail?{error:{code:'42501',message:'denied'}}:{error:null};},
+        update:async(values)=>{calls.push({update:values});return fail?{error:{code:'42501',message:'denied'}}:{error:null};},
+      };
+    },
+    auth:{signOut:async()=>({error:null})},
+  }};
+}
+async function mountProfilePage(fixture){
+  globalThis.__accountAuthClient=fixture.client;
+  await mount('/account',auth({session:{user:{id:'11111111-1111-4111-8111-111111111111',email:'customer@example.invalid'}}}),React.createElement(AccountPage));
+  await flush();
+  const save=Array.from(host.querySelectorAll('button')).find(node=>/Save profile/.test(node.textContent));
+  assert.ok(save,'the profile form must expose a save action');
+  return save;
+}
+
+test('a confirmed profile save is announced once by the shared notification',async()=>{
+  const fixture=profileClient();
+  const save=await mountProfilePage(fixture);
+  await act(async()=>{save.click();});
+  await flush();
+  const notice=host.querySelector('.bag-notice');
+  assert.ok(notice,'a confirmed save is announced by the shared notification');
+  assert.match(notice.textContent,/Your profile has been saved\./);
+  assert.equal(host.querySelectorAll('.bag-notice').length,1,'the announcement is shown once');
+  assert.equal(host.querySelector('.profile-actions [role="status"]').textContent,'','the inline status does not repeat the announcement');
+  assert.equal(host.querySelector('.profile-actions [role="alert"]'),null,'a confirmed save raises no inline error');
+  assert.ok(fixture.calls.some(call=>call.insert||call.update),'the profile was written');
+});
+
+test('a failed profile save stays inline and assertive and is not announced twice',async()=>{
+  const fixture=profileClient({fail:true});
+  const save=await mountProfilePage(fixture);
+  await act(async()=>{save.click();});
+  await flush();
+  const alert=host.querySelector('.profile-actions [role="alert"]');
+  assert.ok(alert,'a failed save is announced inline with alert semantics');
+  assert.match(alert.textContent,/Your profile could not be saved\./);
+  assert.equal(host.querySelector('.bag-notice'),null,'a failed save is not also announced as a notification');
 });
