@@ -5,16 +5,21 @@ import {useState} from 'react';
 export function ProductImage({
   product,
   priority = false,
+  onLoad,
+  onError,
 }: {
   product: Product;
   priority?: boolean;
+  onLoad?: () => void;
+  onError?: () => void;
 }) {
   const [failed,setFailed]=useState('');
   if(failed===product.image)return <span role="img" aria-label={`Image unavailable for ${product.name}`}>Image unavailable</span>;
   return (
     <img
       src={product.image}
-      onError={()=>setFailed(product.image)}
+      onLoad={onLoad}
+      onError={()=>{setFailed(product.image);onError?.();}}
       alt={
         product.image.endsWith(".svg")
           ? `Illustration of ${product.name}`
