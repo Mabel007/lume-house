@@ -5,9 +5,11 @@ import { getSupabaseClient } from "../../lib/supabase/client";
 import { emptyProfile, loadProfile, saveProfile, type Profile } from "./profile";
 import { AccountExperience } from "./AccountExperience";
 import { accountDisplayName } from "./accountIdentity";
+import { useCustomerSignOut } from "../auth/useCustomerSignOut";
 export function AccountPage() {
   const auth = useAuth();
   const { pathname } = useLocation();
+  const signOut = useCustomerSignOut();
   const [profile, setProfile] = useState<Profile>({ ...emptyProfile });
   const [status, setStatus] = useState("Loading profile…");
   const [busy, setBusy] = useState(false);
@@ -36,5 +38,5 @@ export function AccountPage() {
     setStatus("Unsaved changes discarded.");
   }
   const authenticatedName = accountDisplayName(auth.session?.user);
-  return <AccountExperience profile={profile} savedName={savedProfile.full_name} authenticatedName={authenticatedName || undefined} email={auth.session?.user.email} ready={ready} busy={busy} status={status} error={auth.error} onChange={(key, value) => setProfile(previous => ({ ...previous, [key]: value }))} onSave={event => void save(event)} onCancel={cancel} onSignOut={() => void auth.signOut()} />;
+  return <AccountExperience profile={profile} savedName={savedProfile.full_name} authenticatedName={authenticatedName || undefined} email={auth.session?.user.email} ready={ready} busy={busy} status={status} error={auth.error} onChange={(key, value) => setProfile(previous => ({ ...previous, [key]: value }))} onSave={event => void save(event)} onCancel={cancel} signOut={signOut} />;
 }

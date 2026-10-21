@@ -1,7 +1,7 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseClient } from "../../lib/supabase/client";
-import { AuthContext } from "./AuthContext";
+import { AuthContext, createSignOutController, type SignOutResult } from "./AuthContext";
 import { authRedirect, startGoogleSignIn, watchSession } from "./auth";
 import { setAdminAuthIntent } from './adminAuthIntent';
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -22,13 +22,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { setAdminAuthIntent(window.sessionStorage, adminReturnTo); await startGoogleSignIn(getSupabaseClient(), authRedirect(window.location.origin, import.meta.env.VITE_AUTH_REDIRECT_URL)); }
     catch { try { setAdminAuthIntent(window.sessionStorage); } catch { /* Browser storage may be unavailable. */ } setError("Google sign-in could not start. Please try again."); }
   }
-  async function signOut() {
-    setError(null);
+  const requestSignOut = useCallback(async (): Promise<SignOutResult> => {
     try {
       const { error } = await getSupabaseClient().auth.signOut();
       if (error) throw error;
       setSession(null);
-    } catch { setError("Sign-out failed. Please try again."); }
-  }
-  return <AuthContext.Provider value={{ session, loading, error, signIn, signOut }}>{children}</AuthContext.Provider>;
+      setError(null);
+      return { ok: true };
+    } catch {
+      const message = "Sign-out failed. Please try again.";
+      setError(message);
+      return { ok: false, message };
+    }
+  }, []);
+  // One controller per auth context: every signed-in surface shares its
+  // in-flight guard and pending state, so a second attempt cannot race the first.
+  const signOutController = useMemo(() => createSignOutController(requestSignOut), [requestSignOut]);
+  // Admin surfaces call signOut directly; routing it through the controller keeps
+  // them covered by the same single-in-flight guarantee.
+  const signOut = useCallback((): Promise<SignOutResult> => signOutController.run(), [signOutController]);
+  return <AuthContext.Provider value={{ session, loading, error, signIn, signOut, signOutController }}>{children}</AuthContext.Provider>;
 }

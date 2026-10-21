@@ -301,17 +301,24 @@ test("header keeps guest/loading Account text and shows only private initials wh
   assert.match(loading, /href="\/account"[^>]*>Account<\/a>/);
   assert.doesNotMatch(loading, /account-badge|Account, signed in/);
   const signed = renderLayout("/", undefined, signedIn);
-  const accountLink = signed.match(/<a[^>]*href="\/account"[^>]*>.*?<\/a>/s)?.[0] ?? "";
-  assert.match(accountLink, /aria-label="Account, signed in"/);
-  assert.match(accountLink, /class="header-account"/);
-  assert.match(accountLink, /<span class="account-badge" aria-hidden="true">NB<\/span>/);
-  assert.doesNotMatch(accountLink, /customer@example\.invalid|Naj Builds/);
+  // The signed-in identity is a menu trigger button, not a link, so guests keep the
+  // plain Account link and signed-in customers get a haspopup menu of destinations.
+  const trigger = signed.match(/<button[^>]*aria-haspopup="menu"[^>]*>.*?<\/button>/s)?.[0] ?? "";
+  assert.ok(trigger, "the signed-in header must expose an account menu trigger");
+  assert.match(trigger, /aria-label="Account, signed in"/);
+  assert.match(trigger, /class="header-account"/);
+  assert.match(trigger, /aria-expanded="false"/);
+  assert.match(trigger, /<span class="account-badge" aria-hidden="true">NB<\/span>/);
+  assert.doesNotMatch(trigger, /customer@example\.invalid|Naj Builds/);
   const nav = signed.match(/<nav aria-label="Main navigation"[^>]*>(.*?)<\/nav>/s)?.[1] ?? "";
-  assert.equal((nav.match(/<a /g) ?? []).length, 5, "the badge replaces the label, not the destination");
+  // The initials badge replaces the Account *label* with a menu trigger, so the nav
+  // holds one trigger and the four remaining destinations as links.
+  assert.equal((nav.match(/<a /g) ?? []).length, 4, "the badge replaces the label, not the destination");
+  assert.equal((nav.match(/<button\b/g) ?? []).length, 1, "the signed-in account control is the only button in the nav");
   assert.doesNotMatch(renderLayout("/admin", undefined, signedIn), /site-header|Account, signed in/);
   const signedOut = renderLayout("/", undefined, { ...signedIn, session: null });
   assert.match(signedOut, /href="\/account"[^>]*>Account<\/a>/);
-  assert.doesNotMatch(signedOut, /account-badge|Account, signed in/);
+  assert.doesNotMatch(signedOut, /account-badge|Account, signed in|aria-haspopup="menu"/);
   const noName = renderLayout("/", undefined, { ...signedIn, session: { ...session, user: { ...session.user, user_metadata: {} } } });
   assert.match(noName, /class="account-badge" aria-hidden="true">LH</);
 });
@@ -393,7 +400,8 @@ test("account initials handle whitespace, single names, missing names and Unicod
 
 function renderAccount(overrides = {}) {
   const profile = { full_name: "Customer Name", phone: "", default_street_address: "", default_area: "", default_city: "" };
-  return renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(AccountExperience, { profile, savedName: "Saved Name", email: "customer@example.test", ready: true, busy: false, status: "", error: null, onChange: () => {}, onSave: () => {}, onCancel: () => {}, onSignOut: () => {}, ...overrides })));
+  const signOut = { signingOut: false, error: null, signOut: async () => {} };
+  return renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(AccountExperience, { profile, savedName: "Saved Name", email: "customer@example.test", ready: true, busy: false, status: "", error: null, onChange: () => {}, onSave: () => {}, onCancel: () => {}, signOut, ...overrides })));
 }
 
 test("Account separates saved identity, grouped defaults, orders and Google security", () => {
@@ -414,6 +422,17 @@ test("Account separates saved identity, grouped defaults, orders and Google secu
     assert.ok(input.includes(`name="${name}"`));
     assert.ok(input.includes(`autoComplete="${token}"`));
   }
+});
+
+test("Account-page sign-out shows a pending label, blocks duplicates and stays retryable on failure", () => {
+  const pending = renderAccount({ signOut: { signingOut: true, error: null, signOut: async () => {} } });
+  assert.match(pending, />Signing out…<\/button>/, "a pending sign-out must be labelled");
+  assert.match(pending, /<button class="text-link" type="button" disabled=""/, "a pending sign-out must block duplicate attempts");
+  assert.doesNotMatch(pending, />Sign Out<\/button>/, "the idle label must not remain while pending");
+  const failed = renderAccount({ signOut: { signingOut: false, error: "Sign-out failed. Please try again.", signOut: async () => {} } });
+  assert.match(failed, /role="alert"[^>]*>Sign-out failed\. Please try again\.<\/p>/, "a failed page sign-out must announce a retryable error");
+  assert.match(failed, />Sign Out<\/button>/, "a failed sign-out must remain retryable");
+  assert.doesNotMatch(failed, /<button class="text-link" type="button" disabled=""/, "a failed sign-out must re-enable the control");
 });
 
 test("Account hub links to existing destinations and uses only available current identity", () => {
