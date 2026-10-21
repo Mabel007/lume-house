@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { getSupabaseClient } from "../../lib/supabase/client";
 import { emptyProfile, loadProfile, saveProfile, type Profile } from "./profile";
 import { AccountExperience } from "./AccountExperience";
+import { accountDisplayName } from "./accountIdentity";
 export function AccountPage() {
   const auth = useAuth();
   const { pathname } = useLocation();
@@ -34,6 +35,6 @@ export function AccountPage() {
     setProfile({ ...savedProfile });
     setStatus("Unsaved changes discarded.");
   }
-  const metadataName: unknown = auth.session?.user.user_metadata?.full_name ?? auth.session?.user.user_metadata?.name;
-  return <AccountExperience profile={profile} savedName={savedProfile.full_name} authenticatedName={typeof metadataName === "string" ? metadataName : undefined} email={auth.session?.user.email} ready={ready} busy={busy} status={status} error={auth.error} onChange={(key, value) => setProfile(previous => ({ ...previous, [key]: value }))} onSave={event => void save(event)} onCancel={cancel} onSignOut={() => void auth.signOut()} />;
+  const authenticatedName = accountDisplayName(auth.session?.user);
+  return <AccountExperience profile={profile} savedName={savedProfile.full_name} authenticatedName={authenticatedName || undefined} email={auth.session?.user.email} ready={ready} busy={busy} status={status} error={auth.error} onChange={(key, value) => setProfile(previous => ({ ...previous, [key]: value }))} onSave={event => void save(event)} onCancel={cancel} onSignOut={() => void auth.signOut()} />;
 }

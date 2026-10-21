@@ -9,6 +9,8 @@ export const checkoutMessages = {
   area: "Enter your area or community.",
   city: "Enter your city or town.",
   zone: "Choose your delivery zone.",
+  contactPhone: "Enter your phone number.",
+  paymentPhone: "Enter your mobile-money number.",
 } as const;
 
 export function cityProblem(

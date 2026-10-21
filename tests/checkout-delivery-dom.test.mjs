@@ -207,6 +207,7 @@ async function fillValidPhones(){
 test('a blank checkout submit is blocked with field-associated errors and focuses the first field', async()=>{
   const {calls,client}=recordingClient();
   await mount({authSession:session,client});
+  assert.equal(host.querySelector('form#checkout-form').noValidate,true);
   await setValue(host.querySelector('[name="email"]'),'');
   await submit();
   assert.equal(calls.length,0);
@@ -216,7 +217,8 @@ test('a blank checkout submit is blocked with field-associated errors and focuse
   assert.equal(errorText('area-error'),'Enter your area or community.');
   assert.equal(errorText('city-error'),'Enter your city or town.');
   assert.equal(errorText('delivery-zone-error'),'Choose your delivery zone.');
-  assert.equal(errorText('payment-error'),'Enter a valid 8-digit Sierra Leone phone number.');
+  assert.equal(errorText('contact-phone-error'),'Enter your phone number.');
+  assert.equal(errorText('payment-error'),'Enter your mobile-money number.');
   for(const name of ['full-name','email','address','area','city','contact-phone','payment-phone','delivery-zone'])
     assert.equal(invalidAttr(name),'true',`${name} is flagged invalid`);
   assert.match(describedBy('full-name'),/full-name-error/);
@@ -229,7 +231,7 @@ test('a blank checkout submit is blocked with field-associated errors and focuse
 test('each required field omitted on its own blocks placement and names the field', async()=>{
   const cases=[
     ['full-name','Enter your full name.'],
-    ['contact-phone','Enter a valid 8-digit Sierra Leone phone number.'],
+    ['contact-phone','Enter your phone number.'],
     ['email','Enter your email address.'],
     ['address','Enter your street address or landmark.'],
     ['area','Enter your area or community.'],
@@ -248,6 +250,54 @@ test('each required field omitted on its own blocks placement and names the fiel
     assert.equal(errorText(fieldErrorId(name)),message,`${name} message`);
     assert.equal(dom.window.document.activeElement.getAttribute('name'),name,`${name} receives focus`);
   }
+});
+
+test('pristine fields stay quiet until blur, then show Lumé copy and clear on correction', async()=>{
+  await mount({authSession:session});
+  for(const id of ['full-name-error','email-error','address-error','area-error','city-error','delivery-zone-error','contact-phone-error'])
+    assert.equal(errorText(id),null,`${id} starts quiet`);
+  assert.equal(errorText('payment-error') || null,null,'payment-error starts quiet');
+  const name=host.querySelector('[name="full-name"]');
+  await blur(name);
+  assert.equal(errorText('full-name-error'),'Enter your full name.');
+  assert.equal(name.getAttribute('aria-invalid'),'true');
+  await setValue(name,'Fixture Customer');
+  assert.equal(errorText('full-name-error'),null);
+  assert.equal(name.getAttribute('aria-invalid'),null);
+  const email=host.querySelector('[name="email"]');
+  await setValue(email,'');
+  await blur(email);
+  assert.equal(errorText('email-error'),'Enter your email address.');
+  await setValue(email,'not-an-email');
+  assert.equal(errorText('email-error'),'Enter a valid email address.');
+  await setValue(email,'fixture@example.invalid');
+  assert.equal(errorText('email-error'),null);
+  const address=host.querySelector('[name="address"]');
+  await blur(address);
+  assert.equal(errorText('address-error'),'Enter your street address or landmark.');
+  const area=host.querySelector('[name="area"]');
+  await blur(area);
+  assert.equal(errorText('area-error'),'Enter your area or community.');
+  await blur(host.querySelector('[name="contact-phone"]'));
+  assert.equal(errorText('contact-phone-error'),'Enter your phone number.');
+  await blur(host.querySelector('[name="payment-phone"]'));
+  assert.equal(errorText('payment-error'),'Enter your mobile-money number.');
+  await blur(host.querySelector('#delivery-zone'));
+  assert.equal(errorText('delivery-zone-error'),'Choose your delivery zone.');
+});
+
+test('contact and mobile-money phones normalize on blur before submission', async()=>{
+  await mount({authSession:session});
+  const contact=host.querySelector('[name="contact-phone"]');
+  await setValue(contact,'088 790011');
+  await blur(contact);
+  assert.equal(contact.value,'+23288790011');
+  const payment=host.querySelector('#payment-phone');
+  await setValue(payment,'077 123 456');
+  await blur(payment);
+  assert.equal(payment.value,'+23277123456');
+  assert.equal(errorText('contact-phone-error'),null);
+  assert.equal(errorText('payment-error') || null,null);
 });
 
 test('whitespace-only name, address, area and city are rejected before placement and clear on correction', async()=>{

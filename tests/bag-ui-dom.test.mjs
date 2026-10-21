@@ -993,6 +993,12 @@ test("repeated identical notices render a fresh node for the live region", async
 
 // Focus-aware toast placement: jsdom has no layout engine, so tests stub the
 // rectangles the component measures and then exercise the real intersection math.
+// The toast is centred, so its stubbed x-range follows the jsdom viewport width.
+function centredToastBounds() {
+  const width = Math.min(360, dom.window.innerWidth - 32);
+  const left = Math.round((dom.window.innerWidth - width) / 2);
+  return { left, right: left + width };
+}
 function rectOf({ top, bottom, left, right }) {
   return { top, bottom, left, right, x: left, y: top, width: right - left, height: bottom - top, toJSON() {} };
 }
@@ -1001,7 +1007,7 @@ function stubLayout({ viewport = 800, toastHeight = 50 } = {}) {
   const originalInnerHeight = dom.window.innerHeight;
   Object.defineProperty(dom.window, "innerHeight", { configurable: true, value: viewport });
   dom.window.Element.prototype.getBoundingClientRect = function () {
-    if (this.classList?.contains("bag-notice")) return rectOf({ top: 0, bottom: toastHeight, left: 0, right: 300 });
+    if (this.classList?.contains("bag-notice")) return rectOf({ top: 0, bottom: toastHeight, ...centredToastBounds() });
     return this.__box ? rectOf(this.__box) : rectOf({ top: 0, bottom: 0, left: 0, right: 0 });
   };
   return () => {
@@ -1013,37 +1019,54 @@ function setBox(element, box) {
   element.__box = box;
   return element;
 }
-function toastBand(region, viewport, toastHeight) {
-  return region.classList.contains("is-top")
-    ? { top: 20, bottom: 20 + toastHeight, left: 0, right: 300 }
-    : { top: viewport - 20 - toastHeight, bottom: viewport - 20, left: 0, right: 300 };
+// The card renders inside whichever live region currently carries it (polite
+// for success, assertive for failure); placement classes live on that region.
+function activeRegion() {
+  return Array.from(host.querySelectorAll(".bag-notice-region")).find(region => region.querySelector(".bag-notice"));
 }
+function toastBand(region, viewport, toastHeight) {
+  const { left, right } = centredToastBounds();
+  return region.classList.contains("is-bottom")
+    ? { top: viewport - 20 - toastHeight, bottom: viewport - 20, left, right }
+    : { top: 20, bottom: 20 + toastHeight, left, right };
+}
+// Control boxes that sit inside / outside the centred toast's horizontal range.
+const insidetToastX = () => {
+  const { left, right } = centredToastBounds();
+  return { left: left + 60, right: right - 60 };
+};
 function intersects(a, b) {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 function sizedNoticeHost(BagNotice, { first = "First message", second = "Second message" } = {}) {
+  const x = insidetToastX();
   return function NoticeHost() {
     const [message, setMessage] = React.useState(null);
     return React.createElement("div", null,
+      React.createElement("div", { className: "site-header" }),
+      React.createElement("main", { id: "main", tabIndex: -1 }),
       React.createElement("button", { type: "button", id: "bottom-control", onClick: () => setMessage({ id: 1, tone: "success", text: first }) }, "show"),
       React.createElement("button", { type: "button", id: "top-control", onClick: () => setMessage({ id: 1, tone: "success", text: first }) }, "top"),
+      React.createElement("button", { type: "button", id: "side-control", onClick: () => setMessage({ id: 1, tone: "success", text: first }) }, "side"),
       React.createElement("button", { type: "button", id: "replace", onClick: () => setMessage({ id: 2, tone: "failure", text: second }) }, "replace"),
-      React.createElement(BagNotice, { message, onExpire: () => setMessage(null) }));
+      React.createElement("div", null, React.createElement(BagNotice, { message, onExpire: () => setMessage(null) })),
+      React.createElement("span", { "data-x": x.left }));
   };
 }
 
-test("a focused control at the viewport bottom lifts the notice into a clear top band", async () => {
+test("a focused control at the viewport bottom stays clear of the default top notice", async () => {
   const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
   const restore = stubLayout({ viewport: 800, toastHeight: 50 });
+  const x = insidetToastX();
   try {
     await mount(React.createElement(sizedNoticeHost(BagNotice)));
     const bottomControl = host.querySelector("#bottom-control");
-    setBox(bottomControl, { top: 740, bottom: 792, left: 18, right: 156 });
+    setBox(bottomControl, { top: 740, bottom: 792, ...x });
     bottomControl.focus();
     await click(bottomControl);
-    const region = host.querySelector(".bag-notice-region");
-    assert.ok(region.classList.contains("is-top"), "the notice moves to the top band");
-    assert.ok(!intersects(toastBand(region, 800, 50), { top: 740, bottom: 792, left: 18, right: 156 }),
+    const region = activeRegion();
+    assert.ok(!region.classList.contains("is-bottom"), "the notice stays beneath the header");
+    assert.ok(!intersects(toastBand(region, 800, 50), { top: 740, bottom: 792, ...x }),
       "the top band does not cover the focused control");
     assert.equal(document.activeElement, bottomControl, "placement never moves focus");
     assert.equal(host.querySelectorAll(".bag-notice").length, 1, "a single message stays visible");
@@ -1053,19 +1076,38 @@ test("a focused control at the viewport bottom lifts the notice into a clear top
   }
 });
 
-test("a focused control near the viewport top keeps the default bottom placement", async () => {
+test("a focused control in the top band moves the notice to the clear bottom band", async () => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  const restore = stubLayout({ viewport: 800, toastHeight: 50 });
+  const x = insidetToastX();
+  try {
+    await mount(React.createElement(sizedNoticeHost(BagNotice)));
+    const topControl = host.querySelector("#top-control");
+    setBox(topControl, { top: 12, bottom: 68, ...x });
+    topControl.focus();
+    await click(topControl);
+    const region = activeRegion();
+    assert.ok(region.classList.contains("is-bottom"), "the notice moves to the bottom band");
+    assert.ok(!intersects(toastBand(region, 800, 50), { top: 12, bottom: 68, ...x }));
+    assert.equal(document.activeElement, topControl);
+  } finally {
+    restore();
+  }
+});
+
+test("a focused control beside the centred notice does not force it to the bottom", async () => {
   const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
   const restore = stubLayout({ viewport: 800, toastHeight: 50 });
   try {
     await mount(React.createElement(sizedNoticeHost(BagNotice)));
-    const topControl = host.querySelector("#top-control");
-    setBox(topControl, { top: 12, bottom: 68, left: 12, right: 149 });
-    topControl.focus();
-    await click(topControl);
-    const region = host.querySelector(".bag-notice-region");
-    assert.ok(!region.classList.contains("is-top"), "the default bottom band already clears the control");
-    assert.ok(!intersects(toastBand(region, 800, 50), { top: 12, bottom: 68, left: 12, right: 149 }));
-    assert.equal(document.activeElement, topControl);
+    const sideControl = host.querySelector("#side-control");
+    setBox(sideControl, { top: 12, bottom: 68, left: 10, right: 90 });
+    sideControl.focus();
+    await click(sideControl);
+    const region = activeRegion();
+    assert.ok(!region.classList.contains("is-bottom"), "the centred notice does not overlap a control beside it");
+    assert.ok(!intersects(toastBand(region, 800, 50), { top: 12, bottom: 68, left: 10, right: 90 }));
+    assert.equal(document.activeElement, sideControl);
   } finally {
     restore();
   }
@@ -1074,26 +1116,27 @@ test("a focused control near the viewport top keeps the default bottom placement
 test("placement follows keyboard focus between top and bottom controls while the notice stays live", async () => {
   const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
   const restore = stubLayout({ viewport: 800, toastHeight: 50 });
+  const x = insidetToastX();
   try {
     await mount(React.createElement(sizedNoticeHost(BagNotice)));
     const bottomControl = host.querySelector("#bottom-control");
     const topControl = host.querySelector("#top-control");
-    setBox(bottomControl, { top: 740, bottom: 792, left: 18, right: 156 });
-    setBox(topControl, { top: 12, bottom: 68, left: 12, right: 149 });
+    setBox(bottomControl, { top: 740, bottom: 792, ...x });
+    setBox(topControl, { top: 12, bottom: 68, ...x });
     bottomControl.focus();
     await click(bottomControl);
-    assert.ok(host.querySelector(".bag-notice-region").classList.contains("is-top"));
+    assert.ok(!activeRegion().classList.contains("is-bottom"));
 
     await act(async () => { topControl.focus(); });
-    let region = host.querySelector(".bag-notice-region");
-    assert.ok(!region.classList.contains("is-top"), "focus moving to the top returns the toast to the bottom");
-    assert.ok(!intersects(toastBand(region, 800, 50), { top: 12, bottom: 68, left: 12, right: 149 }));
+    let region = activeRegion();
+    assert.ok(region.classList.contains("is-bottom"), "focus moving to the top lowers the toast");
+    assert.ok(!intersects(toastBand(region, 800, 50), { top: 12, bottom: 68, ...x }));
     assert.equal(document.activeElement, topControl, "focus stays on the control the visitor chose");
 
     await act(async () => { bottomControl.focus(); });
-    region = host.querySelector(".bag-notice-region");
-    assert.ok(region.classList.contains("is-top"), "focus returning to the bottom lifts the toast again");
-    assert.ok(!intersects(toastBand(region, 800, 50), { top: 740, bottom: 792, left: 18, right: 156 }));
+    region = activeRegion();
+    assert.ok(!region.classList.contains("is-bottom"), "focus returning to the bottom restores the top notice");
+    assert.ok(!intersects(toastBand(region, 800, 50), { top: 740, bottom: 792, ...x }));
     assert.equal(document.activeElement, bottomControl);
     assert.match(host.textContent, /First message/);
   } finally {
@@ -1101,28 +1144,51 @@ test("placement follows keyboard focus between top and bottom controls while the
   }
 });
 
-test("placement is recomputed when the viewport is resized", async () => {
+test("notice placement measures the site header and updates when it is resized", async () => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  const restore = stubLayout({ viewport: 800, toastHeight: 50 });
+  const x = insidetToastX();
+  try {
+    await mount(React.createElement(sizedNoticeHost(BagNotice)));
+    const header = host.querySelector(".site-header");
+    const control = host.querySelector("#bottom-control");
+    setBox(header, { top: 0, bottom: 120, left: 0, right: 300 });
+    setBox(control, { top: 740, bottom: 792, ...x });
+    control.focus();
+    await click(control);
+    let region = activeRegion();
+    assert.equal(region.style.getPropertyValue("--bag-notice-top"), "132px");
+    assert.ok(!intersects(toastBand(region, 800, 50), { top: 740, bottom: 792, ...x }));
+
+    setBox(header, { top: 0, bottom: 80, left: 0, right: 300 });
+    await act(async () => { dom.window.dispatchEvent(new dom.window.Event("resize")); });
+    region = activeRegion();
+    assert.equal(region.style.getPropertyValue("--bag-notice-top"), "92px");
+    assert.ok(!intersects(toastBand(region, 800, 50), { top: 740, bottom: 792, ...x }));
+  } finally {
+    restore();
+  }
+});
+
+test("focusing the dismiss control does not relocate the notice it sits in", async () => {
   const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
   const restore = stubLayout({ viewport: 800, toastHeight: 50 });
   try {
     await mount(React.createElement(sizedNoticeHost(BagNotice)));
-    const control = host.querySelector("#bottom-control");
-    setBox(control, { top: 600, bottom: 650, left: 18, right: 156 });
-    control.focus();
-    await click(control);
-    assert.ok(!host.querySelector(".bag-notice-region").classList.contains("is-top"),
-      "at 800px tall the bottom band (730-780) misses a control ending at 650");
-
-    Object.defineProperty(dom.window, "innerHeight", { configurable: true, value: 667 });
-    await act(async () => { dom.window.dispatchEvent(new dom.window.Event("resize")); });
-    let region = host.querySelector(".bag-notice-region");
-    assert.ok(region.classList.contains("is-top"), "at 667px tall the bottom band (597-647) covers the control");
-    assert.ok(!intersects(toastBand(region, 667, 50), { top: 600, bottom: 650, left: 18, right: 156 }));
-
-    Object.defineProperty(dom.window, "innerHeight", { configurable: true, value: 800 });
-    await act(async () => { dom.window.dispatchEvent(new dom.window.Event("resize")); });
-    region = host.querySelector(".bag-notice-region");
-    assert.ok(!region.classList.contains("is-top"), "growing the viewport restores the bottom placement");
+    const show = host.querySelector("#bottom-control");
+    setBox(show, { top: 740, bottom: 792, ...insidetToastX() });
+    show.focus();
+    await click(show);
+    const region = activeRegion();
+    assert.ok(!region.classList.contains("is-bottom"));
+    // The dismiss button renders inside the notice's own top band; focusing it
+    // must not count as a collision and shove the toast away from the pointer.
+    await act(async () => {
+      host.querySelector(".bag-notice-dismiss").focus();
+      dom.window.dispatchEvent(new dom.window.FocusEvent("focusin", { bubbles: true }));
+    });
+    assert.ok(!region.classList.contains("is-bottom"), "the notice stays where the visitor is interacting");
+    assert.equal(document.activeElement, host.querySelector(".bag-notice-dismiss"));
   } finally {
     restore();
   }
@@ -1136,16 +1202,20 @@ test("replacement notices keep the newest message and re-run placement before ex
     t.mock.timers.enable({ apis: ["setTimeout"] });
     const control = host.querySelector("#bottom-control");
     const replace = host.querySelector("#replace");
-    setBox(control, { top: 740, bottom: 792, left: 18, right: 156 });
+    setBox(control, { top: 740, bottom: 792, ...insidetToastX() });
     control.focus();
     await click(control);
-    assert.ok(host.querySelector(".bag-notice-region").classList.contains("is-top"));
+    const firstProgress = host.querySelector(".bag-notice-progress-bar");
+    assert.ok(firstProgress);
+    assert.ok(!activeRegion().classList.contains("is-bottom"));
 
     await click(replace);
     const toasts = host.querySelectorAll(".bag-notice");
     assert.equal(toasts.length, 1, "newest message wins");
     assert.match(toasts[0].textContent, /Second message/);
-    assert.ok(host.querySelector(".bag-notice-region").classList.contains("is-top"),
+    const secondProgress = host.querySelector(".bag-notice-progress-bar");
+    assert.notEqual(secondProgress, firstProgress, "the countdown restarts on a fresh node for the newest message");
+    assert.ok(!activeRegion().classList.contains("is-bottom"),
       "replacement keeps the clear placement for the still-focused bottom control");
     assert.equal(document.activeElement, control, "replacement does not steal focus");
 
@@ -1153,20 +1223,113 @@ test("replacement notices keep the newest message and re-run placement before ex
     assert.ok(host.querySelector(".bag-notice"), "the replacement gets its own full expiry window");
     await act(async () => { t.mock.timers.tick(1); });
     assert.equal(host.querySelector(".bag-notice"), null);
-    assert.ok(!host.querySelector(".bag-notice-region").classList.contains("is-top"),
+    assert.equal(host.querySelector(".bag-notice-progress"), null, "the countdown leaves with its message");
+    assert.equal(activeRegion(), undefined, "no region carries a card once cleared");
+    assert.ok(!host.querySelector('.bag-notice-region[aria-live="polite"]').classList.contains("is-bottom"),
       "clearing the message restores the default placement");
+    assert.equal(document.activeElement, control, "an expiry that never focused the toast leaves focus untouched");
   } finally {
     t.mock.timers.reset();
     restore();
   }
 });
 
+test("the notice presents a status icon, a labelled dismiss control and a countdown indicator", async () => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  function ToneHost() {
+    const [message, setMessage] = React.useState(null);
+    return React.createElement("div", null,
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 1, tone: "success", text: "Added 1 × Fixture mug to your Bag" }) }, "ok"),
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 2, tone: "failure", text: "Could not remove that item" }) }, "fail"),
+      React.createElement(BagNotice, { message, onExpire: () => setMessage(null) }));
+  }
+  await mount(React.createElement(ToneHost));
+  await click(button("ok"));
+  const success = host.querySelector(".bag-notice.success");
+  assert.ok(success);
+  assert.equal(success.textContent, "Added 1 × Fixture mug to your Bag", "decorative icon and controls add no text");
+  assert.equal(success.querySelectorAll(".bag-notice-icon svg").length, 1);
+  assert.equal(success.querySelector(".bag-notice-icon").getAttribute("aria-hidden"), null);
+  const dismiss = success.querySelector(".bag-notice-dismiss");
+  assert.ok(dismiss, "the success toast is dismissible");
+  assert.equal(dismiss.getAttribute("aria-label"), "Dismiss notification");
+  assert.equal(dismiss.getAttribute("type"), "button");
+  assert.ok(success.querySelector(".bag-notice-progress .bag-notice-progress-bar"), "the countdown indicator is present");
+  assert.equal(host.querySelectorAll('.bag-notice-region[role="status"][aria-live="polite"]').length, 1,
+    "success announces politely through the single live region");
+
+  await click(button("fail"));
+  const failure = host.querySelector(".bag-notice.failure");
+  assert.ok(failure);
+  assert.equal(failure.textContent, "Could not remove that item");
+  assert.equal(host.querySelectorAll(".bag-notice-dismiss").length, 1, "only one notice and one dismissal ever render");
+  assert.equal(host.querySelectorAll(".bag-notice").length, 1, "only one card is ever on screen");
+  assert.ok(host.querySelector('.bag-notice-region[aria-live="assertive"]'), "errors escalate to an assertive announcement");
+  assert.equal(host.querySelectorAll(".bag-notice-region").length, 2,
+    "the polite region stays mounted for the next success without echoing the error");
+  assert.equal(host.querySelector('.bag-notice-region[aria-live="polite"]').querySelector(".bag-notice"), null,
+    "the polite region is empty while a failure shows, so nothing is announced twice");
+});
+
+test("manual dismissal removes the notice immediately and reports one expiry", async () => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  let expired = 0;
+  function DismissHost() {
+    const [message, setMessage] = React.useState(null);
+    return React.createElement("div", null,
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 1, tone: "success", text: "Dismissable message" }) }, "show"),
+      React.createElement(BagNotice, { message, onExpire: () => { expired += 1; setMessage(null); } }));
+  }
+  await mount(React.createElement(DismissHost));
+  await click(button("show"));
+  assert.ok(host.querySelector(".bag-notice"));
+  await click(host.querySelector(".bag-notice-dismiss"));
+  assert.equal(host.querySelector(".bag-notice"), null, "the dismiss control clears the notice at once");
+  assert.equal(expired, 1, "dismissal reports exactly one expiry");
+});
+
+test("dismissing with focus on the control returns keyboard focus to the page, not nowhere", async () => {
+  const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
+  function FocusHost() {
+    const [message, setMessage] = React.useState(null);
+    return React.createElement("div", null,
+      React.createElement("main", { id: "main", tabIndex: -1 }),
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 1, tone: "failure", text: "Failure message" }) }, "show"),
+      React.createElement(BagNotice, { message, onExpire: () => setMessage(null) }));
+  }
+  await mount(React.createElement(FocusHost));
+  await click(button("show"));
+  const dismiss = host.querySelector(".bag-notice-dismiss");
+  await act(async () => { dismiss.focus(); });
+  assert.equal(document.activeElement, dismiss);
+  await click(dismiss);
+  assert.equal(host.querySelector(".bag-notice"), null);
+  assert.equal(document.activeElement, host.querySelector("#main"),
+    "focus lands on the main landmark rather than being dropped on <body>");
+});
+
 test("focus-aware placement stays a single fixed live region with reduced-motion-safe styling", async () => {
   const { readFileSync } = await import("node:fs");
   const css = readFileSync("src/styles.css", "utf8");
-  assert.match(css, /\.bag-notice-region\s*\{[^}]*position:\s*fixed;[^}]*pointer-events:\s*none;/);
-  assert.match(css, /\.bag-notice-region\.is-top\s*\{[^}]*top:\s*20px;[^}]*bottom:\s*auto;/);
-  assert.match(css, /prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]{0,400}?animation:\s*none\s*!important/);
+  assert.match(css, /\.bag-notice-region\s*\{[^}]*position:\s*fixed;[^}]*left:\s*50%;[^}]*transform:\s*translateX\(-50%\);[^}]*width:\s*min\(360px,\s*calc\(100vw - 32px\)\);[^}]*top:\s*var\(--bag-notice-top,\s*20px\);[^}]*pointer-events:\s*none;/);
+  assert.match(css, /\.bag-notice-region\.is-bottom\s*\{[^}]*top:\s*auto;[^}]*bottom:\s*calc\(20px \+ env\(safe-area-inset-bottom/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]{0,600}?animation:\s*none\s*!important/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]{0,600}?\.bag-notice-progress\s*\{\s*display:\s*none;/);
+});
+
+test("the notice uses a light Lumé House surface with a slim, tone-coloured countdown", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync("src/styles.css", "utf8");
+  const component = readFileSync("src/components/BagNotice.tsx", "utf8");
+  assert.match(css, /\.bag-notice\s*\{[^}]*background:\s*#fffdf7;[^}]*color:\s*#29382e;[^}]*border:\s*1px solid var\(--surface-border\)/,
+    "the surface is light ivory with a token border, not a heavy solid fill");
+  assert.doesNotMatch(css, /\.bag-notice(?!-)[^{]*\{[^}]*background:\s*#2f3a2d/, "the old dark green fill is gone");
+  assert.doesNotMatch(css, /\.bag-notice\.failure\s*\{[^}]*background:\s*#8a4628/, "the old solid rust fill is gone");
+  assert.match(css, /\.bag-notice-progress\s*\{[^}]*height:\s*2px;/);
+  assert.match(css, /\.bag-notice-progress-bar\s*\{[^}]*animation:\s*bag-notice-countdown 5000ms linear forwards;/);
+  assert.match(css, /@keyframes bag-notice-countdown\s*\{\s*from\s*\{\s*transform:\s*scaleX\(1\);\s*\}\s*to\s*\{\s*transform:\s*scaleX\(0\);\s*\}\s*\}/);
+  assert.match(component, /BAG_NOTICE_MS = 5000;/, "the runtime timeout and the CSS countdown stay in step");
+  assert.match(css, /\.bag-notice-dismiss::after\s*\{[^}]*inset:\s*-6px;/, "the dismissal keeps a 44px touch target");
 });
 
 test("StrictMode double-mount keeps the details outcome guard live", async () => {

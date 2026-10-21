@@ -7,7 +7,7 @@ import { createServer } from "vite";
 import { readFileSync } from "node:fs";
 
 let server;
-let ProductContext, CartContext, ShopPage, CartPage, CheckoutPage;
+let ProductContext, CartContext, AuthContext, ShopPage, CartPage, CheckoutPage;
 let contentPages, routeTitle, aboutFragmentTarget;
 let Layout, SiteFooter, AccountExperience, accountInitials, ProductDetails, ProductDetailsPage;
 before(async () => {
@@ -20,6 +20,9 @@ before(async () => {
   ));
   ({ CartContext } = await server.ssrLoadModule(
     "/src/features/cart/CartContext.ts",
+  ));
+  ({ AuthContext } = await server.ssrLoadModule(
+    "/src/features/auth/AuthContext.ts",
   ));
   ({ ProductDetails, ProductDetailsPage } = await server.ssrLoadModule("/src/features/products/ProductDetailsPage.tsx"));
   ({ ShopPage } = await server.ssrLoadModule(
@@ -262,12 +265,14 @@ test("expanded catalog has accessible interactions, editorial sections and respo
   assert.match(css, /:focus-visible/);
 });
 
-function renderLayout(path, cartState = { items, status: "ready", error: null, retry() {} }) {
+const guestAuth = { loading: false, session: null, error: null, signIn: async () => {}, signOut: async () => {} };
+function renderLayout(path, cartState = { items, status: "ready", error: null, retry() {} }, authState = guestAuth) {
   return renderToStaticMarkup(React.createElement(MemoryRouter,{initialEntries:[path]},
-    React.createElement(ProductContext.Provider,{value:{state:{status:"loading"},refresh(){}}},
-      React.createElement(CartContext.Provider,{value:cartState},
-        React.createElement(Routes,null,React.createElement(Route,{element:React.createElement(Layout)},
-          React.createElement(Route,{path:"*",element:React.createElement("h1",null,"Page")})))))));
+    React.createElement(AuthContext.Provider,{value:authState},
+      React.createElement(ProductContext.Provider,{value:{state:{status:"loading"},refresh(){}}},
+        React.createElement(CartContext.Provider,{value:cartState},
+          React.createElement(Routes,null,React.createElement(Route,{element:React.createElement(Layout)},
+            React.createElement(Route,{path:"*",element:React.createElement("h1",null,"Page")}))))))));
 }
 function renderDetails(product) {
   return renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(CartContext.Provider,{value:{items:[],dispatch(){},status:"ready"}},React.createElement(ProductDetails,{product}))));
@@ -285,6 +290,30 @@ test("primary navigation has five destinations, account/help descendant active s
     assert.ok(active[0].includes('href="/help"'));
   }
   assert.match(renderLayout("/account/orders"), /aria-current="page"[^>]*href="\/account"/);
+});
+
+test("header keeps guest/loading Account text and shows only private initials when signed in", () => {
+  const session = { access_token: "synthetic", user: { id: "11111111-1111-4111-8111-111111111111", email: "customer@example.invalid", user_metadata: { full_name: "Naj Builds" } } };
+  const signedIn = { ...guestAuth, session };
+  assert.match(renderLayout("/"), /href="\/account"[^>]*>Account<\/a>/);
+  assert.doesNotMatch(renderLayout("/"), /account-badge|Account, signed in/);
+  const loading = renderLayout("/", undefined, { ...signedIn, loading: true });
+  assert.match(loading, /href="\/account"[^>]*>Account<\/a>/);
+  assert.doesNotMatch(loading, /account-badge|Account, signed in/);
+  const signed = renderLayout("/", undefined, signedIn);
+  const accountLink = signed.match(/<a[^>]*href="\/account"[^>]*>.*?<\/a>/s)?.[0] ?? "";
+  assert.match(accountLink, /aria-label="Account, signed in"/);
+  assert.match(accountLink, /class="header-account"/);
+  assert.match(accountLink, /<span class="account-badge" aria-hidden="true">NB<\/span>/);
+  assert.doesNotMatch(accountLink, /customer@example\.invalid|Naj Builds/);
+  const nav = signed.match(/<nav aria-label="Main navigation"[^>]*>(.*?)<\/nav>/s)?.[1] ?? "";
+  assert.equal((nav.match(/<a /g) ?? []).length, 5, "the badge replaces the label, not the destination");
+  assert.doesNotMatch(renderLayout("/admin", undefined, signedIn), /site-header|Account, signed in/);
+  const signedOut = renderLayout("/", undefined, { ...signedIn, session: null });
+  assert.match(signedOut, /href="\/account"[^>]*>Account<\/a>/);
+  assert.doesNotMatch(signedOut, /account-badge|Account, signed in/);
+  const noName = renderLayout("/", undefined, { ...signedIn, session: { ...session, user: { ...session.user, user_metadata: {} } } });
+  assert.match(noName, /class="account-badge" aria-hidden="true">LH</);
 });
 
 test("ecommerce footer provides grouped real links, dynamic year and separate developer attribution", () => {

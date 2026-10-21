@@ -7,12 +7,18 @@ import { BagIcon } from "./Icon";
 import { aboutFragmentTarget, routeTitle } from "../config/routeExperience";
 import { SiteFooter } from "./SiteFooter";
 import { isAdminRoute } from "../config/adminNavigation";
+import { useAuth } from "../features/auth/AuthContext";
+import { accountInitials } from "../features/account/accountInitials";
+import { accountDisplayName } from "../features/account/accountIdentity";
 
 export function Layout() {
   const { items, status, error, retry } = useCart();
   const count = items.reduce((total, item) => total + item.quantity, 0);
   const { pathname, hash, key } = useLocation();
   const administration = isAdminRoute(pathname);
+  const auth = useAuth();
+  const signedIn = !auth.loading && Boolean(auth.session);
+  const initials = signedIn ? accountInitials(accountDisplayName(auth.session?.user)) : "";
   const { state: catalog } = useProducts();
   const productName = catalog.status === "ready" ? catalog.products.find(product => pathname === `/products/${encodeURIComponent(product.id)}`)?.name : undefined;
   const main = useRef<HTMLElement>(null);
@@ -62,7 +68,9 @@ export function Layout() {
           </NavLink>
           <NavLink to="/about">About</NavLink>
           <NavLink to="/help">Help</NavLink>
-          <NavLink to="/account">Account</NavLink>
+          <NavLink to="/account" className={signedIn ? "header-account" : undefined} aria-label={signedIn ? "Account, signed in" : undefined}>
+            {signedIn ? <span className="account-badge" aria-hidden="true">{initials}</span> : "Account"}
+          </NavLink>
           <NavLink to="/cart" className="cart-link" aria-label={`Bag (${count})`}>
             <BagIcon />
             <span>Bag</span>
