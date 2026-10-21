@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useLocation } from "react-router-dom";
 import { BagNotice, type BagNoticeMessage } from "./BagNotice";
+import { useAuth } from "../features/auth/AuthContext";
 import {
   DEFAULT_NOTIFICATION_DURATIONS,
   NotificationsContext,
@@ -29,15 +30,20 @@ function focusPageIfNoticeHasFocus() {
   }
 }
 
-/** A notification together with the route that created it. */
-type ActiveNotification = { message: BagNoticeMessage; path: string };
+/** A notification together with the route and the session that created it. */
+type ActiveNotification = { message: BagNoticeMessage; path: string; owner: string | null };
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
+  // A notification can carry customer-specific information, so it belongs to the
+  // authenticated session that created it. The owner is taken from the trusted
+  // auth context above this provider, never from the caller.
+  const owner = useAuth().session?.user.id ?? null;
   const [active, setActive] = useState<ActiveNotification | null>(null);
   const activeRef = useRef<ActiveNotification | null>(null);
   const nextId = useRef(0);
   const previousPath = useRef(pathname);
+  const previousOwner = useRef(owner);
   // The route the customer is on. It is written during the commit, before any
   // route can announce itself, so a notifier captured on an earlier route can
   // be recognised as stale at the moment it is called.
@@ -54,6 +60,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     focusPageIfNoticeHasFocus();
     activeRef.current = null;
     setActive(null);
+  }, []);
+
+  // Removes the active notification and returns a focus that the removal
+  // dropped to the persistent page content.
+  const clearActive = useCallback(() => {
+    activeRef.current = null;
+    setActive(null);
+    const focused = document.activeElement;
+    if (!focused || focused === document.body || focused === document.documentElement) {
+      document.getElementById("main")?.focus();
+    }
   }, []);
 
   const notify = useCallback((input: NotifyInput) => {
@@ -83,16 +100,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         durationMs,
       },
       path: pathname,
+      owner,
     };
     activeRef.current = next;
     setActive(next);
     return next.message.id;
-  }, [pathname]);
+  }, [pathname, owner]);
 
-  // A notification belongs to the route that created it. The render guard keeps
-  // the previous route's toast out of the new route's first committed render,
-  // so a stale notification can never flash on the page the customer moved to.
-  const visible = active && active.path === pathname ? active.message : null;
+  // A notification belongs to the route and to the session that created it.
+  // The render guard keeps the previous route's toast out of the new route's
+  // first committed render, and keeps another customer's toast out of the
+  // first committed render of a new session.
+  const visible = active && active.path === pathname && active.owner === owner ? active.message : null;
 
   useEffect(() => {
     if (previousPath.current === pathname) return;
@@ -102,15 +121,19 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     // notification the destination route created for itself stays, because it
     // belongs to the route the customer is on now.
     if (!current || current.path === pathname) return;
-    activeRef.current = null;
-    setActive(null);
-    // The route change removed the toast. If that removal dropped focus, return
-    // it to the page content instead of leaving it on <body>.
-    const focused = document.activeElement;
-    if (!focused || focused === document.body || focused === document.documentElement) {
-      document.getElementById("main")?.focus();
-    }
-  }, [pathname]);
+    clearActive();
+  }, [pathname, clearActive]);
+
+  // A notification of another session is removed when the session changes, so
+  // it can neither be read in the new session nor come back if that customer
+  // returns later.
+  useEffect(() => {
+    if (previousOwner.current === owner) return;
+    previousOwner.current = owner;
+    const current = activeRef.current;
+    if (!current || current.owner === owner) return;
+    clearActive();
+  }, [owner, clearActive]);
 
   // The expiry carries the notification id, so a timer that was already queued
   // when a newer notification replaced this one can never dismiss it.

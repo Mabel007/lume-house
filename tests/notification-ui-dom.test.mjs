@@ -13,7 +13,7 @@ for (const name of ["window", "document", "HTMLElement", "Element"])
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const { createRoot } = await import("react-dom/client");
 const host = document.getElementById("root");
-let server, root, NotificationProvider, useNotifications, DEFAULT_NOTIFICATION_DURATIONS;
+let server, root, NotificationProvider, useNotifications, DEFAULT_NOTIFICATION_DURATIONS, AuthContext;
 
 before(async () => {
   server = await createServer({
@@ -24,6 +24,7 @@ before(async () => {
   ({ useNotifications, DEFAULT_NOTIFICATION_DURATIONS } = await server.ssrLoadModule(
     "/src/components/notifications.ts",
   ));
+  ({ AuthContext } = await server.ssrLoadModule("/src/features/auth/AuthContext.ts"));
 });
 after(async () => {
   await server?.close();
@@ -148,6 +149,63 @@ function activeNotice() {
 }
 function carryingRegions() {
   return Array.from(host.querySelectorAll(".bag-notice-region")).filter(region => region.querySelector(".bag-notice"));
+}
+
+// --- Session ownership ---------------------------------------------------------
+// The notification provider sits below the auth context in the application, so
+// a notification can belong to the authenticated session that created it.
+const sessionA = { user: { id: "customer-a", email: "a@example.invalid" }, access_token: "jwt-a" };
+const sessionB = { user: { id: "customer-b", email: "b@example.invalid" }, access_token: "jwt-b" };
+function authValue(session) {
+  return {
+    loading: false,
+    session,
+    error: null,
+    signIn: async () => {},
+    signOut: async () => ({ ok: true }),
+    signOutController: { subscribe: () => () => {}, run: async () => ({ ok: true }) },
+  };
+}
+function SessionProbe() {
+  const { notify } = useNotifications();
+  useEffect(() => { dom.window.__sessionNotify = notify; }, [notify]);
+  return React.createElement(
+    "main",
+    { id: "main", tabIndex: -1 },
+    React.createElement("button", { id: "ok", onClick: () => notify({ tone: "success", message: "Saved" }) }, "ok"),
+  );
+}
+function SessionHarness() {
+  const [session, setSession] = React.useState(sessionA);
+  dom.window.__switchSession = setSession;
+  return React.createElement(
+    AuthContext.Provider,
+    { value: authValue(session) },
+    React.createElement(
+      NotificationProvider,
+      null,
+      React.createElement(
+        Routes,
+        null,
+        React.createElement(Route, { path: "*", element: React.createElement(SessionProbe) }),
+      ),
+    ),
+  );
+}
+async function mountSession() {
+  root = createRoot(host);
+  await act(async () => {
+    root.render(
+      React.createElement(MemoryRouter, { initialEntries: ["/"] }, React.createElement(SessionHarness)),
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+}
+async function switchSession(session) {
+  await act(async () => {
+    dom.window.__switchSession(session);
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
 }
 
 test("four tones share one notification surface with the approved default durations", async () => {
@@ -410,6 +468,64 @@ test("a notification created after the customer returns to a route still works",
   const notice = activeNotice();
   assert.ok(notice, "a notification for the route the customer returned to still works");
   assert.match(notice.textContent, /Back again/);
+});
+
+test("a notification of one customer is never visible in another customer session", async () => {
+  await mountSession();
+  await click(button("ok"));
+  assert.ok(activeNotice(), "the customer sees their own notification");
+  await switchSession(sessionB);
+  assert.equal(host.querySelectorAll(".bag-notice").length, 0, "the other customer never sees it");
+  await switchSession(sessionA);
+  assert.equal(host.querySelectorAll(".bag-notice").length, 0, "returning to the customer does not bring the old notification back");
+});
+
+test("a notification created after the session change belongs to the new customer", async () => {
+  await mountSession();
+  await switchSession(sessionB);
+  await click(button("ok"));
+  assert.ok(activeNotice(), "the new customer sees the notification they created");
+  assert.equal(carryingRegions().length, 1, "one live region carries it");
+});
+
+test("an anonymous notification is removed when the customer signs in", async () => {
+  await mountSession();
+  await switchSession(null);
+  await click(button("ok"));
+  assert.ok(activeNotice(), "an anonymous notification is shown");
+  await switchSession(sessionA);
+  assert.equal(host.querySelectorAll(".bag-notice").length, 0, "the signed-in customer does not see the anonymous notification");
+});
+
+test("a customer notification is removed when the customer signs out", async () => {
+  await mountSession();
+  await click(button("ok"));
+  assert.ok(activeNotice());
+  await switchSession(null);
+  assert.equal(host.querySelectorAll(".bag-notice").length, 0, "a signed-out visitor does not see the customer notification");
+});
+
+test("an expiry callback from a previous session cannot remove the new customer notification", async () => {
+  const realSetTimeout = globalThis.setTimeout;
+  const captured = [];
+  globalThis.setTimeout = function (fn, delay, ...rest) {
+    const id = realSetTimeout(fn, delay, ...rest);
+    captured.push({ fn, delay, id });
+    return id;
+  };
+  try {
+    await mountSession();
+    await click(button("ok"));
+    const stale = captured.filter(entry => entry.delay === 5000).at(-1);
+    assert.ok(stale, "the notification scheduled its own expiry");
+    await switchSession(sessionB);
+    await click(button("ok"));
+    assert.ok(activeNotice(), "the new customer has their own notification");
+    await act(async () => { stale.fn(); await Promise.resolve(); });
+    assert.ok(activeNotice(), "the previous session expiry cannot clear the new customer notification");
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
 });
 
 test("the shared styles keep safe-area placement and reduced-motion behavior", () => {

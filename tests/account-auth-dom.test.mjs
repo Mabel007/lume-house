@@ -41,7 +41,7 @@ function fakeClient(){
   return {client,calls};
 }
 const flush=async()=>{await act(async()=>{await new Promise(resolve=>setTimeout(resolve,0));});};
-async function mount(path,value,element){root=createRoot(host);await act(async()=>root.render(React.createElement(MemoryRouter,{initialEntries:[path]},React.createElement(NotificationProvider,null,React.createElement(AuthContext.Provider,{value},element)))));}
+async function mount(path,value,element){root=createRoot(host);await act(async()=>root.render(React.createElement(MemoryRouter,{initialEntries:[path]},React.createElement(AuthContext.Provider,{value},React.createElement(NotificationProvider,null,element)))));}
 // The context carries the shared single-in-flight sign-out controller. Harnesses
 // override `signOut` with a stub; deriving the controller from the effective
 // stub keeps them exercising the same guarantee the real AuthProvider provides.
@@ -653,7 +653,7 @@ function profileFixture({pending=null,loads={}}={}){
 }
 const sessionA={user:{id:'customer-a',email:'a@example.invalid'},access_token:'jwt-a'};
 const sessionB={user:{id:'customer-b',email:'b@example.invalid'},access_token:'jwt-b'};
-async function renderAccount(value,element){await act(async()=>root.render(React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(NotificationProvider,null,React.createElement(AuthContext.Provider,{value},element))))); }
+async function renderAccount(value,element){await act(async()=>root.render(React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(AuthContext.Provider,{value},React.createElement(NotificationProvider,null,element))))); }
 const saveControl=()=>host.querySelector('.profile-actions button.button');
 const cancelControl=()=>[...host.querySelectorAll('button')].find(node=>node.textContent==='Cancel');
 const nameField=()=>host.querySelector('[name="full_name"]');
@@ -875,4 +875,63 @@ test('a valid save still announces exactly once under StrictMode',async()=>{
   await flush();
   assert.equal(notices().length,1,'the StrictMode effect cycle does not suppress a valid save');
   assert.match(notices()[0].textContent,/Your profile has been saved\./);
+});
+// --- Batch 1G: notification session ownership ----------------------------------
+
+test('a save that completes after the identity update is scheduled never reaches the next customer session',async()=>{
+  const {CustomerAccount}=await server.ssrLoadModule('/src/features/auth/CustomerRoutes.tsx');
+  const pending=deferred();
+  const fixture=profileFixture({pending});
+  globalThis.__accountAuthClient=fixture.client;
+  let switchSession;
+  function Harness(){
+    const [session,setSessionValue]=React.useState(sessionA);
+    switchSession=setSessionValue;
+    return React.createElement(AuthContext.Provider,{value:auth({session})},React.createElement(NotificationProvider,null,React.createElement(CustomerAccount)));
+  }
+  root=createRoot(host);
+  await act(async()=>{root.render(React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(Harness)));await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  await act(async()=>{inputValue(nameField(),'Customer A edited');});
+  await act(async()=>{saveControl().click();});
+  await flush();
+  // The identity update is scheduled and the save completes before React
+  // commits the new customer.
+  await act(async()=>{
+    switchSession(sessionB);
+    pending.resolve({error:null});
+    await new Promise(resolve=>setTimeout(resolve,0));
+  });
+  await flush();
+  assert.equal(notices().length,0,'the previous customer save never reaches the next customer session');
+  assert.doesNotMatch(host.textContent,/Your profile has been saved/);
+  assert.equal(nameField().value,'Customer B','the new customer has their own profile');
+});
+
+test('a notification of one customer is never visible in another customer session',async()=>{
+  const {CustomerAccount}=await server.ssrLoadModule('/src/features/auth/CustomerRoutes.tsx');
+  const fixture=profileFixture();
+  globalThis.__accountAuthClient=fixture.client;
+  let switchSession;
+  function Harness(){
+    const [session,setSessionValue]=React.useState(sessionA);
+    switchSession=setSessionValue;
+    return React.createElement(AuthContext.Provider,{value:auth({session})},React.createElement(NotificationProvider,null,React.createElement(CustomerAccount)));
+  }
+  root=createRoot(host);
+  await act(async()=>{root.render(React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(Harness)));await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  // The customer saves and the confirmation is visible on their own page.
+  await act(async()=>{inputValue(nameField(),'Customer A saved');});
+  await act(async()=>{saveControl().click();});
+  await flush();
+  assert.equal(notices().length,1,'the confirmation is visible on the customer own page');
+  // The session switches to another customer.
+  await act(async()=>{switchSession(sessionB);await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  assert.equal(notices().length,0,'the other customer never sees the previous customer confirmation');
+  // Returning to the first customer does not bring the old confirmation back.
+  await act(async()=>{switchSession(sessionA);await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  assert.equal(notices().length,0,'an obsolete confirmation is not resurrected');
 });
