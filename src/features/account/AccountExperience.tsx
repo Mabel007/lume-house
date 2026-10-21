@@ -21,10 +21,10 @@ type Props = {
   onChange: (key: keyof Profile, value: string) => void;
   onSave: (event: FormEvent) => void;
   onCancel: () => void;
-  onSignOut: () => void;
+  signOut: { signingOut: boolean; error: string | null; signOut: () => Promise<void> };
 };
 
-export function AccountExperience({ profile, savedName, email, authenticatedName, ready, busy, status, error, onChange, onSave, onCancel, onSignOut }: Props) {
+export function AccountExperience({ profile, savedName, email, authenticatedName, ready, busy, status, error, onChange, onSave, onCancel, signOut }: Props) {
   const section = useRef<HTMLElement>(null);
   const { hash, key: locationKey } = useLocation();
   useEffect(() => {
@@ -53,7 +53,7 @@ export function AccountExperience({ profile, savedName, email, authenticatedName
         <div className="profile-actions"><button className="button" disabled={busy || !ready}>{busy ? "Saving…" : "Save profile & delivery details"}</button><button className="account-cancel" type="button" disabled={busy || !ready} onClick={onCancel}>Cancel</button><p className="feedback" role="status">{status}</p></div>
       </form>
       <aside className="account-aside"><section className="account-note" aria-labelledby="account-orders"><h2 id="account-orders">Orders</h2><p>Revisit your orders, their delivery details and payment status.</p><Link className="text-link" to="/account/orders">My Orders →</Link></section>
-        <section className="account-note account-session" aria-labelledby="account-security"><h2 id="account-security" tabIndex={-1}>Account & Security</h2><p>Signed in with Google</p><p className="account-email">{email}</p><p>You sign in with Google. Lumé House does not manage a password for this account.</p><button className="text-link" disabled={busy} onClick={onSignOut}>Sign Out</button><p className="feedback" role="alert">{error}</p><Link className="text-link" to="/">Continue shopping →</Link></section>
+        <section className="account-note account-session" aria-labelledby="account-security"><h2 id="account-security" tabIndex={-1}>Account & Security</h2><p>Signed in with Google</p><p className="account-email">{email}</p><p>You sign in with Google. Lumé House does not manage a password for this account.</p><button className="text-link" type="button" disabled={busy || signOut.signingOut} onClick={() => void signOut.signOut()}>{signOut.signingOut ? "Signing out…" : "Sign Out"}</button><p className="feedback" role="alert">{signOut.error || error}</p><Link className="text-link" to="/">Continue shopping →</Link></section>
         <section className="account-note account-help" aria-labelledby="account-help"><h2 id="account-help" tabIndex={-1}>Help & Support</h2><p>Find guidance for your account, delivery or a question about your order.</p><ul><li><Link className="text-link" to="/help#contact">Help & Contact →</Link></li><li><Link className="text-link" to="/help/delivery-pickup">Delivery & Pickup →</Link></li><li><Link className="text-link" to="/help/returns-refunds">Returns & Refunds →</Link></li></ul></section>
       </aside>
     </div>
