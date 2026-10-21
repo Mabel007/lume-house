@@ -48,7 +48,7 @@ export function ProductDetails({product}:{product:Product}) {
     if(!alive.current||operation!==pendingSeq.current)return;
     setPending(false);
     if(outcome.kind==='confirmed')notify({tone:'success',message:bagAddedText(addedAmount,name,detail)});
-    else if(outcome.kind==='rejected')notify({tone:'error',message:bagAddFailedText(name)});
+    else if(outcome.kind==='rejected')notify({tone:'error',message:bagAddFailedText(name,outcome.failure)});
   }
   return <section className="wrap page-section product-details">
     <Link className="back-link" to="/">← Back to the collection</Link>

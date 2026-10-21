@@ -1108,6 +1108,13 @@ nav a,
 .bag-notice.failure .bag-notice-progress-bar { background: #b3714a; }
 .bag-notice.warning .bag-notice-progress-bar { background: #b58a45; }
 .bag-notice.info .bag-notice-progress-bar { background: #6f838a; }
+/* Persistent saved Bag recovery: a quiet band with one clear action. It is not a
+   live region, so the notification stays the only announcement of the failure. */
+.cart-recovery { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; margin: 14px 0; padding: 14px 18px; background: #fffdf7; border: 1px solid var(--surface-border); border-left: 3px solid #9c7047; color: #29382e; font-size: 13px; line-height: 1.6; }
+.cart-recovery-note { margin: 0; flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+.cart-recovery-action { min-height: 44px; padding: 0 18px; border: 1px solid #2d4033; border-radius: 2px; background: transparent; color: #2d4033; font-size: 13px; cursor: pointer; transition: background-color var(--motion-time), color var(--motion-time); }
+.cart-recovery-action:hover { background: #2d4033; color: #fffdf7; }
+.cart-recovery-action[aria-disabled="true"] { opacity: .6; cursor: default; }
 @keyframes bag-notice-countdown {
   from { transform: scaleX(1); }
   to { transform: scaleX(0); }

@@ -50,7 +50,7 @@ function statusIcon(tone: BagNoticeTone) {
   );
 }
 
-export function BagNotice({ message, onExpire }: { message: BagNoticeMessage | null; onExpire: () => void }) {
+export function BagNotice({ message, onExpire }: { message: BagNoticeMessage | null; onExpire: (id: number) => void }) {
   const regionRef = useRef<HTMLDivElement>(null);
   const restoreFocus = useRef(false);
   const [atBottom, setAtBottom] = useState(false);
@@ -60,9 +60,12 @@ export function BagNotice({ message, onExpire }: { message: BagNoticeMessage | n
   // dismiss button), which would drop focus onto <body>. Remember that state
   // before the message goes away so the layout effect can place focus back on
   // the page content instead of leaving it nowhere.
+  // The notification id travels with the expiry so a timer that was already
+  // queued when a newer notification replaced this one can never dismiss it.
   const expire = () => {
+    if (!message) return;
     restoreFocus.current = regionRef.current?.contains(document.activeElement) ?? false;
-    onExpire();
+    onExpire(message.id);
   };
 
   useEffect(() => {

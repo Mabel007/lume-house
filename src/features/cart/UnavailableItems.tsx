@@ -1,5 +1,6 @@
 import { useCart } from "./CartContext";
 import { useNotifications } from "../../components/notifications";
+import { bagUnavailableRemoveFailedText } from "./bagFeedback";
 import { cartLineKey, type CartItem } from "./cart";
 
 export function UnavailableItems({ items }: { items: CartItem[] }) {
@@ -10,7 +11,7 @@ export function UnavailableItems({ items }: { items: CartItem[] }) {
     if (outcome.kind === "rejected") {
       notify({
         tone: "error",
-        message: `Unavailable item ${index + 1} could not be removed. Check your Bag before trying again.`,
+        message: bagUnavailableRemoveFailedText(index + 1, outcome.failure),
       });
     }
   }

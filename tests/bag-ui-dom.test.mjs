@@ -63,7 +63,7 @@ function bagClient(handler) {
   globalThis.__bagClient = {
     rpc(name, args) {
       calls.push({ name, args });
-      const outcome = handler(name);
+      const outcome = handler(name, args);
       return { setHeader() { return outcome; } };
     },
   };
@@ -116,7 +116,8 @@ async function rerender(element) {
   await act(async () => { root.render(element); await new Promise(resolve => setTimeout(resolve, 0)); });
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 }
-function layoutTree(auth, path = "/") {
+function layoutTree(auth, path = "/", page) {
+  const element = page ?? (path === "/cart" ? CartPage : ShopPage);
   return React.createElement(MemoryRouter, { initialEntries: [path] },
     React.createElement(AuthContext.Provider, { value: auth },
       React.createElement(ProductContext.Provider, { value: catalog },
@@ -124,7 +125,7 @@ function layoutTree(auth, path = "/") {
           React.createElement(NotificationProvider, null,
             React.createElement(Routes, null,
               React.createElement(Route, { element: React.createElement(Layout) },
-                React.createElement(Route, { path, element: React.createElement(path === "/cart" ? CartPage : ShopPage) }))))))));
+                React.createElement(Route, { path, element: React.isValidElement(element) ? element : React.createElement(element) }))))))));
 }
 // StrictMode reproduces the dev double-mount that plays effect cleanup then
 // re-runs effects; the alive guards must survive the replay.
@@ -311,7 +312,7 @@ test("authenticated Add to Bag failure shows one action toast, keeps the Bag unc
   assert.equal(host.querySelector('[role="alert"]'), null, "the action failure is not also published by the Bag header");
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Bag/);
+  assert.match(toast.textContent, /couldn't add Fixture mug to your Bag/);
   assert.doesNotMatch(toast.textContent, /was not added/);
   assert.doesNotMatch(host.textContent, /Added 1 × Fixture mug to your Bag/);
   assert.equal(buttonByLabel("Add Fixture mug to Bag").disabled, false);
@@ -555,6 +556,7 @@ test("quantity update failure keeps the global Bag error and retry without an ac
   assert.equal(calls.find(call => call.name === "change_variant_cart").args.p_mode, "set");
   await settle(change, { data: null, error: { code: "P0001", message: "fixture quantity failure" } });
   assert.equal(host.querySelector(".bag-notice"), null, "quantity changes keep their existing global feedback");
+  assert.equal(host.querySelector(".cart-recovery"), null, "a quantity failure keeps its existing global recovery");
   const alert = host.querySelector('[role="alert"]');
   assert.ok(alert);
   assert.match(alert.textContent, /Your Bag change could not be confirmed/);
@@ -577,8 +579,8 @@ test("unavailable-item removal failure keeps truthful accessible feedback", asyn
   await settle(change, { data: null, error: { code: "P0001", message: "fixture unavailable removal failure" } });
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /Unavailable item 1 could not be removed/);
-  assert.match(toast.textContent, /Check your Bag before trying again/);
+  assert.match(toast.textContent, /couldn't confirm removing unavailable item 1 from your Bag/);
+  assert.match(toast.textContent, /Refresh your saved Bag to see the current items/);
   assert.doesNotMatch(host.textContent, /Removed unavailable item/);
   assert.match(host.textContent, /Some items are no longer available/, "the unavailable-item state remains visible");
   assert.equal(host.querySelector('[role="alert"]'), null);
@@ -924,7 +926,7 @@ test("uncertain add after a lost RPC response makes no definite claim and reload
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
   assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Bag/);
-  assert.match(toast.textContent, /Check your Bag before trying again/);
+  assert.match(toast.textContent, /Refresh your saved Bag to see the current items before trying again/);
   assert.doesNotMatch(host.textContent, /was not added|Added 1 × Fixture mug to your Bag/);
   assert.equal(host.querySelector('[role="alert"]'), null, "the action failure does not also claim the global Bag alert");
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "uncertain mutations are never repeated automatically");
@@ -976,7 +978,7 @@ test("uncertain removal after a lost RPC response makes no definite claim and re
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
   assert.match(toast.textContent, /couldn't confirm removing Fixture mug from your Bag/);
-  assert.match(toast.textContent, /Check your Bag before trying again/);
+  assert.match(toast.textContent, /Refresh your saved Bag to see the current items before trying again/);
   assert.doesNotMatch(host.textContent, /was not removed|Removed Fixture mug from your Bag/);
   assert.equal(host.querySelector('[role="alert"]'), null);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "uncertain removals are never repeated automatically");

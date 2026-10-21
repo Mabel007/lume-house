@@ -1,9 +1,9 @@
 import { test, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import React, { act, useEffect } from "react";
+import React, { act, useEffect, useLayoutEffect, useRef } from "react";
 import { JSDOM } from "jsdom";
 import { createServer } from "vite";
-import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { MemoryRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { readFileSync } from "node:fs";
 
 const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost/", pretendToBeVisual: true });
@@ -38,6 +38,18 @@ afterEach(async () => {
 function NotificationProbe() {
   const { notify, dismiss } = useNotifications();
   const navigate = useNavigate();
+  const location = useLocation();
+  const mounted = useRef(false);
+  // A layout effect runs after the DOM mutations of its commit, so it observes
+  // exactly what the first committed render of a route contains.
+  useLayoutEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    dom.window.__frames = dom.window.__frames ?? [];
+    dom.window.__frames.push({ path: location.pathname, toast: !!document.querySelector(".bag-notice") });
+  }, [location.pathname]);
   useEffect(() => {
     dom.window.__notifications = { notify, dismiss, navigate };
   }, [notify, dismiss, navigate]);
@@ -165,6 +177,45 @@ test("an older timeout cannot dismiss a newer notification", async t => {
   } finally {
     t.mock.timers.reset();
   }
+});
+
+test("an expiry callback that was already queued cannot dismiss the newer notification", async () => {
+  await mount();
+  const realSetTimeout = globalThis.setTimeout;
+  const captured = [];
+  globalThis.setTimeout = function (fn, delay, ...rest) {
+    const id = realSetTimeout(fn, delay, ...rest);
+    captured.push({ fn, delay, id });
+    return id;
+  };
+  try {
+    await click(button("success"));
+    const beforeReplacement = captured.length;
+    const stale = captured.slice(0, beforeReplacement).filter(entry => entry.delay === 5000).at(-1);
+    assert.ok(stale, "the success notification scheduled its own expiry");
+    await click(button("error"));
+    assert.match(activeNotice().textContent, /Failed/);
+    // The browser had already queued this callback when the newer notification
+    // replaced the older one.
+    await act(async () => { stale.fn(); await Promise.resolve(); });
+    assert.ok(activeNotice(), "the stale expiry callback must not clear the newer notification");
+    assert.match(activeNotice().textContent, /Failed/);
+    assert.equal(host.querySelectorAll(".bag-notice").length, 1);
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
+});
+
+test("navigation removes the previous route's notification before the new route renders", async () => {
+  await mount();
+  await click(button("success"));
+  assert.ok(activeNotice());
+  await click(button("next"));
+  const frames = dom.window.__frames ?? [];
+  assert.ok(frames.length >= 1, "the navigation committed a new route");
+  assert.equal(frames[0].path, "/next");
+  assert.equal(frames[0].toast, false, "the previous route's notification is not in the first committed render of the new route");
+  assert.equal(activeNotice(), null);
 });
 
 test("the exact same message is still announced as a fresh notification", async () => {

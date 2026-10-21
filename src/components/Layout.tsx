@@ -14,7 +14,7 @@ import { AccountMenu } from "./AccountMenu";
 import { useCustomerSignOut } from "../features/auth/useCustomerSignOut";
 
 export function Layout() {
-  const { items, status, error, retry } = useCart();
+  const { items, status, error, retry, recovery, refreshSavedCart } = useCart();
   const count = items.reduce((total, item) => total + item.quantity, 0);
   const { pathname, hash, key } = useLocation();
   const administration = isAdminRoute(pathname);
@@ -92,6 +92,22 @@ export function Layout() {
         {!administration && status === "loading" && <p className="wrap" role="status">Loading your Bag…</p>}
         {!administration && status === "saving" && <p className="wrap" role="status">Saving your Bag…</p>}
         {!administration && error && <div className="wrap" role="alert">{error} <button onClick={retry}>Retry saved Bag</button></div>}
+        {!administration && recovery && (
+          <div className="wrap cart-recovery" aria-busy={recovery.status === "refreshing"}>
+            {recovery.status === "required" && <p className="cart-recovery-note">{recovery.message}</p>}
+            {recovery.status === "refreshing" && <p className="cart-recovery-note">Refreshing your saved Bag…</p>}
+            {recovery.status === "completed" && <p className="cart-recovery-note" role="status">Your saved Bag is up to date. Review the items and quantities before continuing.</p>}
+            {recovery.status === "failed" && <p className="cart-recovery-note">We couldn&apos;t refresh your saved Bag, so it may still be out of date.</p>}
+            <button
+              type="button"
+              className="cart-recovery-action"
+              aria-disabled={recovery.status === "refreshing"}
+              onClick={() => refreshSavedCart?.()}
+            >
+              Refresh saved Bag
+            </button>
+          </div>
+        )}
         <Outlet />
       </main>
       {!administration && <SiteFooter />}

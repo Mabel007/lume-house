@@ -28,21 +28,24 @@ function focusPageIfNoticeHasFocus() {
   }
 }
 
+/** A notification together with the route that created it. */
+type ActiveNotification = { message: BagNoticeMessage; path: string };
+
 export function NotificationProvider({ children }: { children: ReactNode }) {
-  const [notification, setNotification] = useState<BagNoticeMessage | null>(null);
-  const notificationRef = useRef<BagNoticeMessage | null>(null);
-  const nextId = useRef(0);
   const { pathname } = useLocation();
+  const [active, setActive] = useState<ActiveNotification | null>(null);
+  const activeRef = useRef<ActiveNotification | null>(null);
+  const nextId = useRef(0);
   const previousPath = useRef(pathname);
 
   const dismiss = useCallback((id?: NotificationId) => {
-    const current = notificationRef.current;
-    if (!current || (id !== undefined && current.id !== id)) return;
+    const current = activeRef.current;
+    if (!current || (id !== undefined && current.message.id !== id)) return;
     // The toast normally restores focus itself. This also covers a programmatic
     // dismissal that removes the focused close control.
     focusPageIfNoticeHasFocus();
-    notificationRef.current = null;
-    setNotification(null);
+    activeRef.current = null;
+    setActive(null);
   }, []);
 
   const notify = useCallback((input: NotifyInput) => {
@@ -57,35 +60,50 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     // A replacement removes the card the customer may be using. Move focus to
     // the persistent page before the old dismiss control disappears.
-    if (notificationRef.current) focusPageIfNoticeHasFocus();
+    if (activeRef.current) focusPageIfNoticeHasFocus();
 
-    const next: BagNoticeMessage = {
-      id: ++nextId.current,
-      tone: visualTone(input.tone),
-      text: message,
-      durationMs,
+    const next: ActiveNotification = {
+      message: {
+        id: ++nextId.current,
+        tone: visualTone(input.tone),
+        text: message,
+        durationMs,
+      },
+      path: pathname,
     };
-    notificationRef.current = next;
-    setNotification(next);
-    return next.id;
-  }, []);
+    activeRef.current = next;
+    setActive(next);
+    return next.message.id;
+  }, [pathname]);
+
+  // A notification belongs to the route that created it. The render guard keeps
+  // the previous route's toast out of the new route's first committed render,
+  // so a stale notification can never flash on the page the customer moved to.
+  const visible = active && active.path === pathname ? active.message : null;
 
   useEffect(() => {
     if (previousPath.current === pathname) return;
     previousPath.current = pathname;
-    if (!notificationRef.current) return;
-    focusPageIfNoticeHasFocus();
-    notificationRef.current = null;
-    setNotification(null);
+    if (!activeRef.current) return;
+    activeRef.current = null;
+    setActive(null);
+    // The route change removed the toast. If that removal dropped focus, return
+    // it to the page content instead of leaving it on <body>.
+    const focused = document.activeElement;
+    if (!focused || focused === document.body || focused === document.documentElement) {
+      document.getElementById("main")?.focus();
+    }
   }, [pathname]);
 
-  const onExpire = useCallback(() => dismiss(), [dismiss]);
+  // The expiry carries the notification id, so a timer that was already queued
+  // when a newer notification replaced this one can never dismiss it.
+  const onExpire = useCallback((id: number) => dismiss(id), [dismiss]);
   const value = useMemo(() => ({ notify, dismiss }), [notify, dismiss]);
 
   return (
     <NotificationsContext.Provider value={value}>
       {children}
-      <BagNotice message={notification} onExpire={onExpire} />
+      <BagNotice message={visible} onExpire={onExpire} />
     </NotificationsContext.Provider>
   );
 }

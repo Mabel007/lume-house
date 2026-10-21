@@ -41,7 +41,7 @@ export function ShopPage() {
     if(!alive.current||operation!==noticeSeq.current)return;
     setAddingId(null);
     if(outcome.kind==="confirmed")notify({tone:"success",message:bagAddedText(1,name,"")});
-    else if(outcome.kind==="rejected")notify({tone:"error",message:bagAddFailedText(name)});
+    else if(outcome.kind==="rejected")notify({tone:"error",message:bagAddFailedText(name,outcome.failure)});
   }
   return (
     <>

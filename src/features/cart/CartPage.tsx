@@ -30,7 +30,7 @@ export function CartPage() {
     const outcome = await dispatch({ type: "remove", productId: product.id, variantId });
     if (!alive.current || operation !== noticeSeq.current) return;
     if (outcome.kind === "confirmed") notify({ tone: "success", message: bagRemovedText(product.name, variantDetail) });
-    else if (outcome.kind === "rejected") notify({ tone: "error", message: bagRemoveFailedText(product.name) });
+    else if (outcome.kind === "rejected") notify({ tone: "error", message: bagRemoveFailedText(product.name, outcome.failure) });
   }
   const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
   const { state } = useProducts();
