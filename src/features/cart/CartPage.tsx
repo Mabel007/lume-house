@@ -35,7 +35,15 @@ export function CartPage() {
   }
   const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
   const { state } = useProducts();
-  if (status === "loading" || status === "error" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind={status==='error'?'error':'loading'}>Your saved Bag is not ready yet.</UiStatus></section>;
+  if (status === "loading" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind="loading">Your saved Bag is not ready yet.</UiStatus></section>;
+  if (status === "error" && state.status !== "ready")
+    return (
+      <section className="wrap page-section">
+        <PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/>
+        <ProductStatus />
+      </section>
+    );
+  if (status === "error") return <section className="wrap page-section"><PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind="error">Your saved Bag is not ready yet.</UiStatus></section>;
   if (!items.length) return <><EmptyCart /><BagNotice message={notice} onExpire={clearNotice} /></>;
   if (state.status !== "ready")
     return (
