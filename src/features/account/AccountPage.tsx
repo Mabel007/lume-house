@@ -26,6 +26,16 @@ export function AccountPage() {
   // again, and the account page stays mounted across that.
   const identity = useRef(id);
   const epoch = useRef(0);
+  // A component lifetime guard. The identity and epoch guards below cannot see
+  // an unmount: a keyed account page is replaced by a new instance that keeps
+  // its own refs, so the replaced instance would still look like the owner of
+  // a pending save. The flag is re-armed by the effect setup, so the StrictMode
+  // setup and cleanup cycle never invalidates a live component.
+  const alive = useRef(true);
+  useLayoutEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
   useLayoutEffect(() => {
     identity.current = id;
     epoch.current += 1;
@@ -46,7 +56,7 @@ export function AccountPage() {
     let active = true;
     const owner = id;
     const generation = epoch.current;
-    const isCurrent = () => active && identity.current === owner && epoch.current === generation;
+    const isCurrent = () => active && alive.current && identity.current === owner && epoch.current === generation;
     if (id) void loadProfile(getSupabaseClient(), id).then(value => { if (!isCurrent()) return; const loaded = value || { ...emptyProfile }; setProfile(loaded); setSavedProfile({ ...loaded }); setStatus(""); setReady(true); }).catch(() => { if (isCurrent()) setStatus("Your profile could not be loaded. Reload to try again."); });
     return () => { active = false; };
   }, [id]);
@@ -62,24 +72,25 @@ export function AccountPage() {
     try {
       // The write always targets the customer that started it.
       await saveProfile(getSupabaseClient(), owner, submittedProfile);
-      // The session may have changed while the save was in flight. The result
-      // then belongs to a session that no longer exists and must not touch the
-      // new customer's form, baseline or notifications.
-      if (identity.current !== owner || epoch.current !== generation) return;
+      // The session may have changed while the save was in flight, or this
+      // account page may have been replaced already. The result then belongs to
+      // a session that no longer exists and must not touch the new customer's
+      // form, baseline or notifications.
+      if (!alive.current || identity.current !== owner || epoch.current !== generation) return;
       setSavedProfile(submittedProfile);
       // Only a confirmed save is announced, and the shared notification owns
       // the message so it is announced exactly once.
       notify({ tone: "success", message: "Your profile has been saved." });
     }
     catch (error) {
-      if (identity.current !== owner || epoch.current !== generation) return;
+      if (!alive.current || identity.current !== owner || epoch.current !== generation) return;
       // The failure stays inline and assertive; it is never also announced.
       setProfileError(error instanceof Error ? error.message : "Your profile could not be saved.");
     }
     finally {
       // Only the operation that still owns the session may clear the pending
       // state of this session.
-      if (identity.current === owner && epoch.current === generation) setBusy(false);
+      if (alive.current && identity.current === owner && epoch.current === generation) setBusy(false);
     }
   }
   function cancel() {

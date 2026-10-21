@@ -789,3 +789,90 @@ test('the duplicate submission guard still blocks a second save',async()=>{
   await act(async()=>{pending.resolve({error:null});await new Promise(resolve=>setTimeout(resolve,0));});
   await flush();
 });
+// --- Batch 1G: profile save after unmount ---------------------------------------
+
+test('a keyed account wrapper that replaces the customer never shows the previous customer save',async()=>{
+  const {CustomerAccount}=await server.ssrLoadModule('/src/features/auth/CustomerRoutes.tsx');
+  const pending=deferred();
+  const fixture=profileFixture({pending});
+  globalThis.__accountAuthClient=fixture.client;
+  await mount('/account',auth({session:sessionA}),React.createElement(CustomerAccount));
+  await flush();
+  await act(async()=>{inputValue(nameField(),'Customer A edited');});
+  await act(async()=>{saveControl().click();});
+  await flush();
+  // The session switches while the route stays /account, so the keyed account
+  // page is replaced by a new instance.
+  await renderAccount(auth({session:sessionB}),React.createElement(CustomerAccount));
+  await flush();await flush();
+  assert.equal(nameField().value,'Customer B','the new customer has their own profile');
+  await act(async()=>{pending.resolve({error:null});await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  assert.equal(notices().length,0,'the previous customer save is not announced in the new session');
+  assert.doesNotMatch(host.textContent,/Your profile has been saved/);
+});
+
+test('a profile save that resolves after the account page unmounted announces nothing',async()=>{
+  const pending=deferred();
+  const fixture=profileFixture({pending});
+  globalThis.__accountAuthClient=fixture.client;
+  await mount('/account',auth({session:sessionA}),React.createElement(AccountPage));
+  await flush();
+  await act(async()=>{inputValue(nameField(),'Customer A edited');});
+  await act(async()=>{saveControl().click();});
+  await flush();
+  // The page leaves while the notification provider and the route stay.
+  await renderAccount(auth({session:sessionA}),React.createElement('p',null,'Account closed'));
+  await flush();
+  await act(async()=>{pending.resolve({error:null});await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  assert.equal(notices().length,0,'an unmounted account page never announces its save');
+});
+
+test('a rejected profile save that resolves after the account page unmounted announces nothing',async()=>{
+  const pending=deferred();
+  const fixture=profileFixture({pending});
+  globalThis.__accountAuthClient=fixture.client;
+  await mount('/account',auth({session:sessionA}),React.createElement(AccountPage));
+  await flush();
+  await act(async()=>{inputValue(nameField(),'Customer A edited');});
+  await act(async()=>{saveControl().click();});
+  await flush();
+  await renderAccount(auth({session:sessionA}),React.createElement('p',null,'Account closed'));
+  await flush();
+  await act(async()=>{pending.resolve({error:{code:'42501',message:'denied'}});await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  assert.equal(notices().length,0,'an unmounted account page never announces a failure');
+  assert.equal(host.querySelectorAll('[role="alert"]').length,0,'an unmounted account page raises no inline failure');
+});
+
+test('a save that resolves after the customer returned to the same account does not resurrect',async()=>{
+  const pending=deferred();
+  const fixture=profileFixture({pending});
+  globalThis.__accountAuthClient=fixture.client;
+  await mount('/account',auth({session:sessionA}),React.createElement(AccountPage));
+  await flush();
+  await act(async()=>{inputValue(nameField(),'Customer A edited');});
+  await act(async()=>{saveControl().click();});
+  await flush();
+  await renderAccount(auth({session:sessionB}),React.createElement(AccountPage));
+  await flush();await flush();
+  await renderAccount(auth({session:sessionA}),React.createElement(AccountPage));
+  await flush();await flush();
+  await act(async()=>{pending.resolve({error:null});await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  assert.equal(notices().length,0,'an obsolete save result is not resurrected');
+});
+
+test('a valid save still announces exactly once under StrictMode',async()=>{
+  const fixture=profileFixture();
+  globalThis.__accountAuthClient=fixture.client;
+  root=createRoot(host);
+  await act(async()=>{root.render(React.createElement(React.StrictMode,null,React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(NotificationProvider,null,React.createElement(AuthContext.Provider,{value:auth({session:sessionA})},React.createElement(AccountPage))))));await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  await act(async()=>{inputValue(nameField(),'Customer A saved');});
+  await act(async()=>{saveControl().click();});
+  await flush();
+  assert.equal(notices().length,1,'the StrictMode effect cycle does not suppress a valid save');
+  assert.match(notices()[0].textContent,/Your profile has been saved\./);
+});
