@@ -243,10 +243,10 @@ test('customer Account hub hides previous-user drafts and stale profile response
 });
 
 test('Account section navigation retains drafts and focus; Cancel restores loaded and successful saves while failures retain input',async()=>{
- const {AuthContext}=await module('features/auth/AuthContext.ts');const {CustomerAccount}=await module('features/auth/CustomerRoutes.tsx');
+ const {AuthContext,createSignOutController}=await module('features/auth/AuthContext.ts');const {CustomerAccount}=await module('features/auth/CustomerRoutes.tsx');
  const loaded={full_name:'Loaded customer',phone:'+23276521208',default_street_address:'Loaded address',default_area:'Lumley',default_city:'Freetown'};let pending=deferred();const writes=[];
  globalThis.__lumeFormTestClient={from(table){assert.equal(table,'profiles');let update;const query={select(){return query;},update(values){update=values;return query;},eq(key,id){assert.equal(key,'id');assert.equal(id,'customer');if(update){writes.push(update);return pending.promise;}return query;},maybeSingle(){return Promise.resolve({data:loaded,error:null});}};return query;}};
- let signOuts=0;const value={session:{user:{id:'customer',email:'owner@example.invalid',user_metadata:{full_name:'Google customer'}}},loading:false,error:null,signIn:async()=>{},signOut:async()=>{signOuts++;}};
+ let signOuts=0;const signOutController=createSignOutController(async()=>{signOuts++;return {ok:true};});const value={session:{user:{id:'customer',email:'owner@example.invalid',user_metadata:{full_name:'Google customer'}}},loading:false,error:null,signIn:async()=>{},signOut:()=>signOutController.run(),signOutController};
  router=createMemoryRouter([{path:'/account',element:React.createElement(AuthContext.Provider,{value},React.createElement(CustomerAccount))}],{initialEntries:['/account']});await mount(React.createElement(RouterProvider,{router}));
  const form=host.querySelector('form');const field=name=>host.querySelector(`[name="${name}"]`);const cancel=()=>Array.from(host.querySelectorAll('button')).find(node=>node.textContent==='Cancel');const signOut=()=>Array.from(host.querySelectorAll('button')).find(node=>node.textContent==='Sign Out');
  const email=host.querySelector('#account-auth-email');assert.equal(email.readOnly,true);assert.equal(email.value,'owner@example.invalid');assert.equal(email.hasAttribute('name'),false);
