@@ -621,3 +621,171 @@ test('a failed profile save stays inline and assertive and is not announced twic
   assert.match(alert.textContent,/Your profile could not be saved\./);
   assert.equal(host.querySelector('.bag-notice'),null,'a failed save is not also announced as a notification');
 });
+// --- Batch 1G: profile identity guard ----------------------------------------
+
+// A profile operation belongs to the customer that started it. The fixtures
+// answer per customer and can delay a load or a write, so a completion that
+// arrives after the session switched can be observed.
+function deferred(){let resolve,reject;const promise=new Promise((done,fail)=>{resolve=done;reject=fail;});return {promise,resolve,reject};}
+function inputValue(node,value){Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype,'value').set.call(node,value);node.dispatchEvent(new dom.window.Event('input',{bubbles:true}));}
+function profileFixture({pending=null,loads={}}={}){
+  const profiles={
+    'customer-a':{full_name:'Customer A',phone:'',default_street_address:'Address A',default_area:'Lumley',default_city:'Freetown'},
+    'customer-b':{full_name:'Customer B',phone:'',default_street_address:'Address B',default_area:'Congo',default_city:'Freetown'},
+  };
+  const writes=[];
+  const client={
+    from(table){
+      assert.equal(table,'profiles');
+      let owner=null;
+      const query={
+        select(){return query;},
+        eq(key,id){assert.equal(key,'id');owner=id;return query;},
+        maybeSingle:async()=>loads[owner]?loads[owner].promise:{data:profiles[owner]??null,error:null},
+        insert:async(values)=>{writes.push(values);return pending?pending.promise:{error:null};},
+        update:(values)=>{writes.push(values);return {eq:async()=>pending?pending.promise:{error:null}};},
+      };
+      return query;
+    },
+    auth:{signOut:async()=>({error:null})},
+  };
+  return {client,writes,profiles};
+}
+const sessionA={user:{id:'customer-a',email:'a@example.invalid'},access_token:'jwt-a'};
+const sessionB={user:{id:'customer-b',email:'b@example.invalid'},access_token:'jwt-b'};
+async function renderAccount(value,element){await act(async()=>root.render(React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(NotificationProvider,null,React.createElement(AuthContext.Provider,{value},element))))); }
+const saveControl=()=>host.querySelector('.profile-actions button.button');
+const cancelControl=()=>[...host.querySelectorAll('button')].find(node=>node.textContent==='Cancel');
+const nameField=()=>host.querySelector('[name="full_name"]');
+const addressField=()=>host.querySelector('[name="default_street_address"]');
+const notices=()=>host.querySelectorAll('.bag-notice');
+
+async function startDelayedSave(fixture,session){
+  globalThis.__accountAuthClient=fixture.client;
+  await mount('/account',auth({session}),React.createElement(AccountPage));
+  await flush();
+  await act(async()=>{inputValue(nameField(),'Customer A edited');});
+  await act(async()=>{saveControl().click();});
+  await flush();
+}
+test('a delayed save from one customer never updates another customer saved baseline',async()=>{
+  const pending=deferred();
+  const fixture=profileFixture({pending});
+  await startDelayedSave(fixture,sessionA);
+  // The session switches to customer B while the save is still in flight.
+  await renderAccount(auth({session:sessionB}),React.createElement(AccountPage));
+  await flush();await flush();
+  assert.equal(nameField().value,'Customer B','the new customer sees only their own profile');
+  // The earlier save now completes.
+  await act(async()=>{pending.resolve({error:null});await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  await act(async()=>{cancelControl().click();});
+  await flush();
+  assert.equal(nameField().value,'Customer B','the new customer baseline is not replaced by the earlier save');
+  assert.equal(addressField().value,'Address B');
+});
+
+test('the new customer Cancel restores their own saved profile and never the previous customer',async()=>{
+  const pending=deferred();
+  const fixture=profileFixture({pending});
+  await startDelayedSave(fixture,sessionA);
+  await renderAccount(auth({session:sessionB}),React.createElement(AccountPage));
+  await flush();await flush();
+  await act(async()=>{pending.resolve({error:null});await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  await act(async()=>{inputValue(nameField(),'Customer B draft');});
+  await act(async()=>{cancelControl().click();});
+  await flush();
+  assert.equal(nameField().value,'Customer B','Cancel restores the customer own saved profile');
+  assert.equal(addressField().value,'Address B');
+});
+
+test('a delayed save produces no success notification in the new customer session',async()=>{
+  const pending=deferred();
+  const fixture=profileFixture({pending});
+  await startDelayedSave(fixture,sessionA);
+  await renderAccount(auth({session:sessionB}),React.createElement(AccountPage));
+  await flush();await flush();
+  await act(async()=>{pending.resolve({error:null});await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  assert.equal(notices().length,0,'the earlier customer save is not announced in the new session');
+  assert.doesNotMatch(host.textContent,/Your profile has been saved/);
+});
+
+test('a delayed rejected save produces no error in the new customer session',async()=>{
+  const pending=deferred();
+  const fixture=profileFixture({pending});
+  await startDelayedSave(fixture,sessionA);
+  await renderAccount(auth({session:sessionB}),React.createElement(AccountPage));
+  await flush();await flush();
+  await act(async()=>{pending.resolve({error:{code:'42501',message:'denied'}});await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  assert.equal(notices().length,0,'a failure of the earlier customer is not announced as a notification');
+  assert.equal(host.querySelectorAll('.profile-actions [role="alert"]').length,0,'a failure of the earlier customer raises no inline error');
+});
+
+test('a delayed profile load cannot overwrite the new identity',async()=>{
+  const loadA=deferred();
+  const fixture=profileFixture({loads:{'customer-a':loadA}});
+  globalThis.__accountAuthClient=fixture.client;
+  await mount('/account',auth({session:sessionA}),React.createElement(AccountPage));
+  await flush();
+  await renderAccount(auth({session:sessionB}),React.createElement(AccountPage));
+  await flush();await flush();
+  assert.equal(nameField().value,'Customer B');
+  await act(async()=>{loadA.resolve({data:{full_name:'Previous customer',phone:'',default_street_address:'Address A',default_area:'Lumley',default_city:'Freetown'},error:null});await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  assert.equal(nameField().value,'Customer B','a late load never overwrites the new identity');
+  assert.equal(addressField().value,'Address B');
+});
+
+test('rapid account switches never resurrect stale profile data',async()=>{
+  const loadA=deferred();
+  const loadB=deferred();
+  const fixture=profileFixture({loads:{'customer-a':loadA,'customer-b':loadB}});
+  globalThis.__accountAuthClient=fixture.client;
+  await mount('/account',auth({session:sessionA}),React.createElement(AccountPage));
+  await flush();
+  await renderAccount(auth({session:sessionB}),React.createElement(AccountPage));
+  await flush();
+  await renderAccount(auth({session:sessionA}),React.createElement(AccountPage));
+  await flush();
+  await act(async()=>{loadB.resolve({data:{full_name:'Customer B',phone:'',default_street_address:'Address B',default_area:'Congo',default_city:'Freetown'},error:null});await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  assert.doesNotMatch(host.textContent,/Customer B/,'a load from the customer that left never reaches the current session');
+  await act(async()=>{loadA.resolve({data:{full_name:'Customer A',phone:'',default_street_address:'Address A',default_area:'Lumley',default_city:'Freetown'},error:null});await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+  assert.doesNotMatch(host.textContent,/Address B/);
+});
+
+test('a save in the same session still confirms and updates the saved baseline',async()=>{
+  const fixture=profileFixture();
+  globalThis.__accountAuthClient=fixture.client;
+  await mount('/account',auth({session:sessionA}),React.createElement(AccountPage));
+  await flush();
+  await act(async()=>{inputValue(nameField(),'Customer A saved');});
+  await act(async()=>{saveControl().click();});
+  await flush();
+  assert.equal(notices().length,1,'a confirmed save is announced once');
+  assert.match(notices()[0].textContent,/Your profile has been saved\./);
+  await act(async()=>{inputValue(nameField(),'Unsaved draft');});
+  await act(async()=>{cancelControl().click();});
+  await flush();
+  assert.equal(nameField().value,'Customer A saved','Cancel restores the profile that was just saved');
+});
+
+test('the duplicate submission guard still blocks a second save',async()=>{
+  const pending=deferred();
+  const fixture=profileFixture({pending});
+  globalThis.__accountAuthClient=fixture.client;
+  await mount('/account',auth({session:sessionA}),React.createElement(AccountPage));
+  await flush();
+  await act(async()=>{saveControl().click();});
+  await flush();
+  assert.equal(saveControl().disabled,true,'the save control is disabled while the save is pending');
+  await act(async()=>{saveControl().click();});
+  await flush();
+  assert.equal(fixture.writes.length,1,'a second activation never sends another write');
+  await act(async()=>{pending.resolve({error:null});await new Promise(resolve=>setTimeout(resolve,0));});
+  await flush();
+});
