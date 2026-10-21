@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { LogOutIcon, PackageIcon, UserIcon } from "./Icon";
 
 /**
  * Signed-in account menu.
@@ -18,11 +19,11 @@ import { Link, useLocation } from "react-router-dom";
  *
  * No email, full name or other identity detail is rendered here.
  */
-type MenuDestination = { label: string; to: string };
+type MenuDestination = { label: string; to: string; icon: React.ReactElement };
 
 const destinations: readonly MenuDestination[] = [
-  { label: "My profile", to: "/account" },
-  { label: "My orders", to: "/account/orders" },
+  { label: "My profile", to: "/account", icon: <UserIcon /> },
+  { label: "My orders", to: "/account/orders", icon: <PackageIcon /> },
 ];
 
 export function AccountMenu({
@@ -112,7 +113,7 @@ export function AccountMenu({
       </button>
       {open && (
         <div className="account-menu-popover" id={menuId} role="menu" aria-label="Account" onKeyDown={onMenuKeyDown}>
-          {destinations.map(({ label, to }, position) => (
+          {destinations.map(({ label, to, icon }, position) => (
             <Link
               key={to}
               role="menuitem"
@@ -120,7 +121,8 @@ export function AccountMenu({
               to={to}
               onClick={() => setOpen(false)}
             >
-              {label}
+              <span className="account-menu-icon" aria-hidden="true">{icon}</span>
+              <span className="account-menu-label">{label}</span>
             </Link>
           ))}
           <button
@@ -132,7 +134,8 @@ export function AccountMenu({
             aria-busy={signingOut}
             onClick={onSignOut}
           >
-            {signingOut ? "Signing out…" : "Sign out"}
+            <span className="account-menu-icon" aria-hidden="true"><LogOutIcon /></span>
+            <span className="account-menu-label">{signingOut ? "Signing out…" : "Sign out"}</span>
           </button>
         </div>
       )}
