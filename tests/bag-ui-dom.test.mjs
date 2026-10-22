@@ -1573,13 +1573,15 @@ test("removing the only Cart line with the keyboard moves the focus to the empty
   assert.equal(host.querySelectorAll(".bag-notice").length, 1, "the removal is still announced");
   assert.match(host.textContent, /Your Cart is taking a slow day/);
   assert.equal(document.activeElement === host.querySelector("[data-cart-empty-title]"), true, "the focus moves to the empty Cart heading");
+  assert.equal(host.querySelectorAll('h1').length, 1, "empty Cart keeps one meaningful heading");
+  assert.equal(host.querySelector('nav[aria-label="Breadcrumb"] a').getAttribute('href'), '/', "Shop remains available after removing the last line");
 });
 
 // Prevention guard, not a historical defect detector.
 test("a Cart removal that did not hold the focus leaves the focus where it was", async () => {
   focusCartClient(threeItems.filter(item => item.variant_id !== "v-vase"));
   await mount(withProviders(userAuth, React.createElement(CartPage), threeCatalog));
-  const elsewhere = host.querySelector('a.back-link');
+  const elsewhere = host.querySelector('nav[aria-label="Breadcrumb"] a[href="/"]');
   await act(async () => { elsewhere.focus(); });
   await click(buttonByLabel("Remove Fixture vase"));
   await flush();
@@ -1597,7 +1599,7 @@ for(const result of ['success','rejection','moved','moved-away','unmounted']) te
   assert.equal(remove.getAttribute('aria-disabled'),'true');
   await click(remove);
   assert.equal(calls.filter(call=>call.name==='change_variant_cart').length,1,'repeat activation blocked');
-  const elsewhere=host.querySelector('a.back-link');
+  const elsewhere=host.querySelector('nav[aria-label="Breadcrumb"] a[href="/"]');
   if(result==='moved' || result==='moved-away') await act(async()=>elsewhere.focus());
   if(result==='moved-away') elsewhere.blur();
   if(result==='unmounted') await act(async()=>root.render(React.createElement('button',{id:'other'},'Other route')));
