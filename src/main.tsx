@@ -10,6 +10,7 @@ import { CartPage } from "./features/cart/CartPage";
 import "./styles.css";
 import { ProductProvider } from "./features/products/ProductProvider";
 import { AuthProvider } from "./features/auth/AuthProvider";
+import { NotificationProvider } from "./components/NotificationProvider";
 import { AuthCallback, CustomerAccount, CustomerCheckout, CustomerOrders,CustomerOrder } from "./features/auth/CustomerRoutes";
 import { AboutPage } from "./features/content/AboutPage";
 import { HelpPage } from "./features/content/HelpPage";
@@ -18,7 +19,7 @@ import "./typography.css";
 import "./refinement.css";
 
 const router = createBrowserRouter(createRoutesFromElements(
-            <Route element={<AuthProvider><ProductProvider><CartProvider><Layout /></CartProvider></ProductProvider></AuthProvider>}>
+            <Route element={<AuthProvider><ProductProvider><CartProvider><NotificationProvider><Layout /></NotificationProvider></CartProvider></ProductProvider></AuthProvider>}>
               <Route path="/" element={<ShopPage />} />
               <Route path="/admin/*" element={<AdminPage />} />
               <Route path="/products/:productId" element={<ProductDetailsPage />} />

@@ -33,11 +33,13 @@ test("session restoration, auth events, sign-out and unsubscribe guard stale res
   let unsubscribed = false;
   const client = { auth: { onAuthStateChange: (callback: typeof event) => { event = callback; return { data: { subscription: { unsubscribe: () => { unsubscribed = true; } } } }; }, getSession: () => new Promise(done => { resolve = done; }) } } as unknown as SupabaseClient;
   const states: (Session | null)[] = [];
-  const stop = watchSession(client, value => states.push(value), () => assert.fail("unexpected restore failure"));
+  const events: string[] = [];
+  const stop = watchSession(client, (event, value) => { events.push(event); states.push(value); }, () => assert.fail("unexpected restore failure"));
   const session = { user: { id: "owner" } } as Session;
   event("SIGNED_IN", session); event("SIGNED_OUT", null);
   resolve({ data: { session }, error: null }); await new Promise(done => setImmediate(done));
   assert.deepEqual(states, [session, null]);
+  assert.deepEqual(events, ["SIGNED_IN", "SIGNED_OUT"], "the auth event tells the provider when a new sign-in lifetime begins");
   stop(); event("SIGNED_IN", session); assert.equal(states.length, 2); assert.equal(unsubscribed, true);
 });
 test("cart visibility hides private intent on logout, identity switch and restoration", () => {

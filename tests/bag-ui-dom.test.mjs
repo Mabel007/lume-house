@@ -12,7 +12,7 @@ for (const name of ["window", "document", "HTMLElement", "Element", "sessionStor
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const { createRoot } = await import("react-dom/client");
 const host = document.getElementById("root");
-let server, root, CartProvider, useCart, ShopPage, ProductDetails, CartPage, Layout, AuthContext, ProductContext;
+let server, root, CartProvider, useCart, ShopPage, ProductDetails, CartPage, Layout, AuthContext, ProductContext, NotificationProvider;
 
 const product = {
   id: "fixture-mug", name: "Fixture mug", description: "Fixture description", category: "Fixture category",
@@ -49,6 +49,7 @@ before(async () => {
   ({ Layout } = await server.ssrLoadModule("/src/components/Layout.tsx"));
   ({ AuthContext } = await server.ssrLoadModule("/src/features/auth/AuthContext.ts"));
   ({ ProductContext } = await server.ssrLoadModule("/src/features/products/ProductContext.ts"));
+  ({ NotificationProvider } = await server.ssrLoadModule("/src/components/NotificationProvider.tsx"));
 });
 afterEach(async () => {
   if (root) await act(async () => root.unmount());
@@ -62,7 +63,7 @@ function bagClient(handler) {
   globalThis.__bagClient = {
     rpc(name, args) {
       calls.push({ name, args });
-      const outcome = handler(name);
+      const outcome = handler(name, args);
       return { setHeader() { return outcome; } };
     },
   };
@@ -81,6 +82,12 @@ const buttonByLabel = label => host.querySelector(`button[aria-label="${label}"]
 async function mount(element) {
   root = createRoot(host);
   await act(async () => { root.render(element); await new Promise(resolve => setTimeout(resolve, 0)); });
+}
+async function remount(element) {
+  if (root) await act(async () => { root.unmount(); });
+  root = null;
+  host.replaceChildren();
+  await mount(element);
 }
 async function click(element) {
   await act(async () => { element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); await Promise.resolve(); });
@@ -102,20 +109,23 @@ function withProviders(auth, children, catalogValue = catalog) {
   return React.createElement(MemoryRouter, { initialEntries: ["/"] },
     React.createElement(AuthContext.Provider, { value: auth },
       React.createElement(ProductContext.Provider, { value: catalogValue },
-        React.createElement(CartProvider, null, children))));
+        React.createElement(CartProvider, null,
+          React.createElement(NotificationProvider, null, children)))));
 }
 async function rerender(element) {
   await act(async () => { root.render(element); await new Promise(resolve => setTimeout(resolve, 0)); });
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 }
-function layoutTree(auth, path = "/") {
+function layoutTree(auth, path = "/", page) {
+  const element = page ?? (path === "/cart" ? CartPage : ShopPage);
   return React.createElement(MemoryRouter, { initialEntries: [path] },
     React.createElement(AuthContext.Provider, { value: auth },
       React.createElement(ProductContext.Provider, { value: catalog },
         React.createElement(CartProvider, null,
-          React.createElement(Routes, null,
-            React.createElement(Route, { element: React.createElement(Layout) },
-              React.createElement(Route, { path, element: React.createElement(path === "/cart" ? CartPage : ShopPage) })))))));
+          React.createElement(NotificationProvider, null,
+            React.createElement(Routes, null,
+              React.createElement(Route, { element: React.createElement(Layout) },
+                React.createElement(Route, { path, element: React.isValidElement(element) ? element : React.createElement(element) }))))))));
 }
 // StrictMode reproduces the dev double-mount that plays effect cleanup then
 // re-runs effects; the alive guards must survive the replay.
@@ -155,12 +165,12 @@ function OutcomeProbe() {
     }, "probe-bad"));
 }
 
-test("guest Add to Bag persists locally, relabels the card and never calls RPCs", async () => {
+test("guest Add to Cart persists locally, relabels the card and never calls RPCs", async () => {
   const calls = bagClient(() => emptyCart());
   await mount(withProviders(guestAuth, React.createElement(ShopPage)));
-  const add = buttonByLabel("Add Fixture mug to Bag");
+  const add = buttonByLabel("Add Fixture mug to Cart");
   assert.ok(add);
-  assert.match(add.textContent, /Add to Bag/);
+  assert.match(add.textContent, /Add to Cart/);
   assert.ok(host.querySelector('.bag-notice-region[role="status"][aria-live="polite"]'));
   assert.equal(host.querySelector(".bag-notice"), null);
   assert.deepEqual(readStored().items, []);
@@ -175,10 +185,10 @@ test("guest Add to Bag persists locally, relabels the card and never calls RPCs"
   assert.match(stored.items[0].mergeId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /Added 1 × Fixture mug to your Bag/);
+  assert.match(toast.textContent, /Added 1 × Fixture mug to your Cart/);
   assert.equal(calls.length, 0);
-  const relabeled = buttonByLabel("Add Fixture mug to Bag");
-  assert.match(relabeled.textContent, /Add another · 1 in Bag/);
+  const relabeled = buttonByLabel("Add Fixture mug to Cart");
+  assert.match(relabeled.textContent, /Add another · 1 in Cart/);
 });
 
 test("guest Product Details adds the chosen quantity from the number input", async () => {
@@ -187,9 +197,9 @@ test("guest Product Details adds the chosen quantity from the number input", asy
   const input = host.querySelector("#product-quantity");
   Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(input, "3");
   await act(async () => { input.dispatchEvent(new dom.window.Event("input", { bubbles: true })); });
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   assert.deepEqual(readStored().items.map(item => item.quantity), [3]);
-  assert.match(host.textContent, /Added 3 × Fixture mug to your Bag/);
+  assert.match(host.textContent, /Added 3 × Fixture mug to your Cart/);
 });
 
 test("details quantity input ignores empty, zero, negative and decimal typing", async () => {
@@ -200,7 +210,7 @@ test("details quantity input ignores empty, zero, negative and decimal typing", 
     await typeQuantity(input, raw);
     assert.equal(input.value, "1", `typing ${JSON.stringify(raw)} must not change the committed quantity`);
   }
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   assert.deepEqual(readStored().items.map(item => item.quantity), [1], "only the committed quantity reaches the cart");
 });
 
@@ -234,8 +244,8 @@ test("details add is blocked when the existing quantity plus the requested amoun
     items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 99, mergeId: "11111111-1111-4111-8111-111111111111" }],
   }));
   await mount(withProviders(guestAuth, React.createElement(ProductDetails, { product })));
-  const add = buttonByLabel("Add Fixture mug to Bag");
-  assert.equal(add.disabled, true, "99 in Bag + 1 requested exceeds the limit");
+  const add = buttonByLabel("Add Fixture mug to Cart");
+  assert.equal(add.disabled, true, "99 in Cart + 1 requested exceeds the limit");
   assert.match(add.textContent, /Quantity limit reached/);
   await click(add);
   assert.equal(readStored().items.map(item => item.quantity).join(), "99", "the blocked add never mutates the cart");
@@ -262,12 +272,12 @@ test("details quantity controls operate from the keyboard where the harness supp
   assert.equal(host.querySelector("#product-quantity").value, "5");
 });
 
-test("authenticated Add to Bag saves once through the RPC, stays busy and cannot duplicate while saving", async () => {
+test("authenticated Add to Cart saves once through the RPC, stays busy and cannot duplicate while saving", async () => {
   const change = deferred();
   const calls = bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
   await mount(withProviders(userAuth, React.createElement(ProductDetails, { product })));
   assert.equal(calls.filter(call => call.name === "load_variant_cart").length, 1);
-  const add = buttonByLabel("Add Fixture mug to Bag");
+  const add = buttonByLabel("Add Fixture mug to Cart");
   assert.equal(add.disabled, false);
   await click(add);
   const changeCalls = calls.filter(call => call.name === "change_variant_cart");
@@ -285,34 +295,32 @@ test("authenticated Add to Bag saves once through the RPC, stays busy and cannot
   await click(add);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
   await settle(change, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
-  assert.equal(buttonByLabel("Add Fixture mug to Bag").disabled, false);
-  assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Add to Bag/);
+  assert.equal(buttonByLabel("Add Fixture mug to Cart").disabled, false);
+  assert.match(buttonByLabel("Add Fixture mug to Cart").textContent, /Add to Cart/);
   assert.equal(host.querySelector("#product-quantity").disabled, false, "quantity input re-enables after the save settles");
   assert.equal(buttonByLabel("Increase Fixture mug quantity").disabled, false, "stepper re-enables after the save settles");
-  assert.match(host.textContent, /Added 1 × Fixture mug to your Bag/);
+  assert.match(host.textContent, /Added 1 × Fixture mug to your Cart/);
 });
 
-test("authenticated Add to Bag failure surfaces the global alert, keeps the Bag unchanged and recovers", async () => {
+test("authenticated Add to Cart failure shows one action toast, keeps the Cart unchanged and recovers", async () => {
   const change = deferred();
   const calls = bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
   await mount(layoutTree(userAuth));
-  const add = buttonByLabel("Add Fixture mug to Bag");
+  const add = buttonByLabel("Add Fixture mug to Cart");
   await click(add);
   await settle(change, { data: null, error: { code: "23505", message: "fixture failure" } });
-  const alert = host.querySelector('[role="alert"]');
-  assert.ok(alert);
-  assert.match(alert.textContent, /Your Bag change could not be confirmed/);
-  assert.match(alert.textContent, /Retry saved Bag/);
+  assert.equal(host.querySelector('[role="alert"]'), null, "the action failure is not also published by the Cart header");
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Bag/);
+  assert.match(toast.textContent, /couldn't add Fixture mug to your Cart/);
   assert.doesNotMatch(toast.textContent, /was not added/);
-  assert.doesNotMatch(host.textContent, /Added 1 × Fixture mug to your Bag/);
-  assert.equal(buttonByLabel("Add Fixture mug to Bag").disabled, false);
-  assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Add to Bag/);
-  await click(button("Retry saved Bag"));
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
-  assert.equal(calls.filter(call => call.name === "load_variant_cart").length, 2);
+  assert.doesNotMatch(host.textContent, /Added 1 × Fixture mug to your Cart/);
+  assert.equal(buttonByLabel("Add Fixture mug to Cart").disabled, false);
+  assert.match(buttonByLabel("Add Fixture mug to Cart").textContent, /Add to Cart/);
+  await click(buttonByLabel("Add Fixture mug to Cart"));
+  await flush();
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 2, "the same action can be retried locally");
+  assert.equal(host.querySelectorAll(".bag-notice").length, 1);
   assert.equal(host.querySelector('[role="alert"]'), null);
 });
 
@@ -335,17 +343,17 @@ test("rapid authenticated double dispatch issues a single serialized mutation", 
   assert.equal(host.querySelector("#probe-count").textContent, "1");
 });
 
-test("header Bag count reflects guest intent units after additions", async () => {
+test("header Cart count reflects guest intent units after additions", async () => {
   bagClient(() => emptyCart());
   await mount(layoutTree(guestAuth));
-  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(0\)/);
-  await click(buttonByLabel("Add Fixture mug to Bag"));
-  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(1\)/);
-  await click(buttonByLabel("Add Fixture mug to Bag"));
-  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(2\)/);
+  assert.match(host.querySelector('a[aria-label^="Cart ("]').getAttribute("aria-label"), /Cart \(0\)/);
+  await click(buttonByLabel("Add Fixture mug to Cart"));
+  assert.match(host.querySelector('a[aria-label^="Cart ("]').getAttribute("aria-label"), /Cart \(1\)/);
+  await click(buttonByLabel("Add Fixture mug to Cart"));
+  assert.match(host.querySelector('a[aria-label^="Cart ("]').getAttribute("aria-label"), /Cart \(2\)/);
 });
 
-test("guest Bag page updates quantities and removals in local storage with derived totals", async () => {
+test("guest Cart page updates quantities and removals in local storage with derived totals", async () => {
   bagClient(() => emptyCart());
   sessionStorage.setItem("lume-guest-cart", JSON.stringify({
     version: 2,
@@ -356,13 +364,13 @@ test("guest Bag page updates quantities and removals in local storage with deriv
   await click(buttonByLabel("Increase Fixture mug quantity"));
   assert.deepEqual(readStored().items.map(item => item.quantity), [3]);
   assert.match(host.textContent, /NLE 54/);
-  assert.match(host.textContent, /Bag subtotal NLE 54\./);
+  assert.match(host.textContent, /Cart subtotal NLE 54\./);
   await click(buttonByLabel("Remove Fixture mug"));
   assert.deepEqual(readStored().items, []);
-  assert.match(host.textContent, /Your Bag is taking a slow day/);
+  assert.match(host.textContent, /Your Cart is taking a slow day/);
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast, "removal confirmation survives the empty-state transition");
-  assert.match(toast.textContent, /Removed Fixture mug from your Bag/);
+  assert.match(toast.textContent, /Removed Fixture mug from your Cart/);
 });
 
 function RecoveringCatalog({ children }) {
@@ -372,7 +380,7 @@ function RecoveringCatalog({ children }) {
   }, children);
 }
 
-test("loaded Bag omits the manual price-refresh control while retaining checkout guidance", async () => {
+test("loaded Cart omits the manual price-refresh control while retaining checkout guidance", async () => {
   bagClient(() => emptyCart());
   sessionStorage.setItem("lume-guest-cart", JSON.stringify({
     version: 2,
@@ -380,13 +388,13 @@ test("loaded Bag omits the manual price-refresh control while retaining checkout
   }));
   await mount(withProviders(guestAuth, React.createElement(CartPage)));
   assert.match(host.textContent, /NLE 36/);
-  assert.equal([...host.querySelectorAll("button")].filter(item => /refresh/i.test(item.textContent || "")).length, 0, "the loaded Bag must not offer a redundant price refresh");
+  assert.equal([...host.querySelectorAll("button")].filter(item => /refresh/i.test(item.textContent || "")).length, 0, "the loaded Cart must not offer a redundant price refresh");
   assert.doesNotMatch(host.textContent, /Refresh product prices/);
   assert.ok(host.querySelector('a[href="/checkout"]'), "checkout remains available");
   assert.match(host.textContent, /Order totals are confirmed securely at checkout\. Payment awaits confirmation\./);
 });
 
-test("Bag catalogue failure keeps an explicit retry that recovers current prices without a manual refresh control", async () => {
+test("Cart catalogue failure keeps an explicit retry that recovers current prices without a manual refresh control", async () => {
   bagClient(() => emptyCart());
   sessionStorage.setItem("lume-guest-cart", JSON.stringify({
     version: 2,
@@ -395,11 +403,12 @@ test("Bag catalogue failure keeps an explicit retry that recovers current prices
   await mount(React.createElement(MemoryRouter, { initialEntries: ["/"] },
     React.createElement(AuthContext.Provider, { value: guestAuth },
       React.createElement(RecoveringCatalog, null,
-        React.createElement(CartProvider, null, React.createElement(CartPage))))));
+        React.createElement(CartProvider, null,
+          React.createElement(NotificationProvider, null, React.createElement(CartPage)))))));
   assert.match(host.textContent, /The collection is unavailable\./);
   assert.match(host.textContent, /couldn.t load the products/);
   assert.doesNotMatch(host.textContent, /Refresh product prices/);
-  assert.doesNotMatch(host.textContent, /Your saved Bag is not ready yet/);
+  assert.doesNotMatch(host.textContent, /Your saved Cart is not ready yet/);
   const retry = [...host.querySelectorAll("button")].find(item => item.textContent === "Try again");
   assert.ok(retry, "a failed catalogue read exposes an explicit retry");
   await click(retry);
@@ -410,17 +419,18 @@ test("Bag catalogue failure keeps an explicit retry that recovers current prices
   assert.doesNotMatch(host.textContent, /Refresh product prices/);
 });
 
-test("signed-in Bag catalogue failure exposes a retry that restores the saved Bag", async () => {
+test("signed-in Cart catalogue failure exposes a retry that restores the saved Cart", async () => {
   const calls = bagClient(name => name === "load_variant_cart"
     ? Promise.resolve({ data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null })
     : Promise.resolve({ data: { id: "cart-1", items: [] }, error: null }));
   await mount(React.createElement(MemoryRouter, { initialEntries: ["/"] },
     React.createElement(AuthContext.Provider, { value: userAuth },
       React.createElement(RecoveringCatalog, null,
-        React.createElement(CartProvider, null, React.createElement(CartPage))))));
+        React.createElement(CartProvider, null,
+          React.createElement(NotificationProvider, null, React.createElement(CartPage)))))));
   assert.match(host.textContent, /The collection is unavailable\./);
   assert.match(host.textContent, /Try again/);
-  assert.doesNotMatch(host.textContent, /Your saved Bag is not ready yet\./);
+  assert.doesNotMatch(host.textContent, /Your saved Cart is not ready yet\./);
   const retry = [...host.querySelectorAll("button")].find(item => item.textContent === "Try again");
   assert.ok(retry, "a signed-in catalogue failure exposes catalogue recovery");
   await click(retry);
@@ -429,15 +439,15 @@ test("signed-in Bag catalogue failure exposes a retry that restores the saved Ba
   assert.match(host.textContent, /NLE 36/);
   assert.match(host.textContent, /Continue to checkout/);
   assert.doesNotMatch(host.textContent, /The collection is unavailable\./);
-  assert.ok(calls.some(call => call.name === "load_variant_cart"), "the saved Bag is restored after catalogue recovery");
+  assert.ok(calls.some(call => call.name === "load_variant_cart"), "the saved Cart is restored after catalogue recovery");
 });
 
-test("signed-in saved-Bag failure keeps its existing error without a catalogue retry", async () => {
+test("signed-in saved-Cart failure keeps its existing error without a catalogue retry", async () => {
   bagClient(name => name === "load_variant_cart"
     ? Promise.resolve({ data: null, error: { code: "P0001", message: "fixture restore failure" } })
     : Promise.resolve({ data: { id: "cart-1", items: [] }, error: null }));
   await mount(withProviders(userAuth, React.createElement(CartPage)));
-  assert.match(host.textContent, /Your saved Bag is not ready yet\./);
+  assert.match(host.textContent, /Your saved Cart is not ready yet\./);
   assert.equal([...host.querySelectorAll("button")].filter(item => item.textContent === "Try again").length, 0, "an unrelated restore failure must not expose catalogue recovery");
 });
 
@@ -502,18 +512,18 @@ test("cart controls disable while a removal is saving and recover when it settle
   });
   await mount(withProviders(userAuth, React.createElement(CartPage)));
   await click(buttonByLabel("Remove Fixture mug"));
-  assert.equal(buttonByLabel("Remove Fixture mug").disabled, true, "remove disables while saving");
+  assert.equal(buttonByLabel("Remove Fixture mug").getAttribute("aria-disabled"), "true", "remove blocks activation while retaining focus");
   assert.equal(buttonByLabel("Increase Fixture mug quantity").disabled, true, "stepper disables while saving");
   assert.equal(buttonByLabel("Decrease Fixture mug quantity").disabled, true, "stepper disables while saving");
   assert.equal(host.querySelector('input[type="number"]').disabled, true, "quantity input disables while saving");
   await settle(change, { data: { id: "cart-1", items: [] }, error: null });
-  assert.match(host.textContent, /Your Bag is taking a slow day/);
+  assert.match(host.textContent, /Your Cart is taking a slow day/);
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /Removed Fixture mug from your Bag/);
+  assert.match(toast.textContent, /Removed Fixture mug from your Cart/);
 });
 
-test("authenticated Bag page removal failure shows no success claim and keeps the line", async () => {
+test("authenticated Cart page removal failure shows no success claim and keeps the line", async () => {
   const change = deferred();
   const calls = bagClient(name => {
     if (name === "load_variant_cart")
@@ -525,15 +535,59 @@ test("authenticated Bag page removal failure shows no success claim and keeps th
   await settle(change, { data: null, error: { code: "P0001", message: "fixture removal failure" } });
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /couldn't confirm removing Fixture mug from your Bag/);
+  assert.match(toast.textContent, /couldn't confirm removing Fixture mug from your Cart/);
   assert.doesNotMatch(toast.textContent, /was not removed/);
-  assert.doesNotMatch(host.textContent, /Removed Fixture mug from your Bag/);
+  assert.doesNotMatch(host.textContent, /Removed Fixture mug from your Cart/);
   assert.match(host.textContent, /NLE 36/);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
   assert.equal(buttonByLabel("Remove Fixture mug").disabled, false);
+  assert.equal(host.querySelector('[role="alert"]'), null, "the action failure is not duplicated by a global Cart alert");
 });
 
-test("authenticated Bag page quantity and removal use set and remove RPC modes", async () => {
+test("quantity update failure keeps the global Cart error and retry without an action toast", async () => {
+  const change = deferred();
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart")
+      return Promise.resolve({ data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 2 }] }, error: null });
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth, "/cart"));
+  await typeQuantity(host.querySelector('input[type="number"]'), "3");
+  assert.equal(calls.find(call => call.name === "change_variant_cart").args.p_mode, "set");
+  await settle(change, { data: null, error: { code: "P0001", message: "fixture quantity failure" } });
+  assert.equal(host.querySelector(".bag-notice"), null, "quantity changes keep their existing global feedback");
+  assert.equal(host.querySelector(".cart-recovery"), null, "a quantity failure keeps its existing global recovery");
+  const alert = host.querySelector('[role="alert"]');
+  assert.ok(alert);
+  assert.match(alert.textContent, /Your Cart change could not be confirmed/);
+  assert.match(alert.textContent, /Retry saved Cart/);
+  await click(button("Retry saved Cart"));
+  await flush();
+  assert.equal(calls.filter(call => call.name === "load_variant_cart").length, 2);
+});
+
+test("unavailable-item removal failure keeps truthful accessible feedback", async () => {
+  const change = deferred();
+  const calls = bagClient(name => {
+    if (name === "load_variant_cart")
+      return Promise.resolve({ data: { id: "cart-1", items: [{ product_id: "fixture-missing", variant_id: "v-missing", quantity: 2 }] }, error: null });
+    return change.promise;
+  });
+  await mount(layoutTree(userAuth, "/cart"));
+  assert.match(host.textContent, /Some items are no longer available/);
+  await click(buttonByLabel("Remove unavailable item 1"));
+  await settle(change, { data: null, error: { code: "P0001", message: "fixture unavailable removal failure" } });
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /couldn't confirm removing unavailable item 1 from your Cart/);
+  assert.match(toast.textContent, /Refresh your saved Cart to see the current items/);
+  assert.doesNotMatch(host.textContent, /Removed unavailable item/);
+  assert.match(host.textContent, /Some items are no longer available/, "the unavailable-item state remains visible");
+  assert.equal(host.querySelector('[role="alert"]'), null);
+  assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
+});
+
+test("authenticated Cart page quantity and removal use set and remove RPC modes", async () => {
   const changes = [];
   const calls = bagClient(name => {
     if (name === "load_variant_cart")
@@ -560,10 +614,10 @@ test("authenticated Bag page quantity and removal use set and remove RPC modes",
   assert.equal(removeCall.args.p_quantity, null);
   assert.equal(removeCall.args.p_expected_quantity, 3);
   await settle(changes[1], { data: { id: "cart-1", items: [] }, error: null });
-  assert.match(host.textContent, /Your Bag is taking a slow day/);
+  assert.match(host.textContent, /Your Cart is taking a slow day/);
 });
 
-test("guest items merge into the authenticated Bag on sign-in with stable receipts", async () => {
+test("guest items merge into the authenticated Cart on sign-in with stable receipts", async () => {
   sessionStorage.setItem("lume-guest-cart", JSON.stringify({
     version: 2,
     items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 2, mergeId: "11111111-1111-4111-8111-111111111111" }],
@@ -584,33 +638,36 @@ test("guest items merge into the authenticated Bag on sign-in with stable receip
 test("shop toast keeps only the newest confirmation", async () => {
   bagClient(() => emptyCart());
   await mount(layoutTree(guestAuth));
-  await click(buttonByLabel("Add Fixture mug to Bag"));
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   const toasts = host.querySelectorAll(".bag-notice");
   assert.equal(toasts.length, 1);
-  assert.match(toasts[0].textContent, /Added 1 × Fixture mug to your Bag/);
+  assert.match(toasts[0].textContent, /Added 1 × Fixture mug to your Cart/);
 });
 
-test("Product Details actions group keeps the Bag link beside a reserved notice slot", async () => {
+test("Product Details actions group keeps the Cart link and uses the shared notice", async () => {
   bagClient(() => emptyCart());
   await mount(withProviders(guestAuth, React.createElement(ProductDetails, { product })));
   const group = host.querySelector(".product-details-actions");
   assert.ok(group);
   const link = group.querySelector('a[href="/cart"]');
   assert.ok(link);
-  assert.match(link.textContent, /View your Bag/);
-  assert.equal(group.querySelector(".feedback").textContent, "");
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  assert.match(link.textContent, /View your Cart/);
+  assert.equal(group.querySelector(".feedback"), null, "the migrated inline feedback slot is gone");
+  assert.equal(group.querySelector('[role="status"]'), null, "Product Details does not keep a duplicate live region");
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   const sameLink = group.querySelector('a[href="/cart"]');
   assert.equal(sameLink, link, "notice appearance must not replace or move the link within the group");
-  assert.match(group.querySelector(".feedback").textContent, /Added 1 × Fixture mug to your Bag/);
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /Added 1 × Fixture mug to your Cart/);
 });
 
 test("an obsolete add failure after switching accounts shows no feedback under the new identity", async () => {
   const change = deferred();
   const calls = bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
   await mount(layoutTree(userAuth));
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
   await rerender(layoutTree(userAuthB));
   await settleError(change, new TypeError("Failed to fetch"));
@@ -644,12 +701,12 @@ test("an obsolete add resolving after sign-out shows no success under the guest 
   const change = deferred();
   bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
   await mount(layoutTree(userAuth));
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   await rerender(layoutTree(guestAuth));
   await settle(change, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
   await flush();
   assert.equal(host.querySelector(".bag-notice"), null, "no success claimed for A's obsolete operation as a guest");
-  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(0\)/, "A's cart never appears under the guest identity");
+  assert.match(host.querySelector('a[aria-label^="Cart ("]').getAttribute("aria-label"), /Cart \(0\)/, "A's cart never appears under the guest identity");
 });
 
 test("an obsolete removal completion cannot replace B's newer confirmation", async () => {
@@ -670,15 +727,15 @@ test("an obsolete removal completion cannot replace B's newer confirmation", asy
   await settle(changes[1], { data: { id: "cart-1", items: [] }, error: null });
   let toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /Removed Fixture mug from your Bag/);
+  assert.match(toast.textContent, /Removed Fixture mug from your Cart/);
   await settleError(changes[0], new TypeError("Failed to fetch"));
   toast = host.querySelector(".bag-notice");
   assert.ok(toast, "B's confirmation stays mounted when A's request settles");
-  assert.match(toast.textContent, /Removed Fixture mug from your Bag/, "B's newer confirmation remains visible");
+  assert.match(toast.textContent, /Removed Fixture mug from your Cart/, "B's newer confirmation remains visible");
   assert.doesNotMatch(host.textContent, /couldn't confirm removing/);
   assert.equal(host.querySelector('[role="alert"]'), null, "the obsolete failure raises no global alert");
-  assert.match(host.textContent, /Your Bag is taking a slow day/);
-  assert.doesNotMatch(host.textContent, /Saving your Bag/, "pending status stays cleared after the active operation finished");
+  assert.match(host.textContent, /Your Cart is taking a slow day/);
+  assert.doesNotMatch(host.textContent, /Saving your Cart/, "pending status stays cleared after the active operation finished");
 });
 
 test("an obsolete completion cannot clear the newer operation's pending state or replace its confirmation", async () => {
@@ -691,35 +748,35 @@ test("an obsolete completion cannot clear the newer operation's pending state or
     return next.promise;
   });
   await mount(withProviders(userAuth, React.createElement(ShopPage), twoCatalog));
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   assert.equal(changes.length, 1, "A's add is deferred in flight");
   await rerender(withProviders(userAuthB, React.createElement(ShopPage), twoCatalog));
-  assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Adding…/, "the in-flight pending state survives the identity restore");
-  assert.equal(buttonByLabel("Add Fixture mug to Bag").disabled, true);
-  const vaseAdd = buttonByLabel("Add Fixture vase to Bag");
+  assert.match(buttonByLabel("Add Fixture mug to Cart").textContent, /Adding…/, "the in-flight pending state survives the identity restore");
+  assert.equal(buttonByLabel("Add Fixture mug to Cart").disabled, true);
+  const vaseAdd = buttonByLabel("Add Fixture vase to Cart");
   assert.equal(vaseAdd.disabled, false, "the active account can start a newer operation");
   await click(vaseAdd);
   assert.equal(changes.length, 2);
-  assert.match(buttonByLabel("Add Fixture vase to Bag").textContent, /Adding…/, "pending state belongs to the active operation");
+  assert.match(buttonByLabel("Add Fixture vase to Cart").textContent, /Adding…/, "pending state belongs to the active operation");
   await settle(changes[1], { data: { id: "cart-1", items: [{ product_id: "fixture-vase", variant_id: "v-vase", quantity: 1 }] }, error: null });
   let toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /Added 1 × Fixture vase to your Bag/);
-  assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Add to Bag/, "pending clears when the active operation finishes");
-  assert.equal(buttonByLabel("Add Fixture mug to Bag").disabled, false);
+  assert.match(toast.textContent, /Added 1 × Fixture vase to your Cart/);
+  assert.match(buttonByLabel("Add Fixture mug to Cart").textContent, /Add to Cart/, "pending clears when the active operation finishes");
+  assert.equal(buttonByLabel("Add Fixture mug to Cart").disabled, false);
   await settleError(changes[0], new TypeError("Failed to fetch"));
   toast = host.querySelector(".bag-notice");
   assert.ok(toast, "A's obsolete rejection does not clear the notice");
-  assert.match(toast.textContent, /Added 1 × Fixture vase to your Bag/, "B's newer confirmation remains visible");
+  assert.match(toast.textContent, /Added 1 × Fixture vase to your Cart/, "B's newer confirmation remains visible");
   assert.doesNotMatch(host.textContent, /couldn't confirm adding/);
-  assert.match(buttonByLabel("Add Fixture mug to Bag").textContent, /Add to Bag/);
+  assert.match(buttonByLabel("Add Fixture mug to Cart").textContent, /Add to Cart/);
 });
 
 test("unmounting before a deferred add settles leaves no stale feedback behind", async () => {
   const change = deferred();
   bagClient(name => (name === "load_variant_cart" ? emptyCart() : change.promise));
   await mount(withProviders(userAuth, React.createElement(ShopPage)));
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   await act(async () => { root.unmount(); });
   root = null;
   await assert.doesNotReject(async () => {
@@ -803,7 +860,7 @@ test("a real guest-to-account transition merges the guest item with its stored r
     return next.promise;
   });
   await mount(layoutTree(guestAuth));
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   const receipt = readStored().items[0].mergeId;
   assert.match(receipt, /^[0-9a-f-]{36}$/);
   await rerender(layoutTree(userAuth));
@@ -814,7 +871,7 @@ test("a real guest-to-account transition merges the guest item with its stored r
   assert.equal(mergeCalls[0].args.p_operation_id, receipt, "stable sign-in merge receipt");
   await settle(merges[0], { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
   await flush();
-  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(1\)/);
+  assert.match(host.querySelector('a[aria-label^="Cart ("]').getAttribute("aria-label"), /Cart \(1\)/);
   assert.equal(readStored().items.length, 0, "guest intent is consumed by the successful merge");
 });
 
@@ -827,7 +884,7 @@ test("a simulated merge failure keeps the guest receipt, surfaces the global ret
     return next.promise;
   });
   await mount(layoutTree(guestAuth));
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   const receipt = readStored().items[0].mergeId;
   await rerender(layoutTree(userAuth));
   assert.equal(merges.length, 1);
@@ -836,9 +893,9 @@ test("a simulated merge failure keeps the guest receipt, surfaces the global ret
   const alert = host.querySelector('[role="alert"]');
   assert.ok(alert);
   assert.match(alert.textContent, /could not be restored or merged/);
-  assert.match(alert.textContent, /Retry saved Bag/);
+  assert.match(alert.textContent, /Retry saved Cart/);
   assert.equal(readStored().items.length, 1, "guest intent is retained after the merge failure");
-  await click(button("Retry saved Bag"));
+  await click(button("Retry saved Cart"));
   await flush();
   const mergeCalls = calls.filter(call => call.name === "change_variant_cart");
   assert.equal(mergeCalls.length, 2, "the retry re-runs the restore merge");
@@ -846,7 +903,7 @@ test("a simulated merge failure keeps the guest receipt, surfaces the global ret
   await settle(merges[1], { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }] }, error: null });
   await flush();
   assert.equal(host.querySelector('[role="alert"]'), null, "recovery clears the global alert");
-  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(1\)/, "exactly one merged line, no duplicates");
+  assert.match(host.querySelector('a[aria-label^="Cart ("]').getAttribute("aria-label"), /Cart \(1\)/, "exactly one merged line, no duplicates");
   assert.equal(readStored().items.length, 0);
 });
 
@@ -864,19 +921,18 @@ test("uncertain add after a lost RPC response makes no definite claim and reload
     return change.promise;
   });
   await mount(layoutTree(userAuth));
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   await settleError(change, new TypeError("Failed to fetch"));
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Bag/);
-  assert.match(toast.textContent, /Check your Bag before trying again/);
-  assert.doesNotMatch(host.textContent, /was not added|Added 1 × Fixture mug to your Bag/);
-  assert.ok(host.querySelector('[role="alert"]'), "global retry path stays available");
+  assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Cart/);
+  assert.match(toast.textContent, /Refresh your saved Cart to see the current items before trying again/);
+  assert.doesNotMatch(host.textContent, /was not added|Added 1 × Fixture mug to your Cart/);
+  assert.equal(host.querySelector('[role="alert"]'), null, "the action failure does not also claim the global Cart alert");
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "uncertain mutations are never repeated automatically");
-  await click(button("Retry saved Bag"));
-  await flush();
+  await remount(layoutTree(userAuth));
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "reload does not replay the uncertain mutation");
-  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(1\)/, "reload reconciles the actually-applied line");
+  assert.match(host.querySelector('a[aria-label^="Cart ("]').getAttribute("aria-label"), /Cart \(1\)/, "reload reconciles the actually-applied line");
 });
 
 test("uncertain add with a malformed saved-cart response after commit makes no definite claim and reload reconciles", async () => {
@@ -892,17 +948,16 @@ test("uncertain add with a malformed saved-cart response after commit makes no d
     return change.promise;
   });
   await mount(layoutTree(userAuth));
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   await settle(change, { data: { unexpected: "shape" }, error: null });
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Bag/);
-  assert.doesNotMatch(host.textContent, /was not added|Added 1 × Fixture mug to your Bag/);
-  assert.ok(host.querySelector('[role="alert"]'));
+  assert.match(toast.textContent, /couldn't confirm adding Fixture mug to your Cart/);
+  assert.doesNotMatch(host.textContent, /was not added|Added 1 × Fixture mug to your Cart/);
+  assert.equal(host.querySelector('[role="alert"]'), null);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
-  await click(button("Retry saved Bag"));
-  await flush();
-  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(1\)/, "reload reconciles the actually-applied line");
+  await remount(layoutTree(userAuth));
+  assert.match(host.querySelector('a[aria-label^="Cart ("]').getAttribute("aria-label"), /Cart \(1\)/, "reload reconciles the actually-applied line");
 });
 
 test("uncertain removal after a lost RPC response makes no definite claim and reload reconciles the removed line", async () => {
@@ -922,16 +977,15 @@ test("uncertain removal after a lost RPC response makes no definite claim and re
   await settleError(change, new TypeError("Failed to fetch"));
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /couldn't confirm removing Fixture mug from your Bag/);
-  assert.match(toast.textContent, /Check your Bag before trying again/);
-  assert.doesNotMatch(host.textContent, /was not removed|Removed Fixture mug from your Bag/);
-  assert.ok(host.querySelector('[role="alert"]'));
+  assert.match(toast.textContent, /couldn't confirm removing Fixture mug from your Cart/);
+  assert.match(toast.textContent, /Refresh your saved Cart to see the current items before trying again/);
+  assert.doesNotMatch(host.textContent, /was not removed|Removed Fixture mug from your Cart/);
+  assert.equal(host.querySelector('[role="alert"]'), null);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1, "uncertain removals are never repeated automatically");
-  await click(button("Retry saved Bag"));
-  await flush();
+  await remount(layoutTree(userAuth, "/cart"));
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
-  assert.match(host.textContent, /Your Bag is taking a slow day/, "reload reconciles the actually-removed line");
-  assert.match(host.querySelector('a[aria-label^="Bag ("]').getAttribute("aria-label"), /Bag \(0\)/);
+  assert.match(host.textContent, /Your Cart is taking a slow day/, "reload reconciles the actually-removed line");
+  assert.match(host.querySelector('a[aria-label^="Cart ("]').getAttribute("aria-label"), /Cart \(0\)/);
 });
 
 test("uncertain removal with a malformed saved-cart response makes no definite claim", async () => {
@@ -946,8 +1000,8 @@ test("uncertain removal with a malformed saved-cart response makes no definite c
   await settle(change, { data: null, error: null });
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast);
-  assert.match(toast.textContent, /couldn't confirm removing Fixture mug from your Bag/);
-  assert.doesNotMatch(host.textContent, /was not removed|Removed Fixture mug from your Bag/);
+  assert.match(toast.textContent, /couldn't confirm removing Fixture mug from your Cart/);
+  assert.doesNotMatch(host.textContent, /was not removed|Removed Fixture mug from your Cart/);
   assert.equal(calls.filter(call => call.name === "change_variant_cart").length, 1);
 });
 
@@ -956,7 +1010,7 @@ test("bag notice auto-expires after five seconds", async t => {
   function ExpireHost() {
     const [message, setMessage] = React.useState(null);
     return React.createElement("div", null,
-      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 1, tone: "success", text: "Added 1 × Fixture mug to your Bag" }) }, "show"),
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 1, tone: "success", text: "Added 1 × Fixture mug to your Cart" }) }, "show"),
       React.createElement(BagNotice, { message, onExpire: () => setMessage(null) }));
   }
   await mount(React.createElement(ExpireHost));
@@ -1046,7 +1100,7 @@ test("unmounting the notice clears its expiry timer", async t => {
 
 test("repeated identical notices render a fresh node for the live region", async () => {
   const { BagNotice } = await server.ssrLoadModule("/src/components/BagNotice.tsx");
-  const text = "Added 1 × Fixture mug to your Bag";
+  const text = "Added 1 × Fixture mug to your Cart";
   function RepeatHost() {
     const [message, setMessage] = React.useState(null);
     return React.createElement("div", null,
@@ -1315,7 +1369,7 @@ test("the notice presents a status icon, a labelled dismiss control and a countd
   function ToneHost() {
     const [message, setMessage] = React.useState(null);
     return React.createElement("div", null,
-      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 1, tone: "success", text: "Added 1 × Fixture mug to your Bag" }) }, "ok"),
+      React.createElement("button", { type: "button", onClick: () => setMessage({ id: 1, tone: "success", text: "Added 1 × Fixture mug to your Cart" }) }, "ok"),
       React.createElement("button", { type: "button", onClick: () => setMessage({ id: 2, tone: "failure", text: "Could not remove that item" }) }, "fail"),
       React.createElement(BagNotice, { message, onExpire: () => setMessage(null) }));
   }
@@ -1323,7 +1377,7 @@ test("the notice presents a status icon, a labelled dismiss control and a countd
   await click(button("ok"));
   const success = host.querySelector(".bag-notice.success");
   assert.ok(success);
-  assert.equal(success.textContent, "Added 1 × Fixture mug to your Bag", "decorative icon and controls add no text");
+  assert.equal(success.textContent, "Added 1 × Fixture mug to your Cart", "decorative icon and controls add no text");
   assert.equal(success.querySelectorAll(".bag-notice-icon svg").length, 1);
   assert.equal(success.querySelector(".bag-notice-icon").getAttribute("aria-hidden"), null);
   const dismiss = success.querySelector(".bag-notice-dismiss");
@@ -1387,7 +1441,7 @@ test("dismissing with focus on the control returns keyboard focus to the page, n
 test("focus-aware placement stays a single fixed live region with reduced-motion-safe styling", async () => {
   const { readFileSync } = await import("node:fs");
   const css = readFileSync("src/styles.css", "utf8");
-  assert.match(css, /\.bag-notice-region\s*\{[^}]*position:\s*fixed;[^}]*left:\s*50%;[^}]*transform:\s*translateX\(-50%\);[^}]*width:\s*min\(360px,\s*calc\(100vw - 32px\)\);[^}]*top:\s*var\(--bag-notice-top,\s*20px\);[^}]*pointer-events:\s*none;/);
+  assert.match(css, /\.bag-notice-region\s*\{[^}]*position:\s*fixed;[^}]*left:\s*50%;[^}]*transform:\s*translateX\(-50%\);[^}]*width:\s*min\(360px,\s*calc\(100vw - 32px\)\);[^}]*top:\s*max\(calc\(20px \+ env\(safe-area-inset-top,[^}]*pointer-events:\s*none;/);
   assert.match(css, /\.bag-notice-region\.is-bottom\s*\{[^}]*top:\s*auto;[^}]*bottom:\s*calc\(20px \+ env\(safe-area-inset-bottom/);
   assert.match(css, /prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]{0,600}?animation:\s*none\s*!important/);
   assert.match(css, /prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]{0,600}?\.bag-notice-progress\s*\{\s*display:\s*none;/);
@@ -1402,7 +1456,7 @@ test("the notice uses a light Lumé House surface with a slim, tone-coloured cou
   assert.doesNotMatch(css, /\.bag-notice(?!-)[^{]*\{[^}]*background:\s*#2f3a2d/, "the old dark green fill is gone");
   assert.doesNotMatch(css, /\.bag-notice\.failure\s*\{[^}]*background:\s*#8a4628/, "the old solid rust fill is gone");
   assert.match(css, /\.bag-notice-progress\s*\{[^}]*height:\s*2px;/);
-  assert.match(css, /\.bag-notice-progress-bar\s*\{[^}]*animation:\s*bag-notice-countdown 5000ms linear forwards;/);
+  assert.match(css, /\.bag-notice-progress-bar\s*\{[^}]*animation:\s*bag-notice-countdown var\(--bag-notice-duration,\s*5000ms\) linear forwards;/);
   assert.match(css, /@keyframes bag-notice-countdown\s*\{\s*from\s*\{\s*transform:\s*scaleX\(1\);\s*\}\s*to\s*\{\s*transform:\s*scaleX\(0\);\s*\}\s*\}/);
   assert.match(component, /BAG_NOTICE_MS = 5000;/, "the runtime timeout and the CSS countdown stay in step");
   assert.match(css, /\.bag-notice-dismiss::after\s*\{[^}]*inset:\s*-6px;/, "the dismissal keeps a 44px touch target");
@@ -1411,23 +1465,25 @@ test("the notice uses a light Lumé House surface with a slim, tone-coloured cou
 test("StrictMode double-mount keeps the details outcome guard live", async () => {
   bagClient(() => emptyCart());
   await mount(strictProviders(guestAuth, React.createElement(ProductDetails, { product })));
-  await click(buttonByLabel("Add Fixture mug to Bag"));
-  const add = buttonByLabel("Add Fixture mug to Bag");
-  assert.match(add.textContent, /^Add to Bag$/, "pending state clears when the confirmed outcome returns");
-  assert.match(host.querySelector(".feedback").textContent, /Added 1 × Fixture mug to your Bag/,
+  await click(buttonByLabel("Add Fixture mug to Cart"));
+  const add = buttonByLabel("Add Fixture mug to Cart");
+  assert.match(add.textContent, /^Add to Cart$/, "pending state clears when the confirmed outcome returns");
+  const toast = host.querySelector(".bag-notice");
+  assert.ok(toast);
+  assert.match(toast.textContent, /Added 1 × Fixture mug to your Cart/,
     "confirmation renders after StrictMode replays the mount effect");
 });
 
 test("StrictMode double-mount keeps the shop confirmation toast rendering", async () => {
   bagClient(() => emptyCart());
   await mount(strictLayoutTree(guestAuth));
-  await click(buttonByLabel("Add Fixture mug to Bag"));
+  await click(buttonByLabel("Add Fixture mug to Cart"));
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast, "shop toast renders after StrictMode replays the mount effect");
-  assert.match(toast.textContent, /Added 1 × Fixture mug to your Bag/);
+  assert.match(toast.textContent, /Added 1 × Fixture mug to your Cart/);
 });
 
-test("StrictMode double-mount keeps Bag page removal confirmations rendering", async () => {
+test("StrictMode double-mount keeps Cart page removal confirmations rendering", async () => {
   bagClient(() => emptyCart());
   sessionStorage.setItem("lume-guest-cart", JSON.stringify({
     version: 2,
@@ -1437,21 +1493,119 @@ test("StrictMode double-mount keeps Bag page removal confirmations rendering", a
   await click(buttonByLabel("Remove Fixture mug"));
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast, "removal toast renders after StrictMode replays the mount effect");
-  assert.match(toast.textContent, /Removed Fixture mug from your Bag/);
+  assert.match(toast.textContent, /Removed Fixture mug from your Cart/);
 });
 
-// Integration regression (B1 Bag surfaces x B2 approved D1): the Bag must render the
+// Integration regression (B1 Cart surfaces x B2 approved D1): the Cart must render the
 // shared uppercase NLE label derived from configuration, never the legacy mixed-case
 // "NLe" literal that predated the currency decision.
-test("Bag surfaces render the shared uppercase NLE label with no legacy NLe casing", async () => {
+test("Cart surfaces render the shared uppercase NLE label with no legacy NLe casing", async () => {
   bagClient(() => emptyCart());
   sessionStorage.setItem("lume-guest-cart", JSON.stringify({
     version: 2,
     items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 2, mergeId: "11111111-1111-4111-8111-111111111111" }],
   }));
   await mount(withProviders(guestAuth, React.createElement(CartPage)));
-  assert.match(host.textContent, /NLE 36/, "Bag renders the uppercase NLE label");
+  assert.match(host.textContent, /NLE 36/, "Cart renders the uppercase NLE label");
   assert.match(host.textContent, /NLE 18 each/, "per-unit price uses the uppercase NLE label");
-  assert.match(host.textContent, /Bag subtotal NLE 36\./, "Bag subtotal live region uses uppercase NLE");
-  assert.doesNotMatch(host.textContent, /NLe/, "legacy mixed-case NLe label must not resurface on Bag surfaces");
+  assert.match(host.textContent, /Cart subtotal NLE 36\./, "Cart subtotal live region uses uppercase NLE");
+  assert.doesNotMatch(host.textContent, /NLe/, "legacy mixed-case NLe label must not resurface on Cart surfaces");
+});
+
+// --- Batch 1G: Cart removal focus ------------------------------------------------
+
+// Removing a line takes its Remove control with it, so the focus has to be
+// handed somewhere predictable instead of falling back to the document.
+const focusProduct = {
+  id: "fixture-bowl", name: "Fixture bowl", description: "Fixture description", category: "Fixture category",
+  price: 1200, image: "/images/mug.svg", color: "#e9e3d8",
+  variants: [{ id: "v-bowl", productId: "fixture-bowl", options: {}, isDefault: true, price: 1200, currency: "NLE", inventoryPolicy: "untracked" }],
+};
+const threeCatalog = { state: { status: "ready", products: [product, productTwo, focusProduct] }, refresh() {} };
+const threeItems = [
+  { product_id: "fixture-mug", variant_id: "v-default", quantity: 1 },
+  { product_id: "fixture-vase", variant_id: "v-vase", quantity: 1 },
+  { product_id: "fixture-bowl", variant_id: "v-bowl", quantity: 1 },
+];
+function focusCartClient(remaining, items = threeItems) {
+  return bagClient(name => {
+    if (name === "load_variant_cart")
+      return Promise.resolve({ data: { id: "cart-1", items }, error: null });
+    return Promise.resolve({ data: { id: "cart-1", items: remaining }, error: null });
+  });
+}
+const focusedLabel = () => {
+  const active = document.activeElement;
+  if (!active) return "";
+  return active.getAttribute("aria-label") || active.getAttribute("data-cart-empty-title") || active.tagName;
+};
+
+test("removing a middle Cart line with the keyboard moves the focus to the next line", async () => {
+  focusCartClient(threeItems.filter(item => item.variant_id !== "v-vase"));
+  await mount(withProviders(userAuth, React.createElement(CartPage), threeCatalog));
+  const remove = buttonByLabel("Remove Fixture vase");
+  await act(async () => { remove.focus(); });
+  assert.equal(document.activeElement === remove, true, "the Remove control holds the focus before the removal");
+  await click(remove);
+  await flush();
+  assert.equal(host.querySelectorAll(".bag-notice").length, 1, "the removal is still announced");
+  assert.equal(focusedLabel(), "Remove Fixture bowl", "the focus moves to the next Cart line");
+});
+
+test("removing the last Cart line with the keyboard moves the focus to the previous line", async () => {
+  focusCartClient(threeItems.filter(item => item.variant_id !== "v-bowl"));
+  await mount(withProviders(userAuth, React.createElement(CartPage), threeCatalog));
+  const remove = buttonByLabel("Remove Fixture bowl");
+  await act(async () => { remove.focus(); });
+  await click(remove);
+  await flush();
+  assert.equal(host.querySelectorAll(".bag-notice").length, 1, "the removal is still announced");
+  assert.equal(focusedLabel(), "Remove Fixture vase", "the focus moves to the previous Cart line");
+});
+
+test("removing the only Cart line with the keyboard moves the focus to the empty Cart heading", async () => {
+  focusCartClient([], [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }]);
+  await mount(withProviders(userAuth, React.createElement(CartPage), threeCatalog));
+  const remove = buttonByLabel("Remove Fixture mug");
+  await act(async () => { remove.focus(); });
+  await click(remove);
+  await flush();
+  assert.equal(host.querySelectorAll(".bag-notice").length, 1, "the removal is still announced");
+  assert.match(host.textContent, /Your Cart is taking a slow day/);
+  assert.equal(document.activeElement === host.querySelector("[data-cart-empty-title]"), true, "the focus moves to the empty Cart heading");
+});
+
+// Prevention guard, not a historical defect detector.
+test("a Cart removal that did not hold the focus leaves the focus where it was", async () => {
+  focusCartClient(threeItems.filter(item => item.variant_id !== "v-vase"));
+  await mount(withProviders(userAuth, React.createElement(CartPage), threeCatalog));
+  const elsewhere = host.querySelector('a.back-link');
+  await act(async () => { elsewhere.focus(); });
+  await click(buttonByLabel("Remove Fixture vase"));
+  await flush();
+  assert.equal(document.activeElement === elsewhere, true, "the focus is not stolen by a removal the customer did not focus");
+});
+for(const result of ['success','rejection','moved','moved-away','unmounted']) test('deferred keyboard Cart removal: '+result,async()=>{
+  const change=deferred();
+  const calls=bagClient(name=>name==='load_variant_cart'?Promise.resolve({data:{id:'cart-1',items:threeItems},error:null}):change.promise);
+  await mount(withProviders(userAuth,React.createElement(CartPage),threeCatalog));
+  const remove=buttonByLabel('Remove Fixture vase');
+  await act(async()=>remove.focus());
+  await click(remove);
+  assert.equal(document.activeElement,remove,'pending removal retains keyboard focus');
+  assert.equal(remove.disabled,false);
+  assert.equal(remove.getAttribute('aria-disabled'),'true');
+  await click(remove);
+  assert.equal(calls.filter(call=>call.name==='change_variant_cart').length,1,'repeat activation blocked');
+  const elsewhere=host.querySelector('a.back-link');
+  if(result==='moved' || result==='moved-away') await act(async()=>elsewhere.focus());
+  if(result==='moved-away') elsewhere.blur();
+  if(result==='unmounted') await act(async()=>root.render(React.createElement('button',{id:'other'},'Other route')));
+  await settle(change,result==='rejection'?{data:null,error:{code:'42501',message:'fixture rejection'}}:{data:{id:'cart-1',items:threeItems.filter(item=>item.variant_id!=='v-vase')},error:null});
+  await flush();
+  if(result==='success') assert.equal(focusedLabel(),'Remove Fixture bowl');
+  if(result==='rejection'){assert.equal(document.activeElement,remove);assert.equal(remove.getAttribute('aria-disabled'),'false');assert.doesNotMatch(host.textContent,/Removed Fixture vase from/);}
+  if(result==='moved') assert.equal(document.activeElement,elsewhere,'completion respects moved focus');
+  if(result==='moved-away') assert.equal(document.activeElement,document.body,'a later loss of the chosen focus does not revive the removal request');
+  if(result==='unmounted') assert.equal(host.querySelector('[data-cart-remove]'),null);
 });

@@ -2,7 +2,7 @@ import { adminSection, isAdminRoute } from "./adminNavigation";
 
 const routeTitles: Readonly<Record<string, string>> = {
   "/": "Shop",
-  "/cart": "Your Bag",
+  "/cart": "Your Cart",
   "/checkout": "Checkout",
   "/account": "Your account",
   "/auth/callback": "Your account",

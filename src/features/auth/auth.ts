@@ -1,15 +1,15 @@
-import type { Session, SupabaseClient } from "@supabase/supabase-js";
-export function watchSession(client: SupabaseClient, receive: (session: Session | null) => void, failed: () => void) {
+import type { AuthChangeEvent, Session, SupabaseClient } from "@supabase/supabase-js";
+export function watchSession(client: SupabaseClient, receive: (event: AuthChangeEvent, session: Session | null) => void, failed: () => void) {
   let active = true;
   let observed = false;
-  const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
+  const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
     observed = true;
-    if (active) receive(session);
+    if (active) receive(event, session);
   });
   void client.auth.getSession().then(({ data, error }) => {
     if (!active) return;
     if (error) failed();
-    else if (!observed) receive(data.session);
+    else if (!observed) receive("INITIAL_SESSION", data.session);
   }).catch(() => { if (active) failed(); });
   return () => { active = false; subscription.unsubscribe(); };
 }

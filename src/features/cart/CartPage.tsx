@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCart } from "./CartContext";
 import { getCartLines, cartLineKey, MAX_QUANTITY } from "./cart";
 import { bagRemovedText, bagRemoveFailedText } from "./bagFeedback";
-import { BagNotice, type BagNoticeMessage } from "../../components/BagNotice";
+import { useNotifications } from "../../components/notifications";
 import { useProducts } from "../products/ProductContext";
 import { ProductStatus } from "../products/ProductStatus";
 import { UnavailableItems } from "./UnavailableItems";
@@ -17,38 +17,64 @@ import { UiStatus } from '../../components/UiStatus';
 
 export function CartPage() {
   const { items, dispatch, status } = useCart();
+  const { notify } = useNotifications();
   const auth = useAuth();
-  const [notice, setNotice] = useState<BagNoticeMessage | null>(null);
   const noticeSeq = useRef(0);
   const alive = useRef(true);
   // Reset on (re)mount: StrictMode dev runs cleanup then re-runs the effect,
   // and the guard must stay live for the remounted component.
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const clearNotice = useCallback(() => setNotice(null), []);
-  async function removeLine(product: { id: string; name: string }, variantId: string | undefined, variantDetail: string) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const emptyRef = useRef<HTMLDivElement>(null);
+  const consumedFocus = useRef(0);
+  const cancelledFocus = useRef(0);
+  const [pendingFocus, setPendingFocus] = useState<{ index: number; operation: number; control: HTMLElement } | null>(null);
+  useEffect(() => {
+    if (!pendingFocus || consumedFocus.current === pendingFocus.operation) return;
+    consumedFocus.current = pendingFocus.operation;
+    if (pendingFocus.operation !== noticeSeq.current || pendingFocus.operation === cancelledFocus.current) return;
+    const active = document.activeElement;
+    if (active !== pendingFocus.control && active !== document.body) return;
+    const controls = listRef.current?.querySelectorAll<HTMLButtonElement>("[data-cart-remove]");
+    if (controls && controls.length > 0) {
+      controls[Math.min(pendingFocus.index, controls.length - 1)].focus();
+      return;
+    }
+    emptyRef.current?.querySelector<HTMLElement>("[data-cart-empty-title]")?.focus();
+  }, [pendingFocus]);
+  async function removeLine(
+    product: { id: string; name: string },
+    variantId: string | undefined,
+    variantDetail: string,
+    control?: HTMLElement | null,
+    index?: number,
+  ) {
     noticeSeq.current += 1;
     const operation = noticeSeq.current;
+    const hadFocus = !!control && document.activeElement === control;
     const outcome = await dispatch({ type: "remove", productId: product.id, variantId });
     if (!alive.current || operation !== noticeSeq.current) return;
-    if (outcome.kind === "confirmed") setNotice({ id: operation, tone: "success", text: bagRemovedText(product.name, variantDetail) });
-    else if (outcome.kind === "rejected") setNotice({ id: operation, tone: "failure", text: bagRemoveFailedText(product.name) });
+    if (outcome.kind === "confirmed") {
+      notify({ tone: "success", message: bagRemovedText(product.name, variantDetail) });
+      if (hadFocus && control && index !== undefined) setPendingFocus({ index, operation, control });
+    } else if (outcome.kind === "rejected") notify({ tone: "error", message: bagRemoveFailedText(product.name, outcome.failure) });
   }
   const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
   const { state } = useProducts();
-  if (status === "loading" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind="loading">Your saved Bag is not ready yet.</UiStatus></section>;
+  if (status === "loading" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Cart." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind="loading">Your saved Cart is not ready yet.</UiStatus></section>;
   if (status === "error" && state.status !== "ready")
     return (
       <section className="wrap page-section">
-        <PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/>
+        <PageHeader title="Your Cart." breadcrumb={{label:'Shop',to:'/'}}/>
         <ProductStatus />
       </section>
     );
-  if (status === "error") return <section className="wrap page-section"><PageHeader title="Your Bag." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind="error">Your saved Bag is not ready yet.</UiStatus></section>;
-  if (!items.length) return <><EmptyCart /><BagNotice message={notice} onExpire={clearNotice} /></>;
+  if (status === "error") return <section className="wrap page-section"><PageHeader title="Your Cart." breadcrumb={{label:'Shop',to:'/'}}/><UiStatus kind="error">Your saved Cart is not ready yet.</UiStatus></section>;
+  if (!items.length) return <div ref={emptyRef}><EmptyCart /></div>;
   if (state.status !== "ready")
     return (
       <section className="wrap page-section">
-        <h1>Your Bag.</h1>
+        <h1>Your Cart.</h1>
         <ProductStatus />
       </section>
     );
@@ -64,14 +90,14 @@ export function CartPage() {
         ← Continue shopping
       </Link>
       <p className="eyebrow">YOUR EVERYDAY FINDS</p>
-      <PageHeader title="Your Bag." description="Review your pieces before checkout."/>
+      <PageHeader title="Your Cart." description="Review your pieces before checkout."/>
       <p className="muted mb-8">
-        {auth.session ? items.some(item=>!item.variantId) ? "Available selections are saved to your account. Unavailable guest items are retained in this browser until removed." : "Your Bag is saved to your account." : "Sign in to save your Bag across visits. Guest items are kept only in this browser tab."}
+        {auth.session ? items.some(item=>!item.variantId) ? "Available selections are saved to your account. Unavailable guest items are retained in this browser until removed." : "Your Cart is saved to your account." : "Sign in to save your Cart across visits. Guest items are kept only in this browser tab."}
       </p>
       <div className="checkout-grid">
-        <div>
+        <div ref={listRef}>
           {unavailable.length > 0 && <UnavailableItems items={unavailable} />}
-          {lines.map(({ product, variant, item, quantity, lineTotal, lineKey }) => {
+          {lines.map(({ product, variant, item, quantity, lineTotal, lineKey }, index) => {
             const label=product.name+(variant&&variantLabel(variant)?`, ${variantLabel(variant)}`:'');
             return (
             <article className="cart-row" key={lineKey}>
@@ -141,9 +167,11 @@ export function CartPage() {
                   </div>
                   <button
                     className="remove-button"
-                    disabled={busy}
+                    aria-disabled={busy}
                     aria-label={`Remove ${label}`}
-                    onClick={() => { void removeLine(product, item.variantId, variant && variantLabel(variant) ? variantLabel(variant) : ""); }}
+                    data-cart-remove=""
+                    onBlur={() => { cancelledFocus.current = noticeSeq.current; }}
+                    onClick={(event) => { if (busy) return; void removeLine(product, item.variantId, variant && variantLabel(variant) ? variantLabel(variant) : "", event.detail === 0 ? event.currentTarget : null, index); }}
                   >
                     Remove
                   </button>
@@ -178,9 +206,8 @@ export function CartPage() {
         </aside>
       </div>
       <p className="sr-only" role="status">
-        Bag subtotal {formatMoney(subtotal)}.
+        Cart subtotal {formatMoney(subtotal)}.
       </p>
-      <BagNotice message={notice} onExpire={clearNotice} />
     </section>
   );
 }

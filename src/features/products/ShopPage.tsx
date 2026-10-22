@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { requiresOptions, variantAvailable, cataloguePrice } from "./variants";
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import type { Product } from "./products";
 import { useProducts } from "./ProductContext";
 import { ProductStatus } from "./ProductStatus";
@@ -8,7 +8,7 @@ import { formatMoney, shop } from "../../config/shop";
 import { useCart } from "../cart/CartContext";
 import { defaultVariant, MAX_QUANTITY } from "../cart/cart";
 import { bagAddedText, bagAddFailedText } from "../cart/bagFeedback";
-import { BagNotice, type BagNoticeMessage } from "../../components/BagNotice";
+import { useNotifications } from "../../components/notifications";
 import { ProductImage } from "./ProductImage";
 import {searchProducts} from './search';
 
@@ -16,12 +16,11 @@ export function ShopPage() {
   const [category, setCategory] = useState("All pieces");
   const [query,setQuery]=useState('');
   const searchInput=useRef<HTMLInputElement>(null);
-  const [notice, setNotice] = useState<BagNoticeMessage | null>(null);
   const noticeSeq = useRef(0);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [addingId, setAddingId] = useState<string | null>(null);
-  const clearNotice = useCallback(() => setNotice(null), []);
+  const { notify } = useNotifications();
   const { items, dispatch, status: cartStatus } = useCart();
   const { state, refresh } = useProducts();
   const products = state.status === "ready" ? state.products : [];
@@ -41,8 +40,8 @@ export function ShopPage() {
     const outcome=await dispatch({type:"add",productId:product.id,variantId});
     if(!alive.current||operation!==noticeSeq.current)return;
     setAddingId(null);
-    if(outcome.kind==="confirmed")setNotice({id:operation,tone:"success",text:bagAddedText(1,name,"")});
-    else if(outcome.kind==="rejected")setNotice({id:operation,tone:"failure",text:bagAddFailedText(name)});
+    if(outcome.kind==="confirmed")notify({tone:"success",message:bagAddedText(1,name,"")});
+    else if(outcome.kind==="rejected")notify({tone:"error",message:bagAddFailedText(name,outcome.failure)});
   }
   return (
     <>
@@ -203,15 +202,15 @@ export function ShopPage() {
                       className="add-button"
                       disabled={!variantAvailable(variant) || quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out" || addingId === product.id}
                       onClick={() => { void addToBag(product, variant!.id); }}
-                      aria-label={`Add ${product.name} to Bag`}
+                      aria-label={`Add ${product.name} to Cart`}
                     >
                       {addingId === product.id
                         ? "Adding…"
                         : quantity >= MAX_QUANTITY
                           ? "Quantity limit reached"
                           : quantity > 0
-                            ? `Add another · ${quantity} in Bag`
-                            : "Add to Bag"}
+                            ? `Add another · ${quantity} in Cart`
+                            : "Add to Cart"}
                       <span aria-hidden="true">+</span>
                     </button>}
                   </article>
@@ -236,7 +235,6 @@ export function ShopPage() {
           Delivery in supported Freetown areas.
         </div>
       </section>
-      <BagNotice message={notice} onExpire={clearNotice} />
     </>
   );
 }

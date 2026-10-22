@@ -123,7 +123,7 @@ test('a guest is offered an actionable Account sign-in link instead of an inert 
   assert.match(host.textContent,/An account is required before you can place your order\./);
 });
 
-test('Place order stays disabled while Bag changes are saving', async()=>{
+test('Place order stays disabled while Cart changes are saving', async()=>{
   await mount({authSession:session,cartStatus:'saving'});
   assert.match(button().textContent,/Place order/);
   await setValue(cityField(),'Freetown');
@@ -147,7 +147,7 @@ test('invalid trusted delivery responses surface safe guidance and never claim p
   assert.equal(button().disabled,false);
 });
 
-test('a changed-price rejection refreshes the Bag and requires an explicit second submit with the same request id', async()=>{
+test('a changed-price rejection refreshes the Cart and requires an explicit second submit with the same request id', async()=>{
   const calls=[]; let refreshes=0, retries=0;
   const client=fakeClient(async(name,options)=>{calls.push({name,options});return {data:null,error:{context:new Response(JSON.stringify({error:'CART_CHANGED'}),{status:409,headers:{'Content-Type':'application/json'}})}};});
   await mount({authSession:session,client,refreshProducts:()=>{refreshes+=1;},retryCart:()=>{retries+=1;}});
@@ -156,9 +156,9 @@ test('a changed-price rejection refreshes the Bag and requires an explicit secon
   await toggle(host.querySelector('#reuse-phone'));
   await submit();
   assert.equal(calls.length,1,'one placement attempt');
-  assert.match(alertTexts().join(' '),/Your Bag or current prices changed\. Review the refreshed Bag before placing your order\./);
+  assert.match(alertTexts().join(' '),/Your Cart or current prices changed\. Review the refreshed Cart before placing your order\./);
   assert.equal(refreshes,1,'current catalogue prices are re-read');
-  assert.equal(retries,1,'the saved Bag is re-read');
+  assert.equal(retries,1,'the saved Cart is re-read');
   assert.equal(button().disabled,false,'the customer can review and submit again');
   assert.equal(calls[0].options.body.expected_cart[0].unit_price,1800,'the displayed unit price is still submitted for server comparison');
   const requestId=calls[0].options.body.request_id;

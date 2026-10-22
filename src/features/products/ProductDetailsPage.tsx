@@ -8,6 +8,7 @@ import { requiresOptions, variantLabel, variantAvailable, cataloguePrice } from 
 import { useCart } from '../cart/CartContext';
 import { defaultVariant, MAX_QUANTITY } from '../cart/cart';
 import { bagAddedText, bagAddFailedText } from '../cart/bagFeedback';
+import { useNotifications } from '../../components/notifications';
 import { formatMoney } from '../../config/shop';
 
 export function ProductDetailsPage() {
@@ -21,8 +22,8 @@ export function ProductDetailsPage() {
 
 export function ProductDetails({product}:{product:Product}) {
   const {items,dispatch,status}=useCart();
+  const {notify}=useNotifications();
   const [selection,setSelection]=useState('');
-  const [notice,setNotice]=useState<{tone:'success'|'failure';text:string}|null>(null);
   const [amount,setAmount]=useState(1);
   const [pending,setPending]=useState(false);
   const pendingSeq=useRef(0);
@@ -46,15 +47,15 @@ export function ProductDetails({product}:{product:Product}) {
     const outcome=await dispatch({type:'add',productId:product.id,variantId:variant.id,quantity:addedAmount});
     if(!alive.current||operation!==pendingSeq.current)return;
     setPending(false);
-    if(outcome.kind==='confirmed')setNotice({tone:'success',text:bagAddedText(addedAmount,name,detail)});
-    else if(outcome.kind==='rejected')setNotice({tone:'failure',text:bagAddFailedText(name)});
+    if(outcome.kind==='confirmed')notify({tone:'success',message:bagAddedText(addedAmount,name,detail)});
+    else if(outcome.kind==='rejected')notify({tone:'error',message:bagAddFailedText(name,outcome.failure)});
   }
   return <section className="wrap page-section product-details">
     <Link className="back-link" to="/">← Back to the collection</Link>
     <div className="product-details-grid"><ProductGallery key={product.id} product={product}/>
       <div className="product-details-copy"><p className="eyebrow">{product.category}</p><h1>{product.name}</h1><p className="product-details-price">{!variant&&optionsRequired?'From ':''}{formatMoney(price)}</p><p className="product-details-description">{product.description}</p>
         {optionsRequired && <fieldset className="variant-options"><legend>Choose your options</legend>{choices.map(choice=><label key={choice.id}><input type="radio" name={`variant-${product.id}`} value={choice.id} disabled={!variantAvailable(choice)} checked={selection===choice.id} onChange={()=>setSelection(choice.id)}/><span>{variantLabel(choice)}{!variantAvailable(choice)&&' — Unavailable'}<span className="variant-option-price">{formatMoney(choice.price)}</span></span></label>)}</fieldset>}
-        <p className="small-note">{compatible?'Available to add to your Bag.':optionsRequired && !variant ? 'Choose an available combination.':'This piece is currently unavailable.'}</p>
+        <p className="small-note">{compatible?'Available to add to your Cart.':optionsRequired && !variant ? 'Choose an available combination.':'This piece is currently unavailable.'}</p>
         <div className="product-details-quantity">
           <div className="quantity-control">
             <button
@@ -92,9 +93,8 @@ export function ProductDetails({product}:{product:Product}) {
           </div>
         </div>
         <div className="product-details-actions">
-          <button className="button product-details-add" disabled={!compatible||busy||pending||quantity+amount>MAX_QUANTITY} aria-label={`Add ${product.name} to Bag`} onClick={addToBag}>{pending?'Adding…':quantity+amount>MAX_QUANTITY?'Quantity limit reached':'Add to Bag'}</button>
-          <p role="status" aria-live="polite" className={`feedback${notice?.tone==='failure'?' feedback-failure':''}`}>{notice?.text??''}</p>
-          <Link className="text-link" to="/cart">View your Bag →</Link>
+          <button className="button product-details-add" disabled={!compatible||busy||pending||quantity+amount>MAX_QUANTITY} aria-label={`Add ${product.name} to Cart`} onClick={addToBag}>{pending?'Adding…':quantity+amount>MAX_QUANTITY?'Quantity limit reached':'Add to Cart'}</button>
+          <Link className="text-link" to="/cart">View your Cart →</Link>
         </div>
         <p className="small-note">Payment awaits confirmation after order placement.</p>
       </div>

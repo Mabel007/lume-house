@@ -65,7 +65,7 @@ test('guest retry receipts are stable across reloads and change only for changed
   assert.equal(stampGuestIntent(restored,restored,()=>next)[0].mergeId,receipt);
   assert.equal(stampGuestIntent([{...restored[0],quantity:3}],restored,()=>next)[0].mergeId,next);
 });
-test('authenticated Bag uses JWT-bound trusted RPCs and rejects duplicate or corrupt persisted lines',async()=>{
+test('authenticated Cart uses JWT-bound trusted RPCs and rejects duplicate or corrupt persisted lines',async()=>{
   const payload={id:'cart',items:[{product_id:'a',variant_id:'blue',quantity:2},{product_id:'a',variant_id:'red',quantity:1}]};
   assert.equal(parseVariantCart(payload).items.length,2);
   assert.throws(()=>parseVariantCart({...payload,items:[payload.items[0],payload.items[0]]}));

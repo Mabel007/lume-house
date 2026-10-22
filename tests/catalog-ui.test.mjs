@@ -10,6 +10,7 @@ let server;
 let ProductContext, CartContext, AuthContext, ShopPage, CartPage, CheckoutPage;
 let contentPages, routeTitle, aboutFragmentTarget;
 let Layout, SiteFooter, AccountExperience, accountInitials, ProductDetails, ProductDetailsPage;
+let NotificationProvider;
 before(async () => {
   server = await createServer({
     server: { middlewareMode: true, hmr: false },
@@ -25,6 +26,7 @@ before(async () => {
     "/src/features/auth/AuthContext.ts",
   ));
   ({ ProductDetails, ProductDetailsPage } = await server.ssrLoadModule("/src/features/products/ProductDetailsPage.tsx"));
+  ({ NotificationProvider } = await server.ssrLoadModule("/src/components/NotificationProvider.tsx"));
   ({ ShopPage } = await server.ssrLoadModule(
     "/src/features/products/ShopPage.tsx",
   ));
@@ -109,7 +111,7 @@ test("policies preserve request eligibility, payment boundaries and separately c
 });
 
 test("route title mapping preserves existing titles and assigns all six public titles", () => {
-  const expected = { "/about": "About", "/help": "Help & Contact", "/help/delivery-pickup": "Delivery & Pickup", "/help/returns-refunds": "Returns & Refunds", "/privacy": "Privacy Policy", "/terms": "Terms & Conditions", "/": "Shop", "/cart": "Your Bag", "/checkout": "Checkout", "/account/orders": "Your account", "/auth/callback": "Your account", "/orders/example/success": "Your order", "/unknown": "Page not found" };
+  const expected = { "/about": "About", "/help": "Help & Contact", "/help/delivery-pickup": "Delivery & Pickup", "/help/returns-refunds": "Returns & Refunds", "/privacy": "Privacy Policy", "/terms": "Terms & Conditions", "/": "Shop", "/cart": "Your Cart", "/checkout": "Checkout", "/account/orders": "Your account", "/auth/callback": "Your account", "/orders/example/success": "Your order", "/unknown": "Page not found" };
   for (const [path, title] of Object.entries(expected)) assert.equal(routeTitle(path), title);
   assert.equal(routeTitle("/about/"), "About");
   assert.equal(routeTitle("/constructor"), "Page not found");
@@ -146,7 +148,7 @@ function render(Page, state, cart = items) {
         React.createElement(
           CartContext.Provider,
           { value: { items: cart, dispatch() {} } },
-          React.createElement(Page),
+          React.createElement(NotificationProvider, null, React.createElement(Page)),
         ),
       ),
     ),
@@ -157,11 +159,11 @@ test("loading and error states do not show stale totals or add-to-cart actions",
   for (const Page of [ShopPage, CartPage, CheckoutPage]) {
     const loading = render(Page, { status: "loading" });
     assert.match(loading, /Loading the collection/);
-    assert.doesNotMatch(loading, /\$|Add to Bag|Continue to checkout/);
+    assert.doesNotMatch(loading, /\$|Add to Cart|Continue to checkout/);
     const failed = render(Page, { status: "error" });
     assert.match(failed, /The collection is unavailable/);
     assert.match(failed, /Try again/);
-    assert.doesNotMatch(failed, /\$|Add to Bag|Continue to checkout/);
+    assert.doesNotMatch(failed, /\$|Add to Cart|Continue to checkout/);
   }
 });
 test("empty catalog does not fall back to demo products", () => {
@@ -193,12 +195,12 @@ test("unavailable products can be removed and cannot proceed to checkout", () =>
   assert.match(cart, /Remove unavailable item 1/);
   assert.doesNotMatch(cart, /Continue to checkout|\$5\.00/);
   const checkout = render(CheckoutPage, state);
-  assert.match(checkout, /Review your Bag/);
+  assert.match(checkout, /Review your Cart/);
   assert.doesNotMatch(checkout, /Place order/);
-  assert.match(render(CartPage, state, []), /Your Bag is taking a slow day/);
+  assert.match(render(CartPage, state, []), /Your Cart is taking a slow day/);
   assert.match(
     render(CheckoutPage, state, []),
-    /Your Bag is taking a slow day/,
+    /Your Cart is taking a slow day/,
   );
 });
 
@@ -254,7 +256,7 @@ test("expanded catalog has accessible interactions, editorial sections and respo
   );
   const html = render(ShopPage, { status: "ready", products: catalog }, []);
   assert.equal((html.match(/class="product-card"/g) ?? []).length, 20);
-  for (const p of catalog) assert.ok(html.includes(`Add ${p.name} to Bag`));
+  for (const p of catalog) assert.ok(html.includes(`Add ${p.name} to Cart`));
   assert.match(html, /Shop by collection/);
   assert.match(html, /THE LUMÉ EDIT/);
   assert.match(html, /product-grid/);
@@ -275,15 +277,15 @@ function renderLayout(path, cartState = { items, status: "ready", error: null, r
             React.createElement(Route,{path:"*",element:React.createElement("h1",null,"Page")}))))))));
 }
 function renderDetails(product) {
-  return renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(CartContext.Provider,{value:{items:[],dispatch(){},status:"ready"}},React.createElement(ProductDetails,{product}))));
+  return renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(CartContext.Provider,{value:{items:[],dispatch(){},status:"ready"}},React.createElement(NotificationProvider,null,React.createElement(ProductDetails,{product})))));
 }
 
-test("primary navigation has five destinations, account/help descendant active states and Bag count", () => {
+test("primary navigation has five destinations, account/help descendant active states and Cart count", () => {
   const nav = renderLayout("/").match(/<nav aria-label="Main navigation"[^>]*>(.*?)<\/nav>/s)[1];
   assert.equal((nav.match(/<a /g) ?? []).length, 5);
   for (const path of ["/", "/about", "/help", "/account", "/cart"]) assert.ok(nav.includes(`href="${path}"`));
-  assert.match(nav, /aria-label="Bag \(2\)"/);
-  assert.doesNotMatch(nav, /My Orders|Sign in|Cart/);
+  assert.match(nav, /aria-label="Cart \(2\)"/);
+  assert.doesNotMatch(nav, /My Orders|Sign in|Bag/);
   for (const path of ["/help", "/help/delivery-pickup", "/help/returns-refunds"]) {
     const active = renderLayout(path).match(/<a[^>]*aria-current="page"[^>]*>/g);
     assert.equal(active.length, 1);
@@ -336,20 +338,20 @@ test("ecommerce footer provides grouped real links, dynamic year and separate de
   assert.doesNotMatch(html, /hello@lumehouse.sl|\+232|office|social/i);
 });
 
-test("Bag copy includes positive shop actions, checkout references and accurate photograph alt", () => {
+test("Cart copy includes positive shop actions, checkout references and accurate photograph alt", () => {
   const state = { status: "ready", products: [fixture] };
   const shop = render(ShopPage, state, []);
-  assert.match(shop, /Add to Bag/);
-  assert.match(shop, /aria-label="Add Fixture mug to Bag"/);
+  assert.match(shop, /Add to Cart/);
+  assert.match(shop, /aria-label="Add Fixture mug to Cart"/);
   assert.match(shop, /supported Freetown areas/);
   const bag = render(CartPage, state);
-  assert.match(bag, /Your Bag/); assert.match(bag, /Bag subtotal/);
+  assert.match(bag, /Your Cart/); assert.match(bag, /Cart subtotal/);
   assert.match(bag, /alt="Illustration of Fixture mug"/);
   const photoBag = render(CartPage, { ...state, products: [{ ...fixture, image: "/images/mug.webp" }] });
   assert.match(photoBag, /alt="Fixture mug"/); assert.doesNotMatch(photoBag, /Illustration of/);
   const checkout = render(CheckoutPage, state);
-  assert.match(checkout, /Back to Bag/); assert.match(checkout, /Edit your Bag/);
-  for (const html of [shop, bag, checkout]) assert.doesNotMatch(html.replace(/<[^>]+>/g, ""), /\bcart\b/i);
+  assert.match(checkout, /Back to Cart/); assert.match(checkout, /Edit your Cart/);
+  for (const html of [shop, bag, checkout]) assert.doesNotMatch(html.replace(/<[^>]+>/g, ""), /\bbag\b/i, "the customer-facing copy uses one shopping term");
 });
 test('storefront search has a labelled native search control and polite results alongside category filtering',()=>{
  const html=render(ShopPage,{status:'ready',products:[fixture]},[]);
@@ -360,10 +362,10 @@ test('storefront search has a labelled native search control and polite results 
  assert.doesNotMatch(html,/No pieces found|Reset search/);
 });
 
-test("Add to Bag feedback waits for confirmed persistence before claiming success", async () => {
-  assert.match(renderLayout("/", { items: [], status: "loading" }), /Loading your Bag/);
-  assert.match(renderLayout("/", { items, status: "saving" }), /Saving your Bag/);
-  assert.match(renderLayout("/", { items, status: "error", error: "Your Bag change was not saved.", retry() {} }), /Retry saved Bag/);
+test("Add to Cart feedback waits for confirmed persistence before claiming success", async () => {
+  assert.match(renderLayout("/", { items: [], status: "loading" }), /Loading your Cart/);
+  assert.match(renderLayout("/", { items, status: "saving" }), /Saving your Cart/);
+  assert.match(renderLayout("/", { items, status: "error", error: "Your Cart change was not saved.", retry() {} }), /Retry saved Cart/);
   const { readFileSync } = await import("node:fs");
   const shop = readFileSync("src/features/products/ShopPage.tsx", "utf8");
   const details = readFileSync("src/features/products/ProductDetailsPage.tsx", "utf8");
@@ -372,25 +374,22 @@ test("Add to Bag feedback waits for confirmed persistence before claiming succes
   assert.match(feedback, /Added \$\{quantity\} × /);
   assert.match(shop, /outcome\.kind==="confirmed"/);
   assert.match(shop, /bagAddedText\(1,name,""\)/);
-  assert.doesNotMatch(shop, /Bag update requested/);
-  assert.doesNotMatch(readFileSync("src/features/cart/CartProvider.tsx", "utf8"), /Your (?:saved )?cart/i);
+  assert.doesNotMatch(shop, /Cart update requested/);
+  assert.doesNotMatch(readFileSync("src/features/cart/CartProvider.tsx", "utf8"), /Your (?:saved )?bag/i, "the customer-facing copy uses the Cart term");
 });
 
-test("Product Details groups add action, notice and Bag link in one stable actions row", async () => {
+test("Product Details groups add action and Cart link in one stable actions row", async () => {
   const { readFileSync } = await import("node:fs");
   const details = readFileSync("src/features/products/ProductDetailsPage.tsx", "utf8");
   const group = details.match(/<div className="product-details-actions">[\s\S]*?<\/div>/);
-  assert.ok(group, "actions group wraps button, status notice and View Bag link");
+  assert.ok(group, "actions group wraps the add button and View Cart link");
   assert.match(group[0], /product-details-add/);
-  assert.match(group[0], /role="status" aria-live="polite"/);
-  assert.match(group[0], /to="\/cart">View your Bag/);
-  assert.ok(group[0].indexOf("product-details-add") < group[0].indexOf('to="/cart"'), "focus order: add button before Bag link");
+  assert.doesNotMatch(group[0], /role="status"|className="feedback"/, "the migrated inline feedback slot is removed");
+  assert.match(group[0], /to="\/cart">View your Cart/);
+  assert.ok(group[0].indexOf("product-details-add") < group[0].indexOf('to="/cart"'), "focus order: add button before Cart link");
   const css = readFileSync("src/styles.css", "utf8");
   assert.match(css, /\.product-details-actions \{ display: flex; flex-direction: column;/);
-  assert.match(css, /\.product-details-actions \.feedback \{ display: block; margin: 0; min-height: 5em; \}/);
-  assert.match(css, /@media \(max-width: 1000px\) \{ \.product-details-actions \.feedback \{ min-height: 6\.8em; \} \}/, "≤1000px reserves four feedback lines for long names");
-  assert.match(css, /@media \(max-width: 479px\) \{ \.product-details-actions \.feedback \{ min-height: 8\.8em; \} \}/, "≤479px reserves five feedback lines so long-name feedback cannot shift the Bag link");
-  assert.match(css, /\.product-details-actions \.feedback:empty \{ display: block; \}/, "notice space is reserved so the Bag link never shifts");
+  assert.doesNotMatch(css, /\.product-details-actions \.feedback/, "feedback no longer reserves vertical space in the actions row");
   assert.match(css, /@media \(max-width: 479px\)[^@]*\.product-details-actions \.product-details-add \{ width: 100%;/);
 });
 
@@ -459,7 +458,7 @@ test("Account loading/error states keep saving disabled and empty identity has a
 test("Product Details default-only renders a normal purchase without meaningless selectors", () => {
   const product={id:'fixture',name:'Test piece',category:'Test',description:'Existing description',price:1800,image:'/images/mug.svg',color:'#e9e3d8',variants:[{id:'default:fixture',productId:'fixture',options:{},isDefault:true,price:1800,currency:'NLE',inventoryPolicy:'untracked'}]};
   const html=renderDetails(product);
-  assert.match(html,/<h1>Test piece<\/h1>/);assert.match(html,/Add Test piece to Bag/);assert.match(html,/Available to add to your Bag/);assert.doesNotMatch(html,/Choose your options|Color: Default|Size: Default|reviews|ratings/i);
+  assert.match(html,/<h1>Test piece<\/h1>/);assert.match(html,/Add Test piece to Cart/);assert.match(html,/Available to add to your Cart/);assert.doesNotMatch(html,/Choose your options|Color: Default|Size: Default|reviews|ratings/i);
   const unavailable=renderDetails({...product,variants:[]});
   assert.match(unavailable,/disabled=""/);assert.match(unavailable,/currently unavailable/);
 });
@@ -479,9 +478,9 @@ test('tracked Product Details refuses unverified or unavailable stock without sh
   assert.match(html,/currently unavailable/);assert.match(html,/disabled=""/);assert.doesNotMatch(html,/Only \d+ left/);
  }
  const html=renderDetails({...product,variants:[{...variant,available:true}]});
- assert.match(html,/Available to add to your Bag/);assert.doesNotMatch(html,/<button[^>]*class="button product-details-add"[^>]*disabled/);
+ assert.match(html,/Available to add to your Cart/);assert.doesNotMatch(html,/<button[^>]*class="button product-details-add"[^>]*disabled/);
 });
-test('Bag and checkout show separate variant options and variant-derived prices for the same parent',()=>{
+test('Cart and checkout show separate variant options and variant-derived prices for the same parent',()=>{
  const variants=[{id:'blue',productId:fixture.id,options:{Color:'Blue'},isDefault:false,price:2000,currency:'NLE',inventoryPolicy:'untracked'}, {id:'red',productId:fixture.id,options:{Color:'Red'},isDefault:false,price:2500,currency:'NLE',inventoryPolicy:'untracked'}];
  const state={status:'ready',products:[{...fixture,variants}]};
  const lines=[{productId:fixture.id,variantId:'blue',quantity:2},{productId:fixture.id,variantId:'red',quantity:1}];
@@ -501,15 +500,15 @@ test("Product Details route handles loading, error and inactive/missing products
   }
 });
 
-test('admin chrome is scoped without changing storefront landmarks or private Bag feedback',()=>{
+test('admin chrome is scoped without changing storefront landmarks or private Cart feedback',()=>{
  for(const path of ['/admin','/admin/orders','/admin/products','/admin/inventory','/admin/memberships','/admin/unknown']){
-  const html=renderLayout(path,{items,status:'saving',error:'Synthetic Bag failure',retry(){}});
+  const html=renderLayout(path,{items,status:'saving',error:'Synthetic Cart failure',retry(){}});
   assert.match(html,/href="#main"/);assert.match(html,/<main id="main"[^>]*tabindex="-1"/);
-  assert.doesNotMatch(html,/Main navigation|<footer|Saving your Bag|Synthetic Bag failure/);
+  assert.doesNotMatch(html,/Main navigation|<footer|Saving your Cart|Synthetic Cart failure/);
  }
  for(const path of ['/','/cart','/account/orders','/administrator']){
-  const html=renderLayout(path,{items,status:'saving',error:'Synthetic Bag failure',retry(){}});
-  assert.match(html,/Main navigation/);assert.match(html,/<footer/);assert.match(html,/Saving your Bag/);assert.match(html,/Synthetic Bag failure/);
+  const html=renderLayout(path,{items,status:'saving',error:'Synthetic Cart failure',retry(){}});
+  assert.match(html,/Main navigation/);assert.match(html,/<footer/);assert.match(html,/Saving your Cart/);assert.match(html,/Synthetic Cart failure/);
  }
 });
 
