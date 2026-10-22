@@ -45,7 +45,7 @@ async function mount(path,value,element){root=createRoot(host);await act(async()
 // The context carries the shared single-in-flight sign-out controller. Harnesses
 // override `signOut` with a stub; deriving the controller from the effective
 // stub keeps them exercising the same guarantee the real AuthProvider provides.
-const auth=overrides=>{const state={loading:false,session:null,error:null,signIn:async()=>{},signOut:async()=>({ok:true}),...overrides};state.signOutController=createSignOutController(state.signOut);return state;};
+const auth=overrides=>{const state={loading:false,session:null,error:null,signIn:async()=>{},signOut:async()=>({ok:true}),sessionGeneration:0,...overrides};state.signOutController=createSignOutController(state.signOut);return state;};
 
 test('sign-out swaps the signed-in account trigger for the guest Account link without navigating',async()=>{
   const session={access_token:'synthetic-jwt',user:{id:'11111111-1111-4111-8111-111111111111',email:'fixture@example.invalid',user_metadata:{full_name:'Fixture Customer'}}};
@@ -934,4 +934,41 @@ test('a notification of one customer is never visible in another customer sessio
   await act(async()=>{switchSession(sessionA);await new Promise(resolve=>setTimeout(resolve,0));});
   await flush();
   assert.equal(notices().length,0,'an obsolete confirmation is not resurrected');
+});
+for (const initial of [null, sessionA]) test('real AuthProvider notification lifetimes from '+(initial?'restored session':'guest'),async()=>{
+  const {AuthProvider}=await server.ssrLoadModule('/src/features/auth/AuthProvider.tsx');
+  const {useNotifications}=await server.ssrLoadModule('/src/components/notifications.ts');
+  let emit,observed,notify;
+  globalThis.__accountAuthClient={auth:{onAuthStateChange(callback){emit=callback;return {data:{subscription:{unsubscribe(){}}}};},getSession:async()=>({data:{session:initial},error:null})}};
+  function Probe(){observed=useAuth();notify=useNotifications().notify;return null;}
+  root=createRoot(host);
+  await act(async()=>root.render(React.createElement(MemoryRouter,null,React.createElement(AuthProvider,null,React.createElement(NotificationProvider,null,React.createElement(Probe))))));
+  await flush();
+  assert.equal(observed.session?.user.id,initial?.user.id);
+  const send=async(event,session)=>{await act(async()=>emit(event,session));};
+  if(!initial) await send('SIGNED_IN',sessionA);
+  let generation=observed.sessionGeneration;
+  const retained=notify;
+  await send('SIGNED_IN',sessionA);
+  assert.equal(observed.sessionGeneration,generation);
+  await send('TOKEN_REFRESHED',{...sessionA,access_token:'synthetic-refresh'});
+  assert.equal(observed.sessionGeneration,generation);
+  await act(async()=>retained({tone:'success',message:'valid recovery'}));
+  assert.match(host.textContent,/valid recovery/);
+  for(const [event,session] of [['SIGNED_OUT',null],['SIGNED_IN',sessionA],['SIGNED_IN',sessionB],['SIGNED_IN',sessionA]]){
+    const stale=notify;
+    await send(event,session);
+    assert.ok(observed.sessionGeneration>generation,event+' must advance lifetime');
+    generation=observed.sessionGeneration;
+    await act(async()=>notify({tone:'success',message:'current lifetime'}));
+    await act(async()=>{assert.equal(stale({tone:'success',message:'stale lifetime'}),0);assert.equal(retained({tone:'success',message:'resurrected'}),0);});
+    assert.match(host.textContent,/current lifetime/);
+    assert.doesNotMatch(host.textContent,/stale lifetime|resurrected/);
+  }
+  const beforeBatch=notify;
+  await act(async()=>{emit('SIGNED_OUT',null);emit('SIGNED_IN',sessionA);});
+  assert.equal(host.querySelector('.bag-notice'),null,'batched same-user reauthentication cannot retain the old visible toast');
+  await act(async()=>{notify({tone:'success',message:'after batch'});assert.equal(beforeBatch({tone:'success',message:'obsolete batch'}),0);});
+  assert.match(host.textContent,/after batch/);
+  assert.doesNotMatch(host.textContent,/obsolete batch/);
 });

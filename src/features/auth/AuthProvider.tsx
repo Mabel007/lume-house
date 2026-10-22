@@ -6,13 +6,22 @@ import { authRedirect, startGoogleSignIn, watchSession } from "./auth";
 import { setAdminAuthIntent } from './adminAuthIntent';
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  const [sessionGeneration, setSessionGeneration] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
+    let owner: string | null = null;
     try {
       const client = getSupabaseClient();
-      const stop = watchSession(client, next => { setSession(next); setLoading(false); }, () => { setLoading(false); setError("Your session could not be restored. Please sign in again."); });
+      const stop = watchSession(client, (event, next) => {
+        // Same-user SIGNED_IN recovery and token refresh retain the lifetime.
+        const nextOwner = next?.user.id ?? null;
+        if (event === "SIGNED_OUT" || nextOwner !== owner) setSessionGeneration(value => value + 1);
+        owner = nextOwner;
+        setSession(next);
+        setLoading(false);
+      }, () => { setLoading(false); setError("Your session could not be restored. Please sign in again."); });
       return () => { active = false; stop(); };
     } catch { queueMicrotask(() => { if (active) { setLoading(false); setError("Account services are unavailable. Please try again later."); } }); }
     return () => { active = false; };
@@ -41,5 +50,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Admin surfaces call signOut directly; routing it through the controller keeps
   // them covered by the same single-in-flight guarantee.
   const signOut = useCallback((): Promise<SignOutResult> => signOutController.run(), [signOutController]);
-  return <AuthContext.Provider value={{ session, loading, error, signIn, signOut, signOutController }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ session, loading, error, signIn, signOut, signOutController, sessionGeneration }}>{children}</AuthContext.Provider>;
 }

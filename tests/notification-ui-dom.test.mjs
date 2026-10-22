@@ -156,7 +156,7 @@ function carryingRegions() {
 // a notification can belong to the authenticated session that created it.
 const sessionA = { user: { id: "customer-a", email: "a@example.invalid" }, access_token: "jwt-a" };
 const sessionB = { user: { id: "customer-b", email: "b@example.invalid" }, access_token: "jwt-b" };
-function authValue(session) {
+function authValue(session, sessionGeneration = 0) {
   return {
     loading: false,
     session,
@@ -164,6 +164,7 @@ function authValue(session) {
     signIn: async () => {},
     signOut: async () => ({ ok: true }),
     signOutController: { subscribe: () => () => {}, run: async () => ({ ok: true }) },
+    sessionGeneration,
   };
 }
 function SessionProbe() {
@@ -177,10 +178,14 @@ function SessionProbe() {
 }
 function SessionHarness() {
   const [session, setSession] = React.useState(sessionA);
-  dom.window.__switchSession = setSession;
+  const [generation, setGeneration] = React.useState(0);
+  // Signing a customer in starts a new authentication lifetime, even when the
+  // same customer id signs in again later.
+  dom.window.__switchSession = next => { setSession(next); setGeneration(value => value + 1); };
+  dom.window.__advanceLifetime = () => setGeneration(value => value + 1);
   return React.createElement(
     AuthContext.Provider,
-    { value: authValue(session) },
+    { value: authValue(session, generation) },
     React.createElement(
       NotificationProvider,
       null,
@@ -535,4 +540,35 @@ test("the shared styles keep safe-area placement and reduced-motion behavior", (
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.match(css, /\.bag-notice-progress\s*\{\s*display:\s*none;/);
   assert.match(css, /\.bag-notice-progress-bar\s*\{[^}]*animation:\s*bag-notice-countdown var\(--bag-notice-duration,\s*5000ms\)/);
+});
+
+test("a notifier retained from a previous customer cannot replace the current customer notification", async () => {
+  await mountSession();
+  const retained = dom.window.__sessionNotify;
+  await switchSession(sessionB);
+  await click(button("ok"));
+  assert.equal(host.querySelectorAll(".bag-notice").length, 1, "the current customer has a notification");
+  await act(async () => { retained({ tone: "error", message: "A stale late" }); await Promise.resolve(); });
+  assert.equal(host.querySelectorAll(".bag-notice").length, 1, "the retained notifier cannot suppress the current customer notification");
+  assert.doesNotMatch(host.textContent, /A stale late/);
+});
+
+test("a notifier retained from a previous customer cannot reappear when that customer returns", async () => {
+  await mountSession();
+  const retained = dom.window.__sessionNotify;
+  await switchSession(sessionB);
+  await switchSession(sessionA);
+  await act(async () => { retained({ tone: "error", message: "A stale late" }); await Promise.resolve(); });
+  assert.equal(host.querySelectorAll(".bag-notice").length, 0, "the retained notifier cannot publish into the later lifetime");
+});
+
+test("a notifier retained from an earlier sign-in lifetime cannot publish into a later lifetime", async () => {
+  await mountSession();
+  const retained = dom.window.__sessionNotify;
+  await act(async () => { dom.window.__advanceLifetime(); await Promise.resolve(); });
+  await act(async () => { retained({ tone: "error", message: "prior A lifetime" }); await Promise.resolve(); });
+  assert.equal(host.querySelectorAll(".bag-notice").length, 0, "the same customer id in a later lifetime is a different owner");
+  await click(button("ok"));
+  assert.equal(host.querySelectorAll(".bag-notice").length, 1, "the active lifetime can still announce");
+  assert.match(host.textContent, /Saved/);
 });

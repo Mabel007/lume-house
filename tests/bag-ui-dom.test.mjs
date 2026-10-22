@@ -512,7 +512,7 @@ test("cart controls disable while a removal is saving and recover when it settle
   });
   await mount(withProviders(userAuth, React.createElement(CartPage)));
   await click(buttonByLabel("Remove Fixture mug"));
-  assert.equal(buttonByLabel("Remove Fixture mug").disabled, true, "remove disables while saving");
+  assert.equal(buttonByLabel("Remove Fixture mug").getAttribute("aria-disabled"), "true", "remove blocks activation while retaining focus");
   assert.equal(buttonByLabel("Increase Fixture mug quantity").disabled, true, "stepper disables while saving");
   assert.equal(buttonByLabel("Decrease Fixture mug quantity").disabled, true, "stepper disables while saving");
   assert.equal(host.querySelector('input[type="number"]').disabled, true, "quantity input disables while saving");
@@ -1510,4 +1510,102 @@ test("Cart surfaces render the shared uppercase NLE label with no legacy NLe cas
   assert.match(host.textContent, /NLE 18 each/, "per-unit price uses the uppercase NLE label");
   assert.match(host.textContent, /Cart subtotal NLE 36\./, "Cart subtotal live region uses uppercase NLE");
   assert.doesNotMatch(host.textContent, /NLe/, "legacy mixed-case NLe label must not resurface on Cart surfaces");
+});
+
+// --- Batch 1G: Cart removal focus ------------------------------------------------
+
+// Removing a line takes its Remove control with it, so the focus has to be
+// handed somewhere predictable instead of falling back to the document.
+const focusProduct = {
+  id: "fixture-bowl", name: "Fixture bowl", description: "Fixture description", category: "Fixture category",
+  price: 1200, image: "/images/mug.svg", color: "#e9e3d8",
+  variants: [{ id: "v-bowl", productId: "fixture-bowl", options: {}, isDefault: true, price: 1200, currency: "NLE", inventoryPolicy: "untracked" }],
+};
+const threeCatalog = { state: { status: "ready", products: [product, productTwo, focusProduct] }, refresh() {} };
+const threeItems = [
+  { product_id: "fixture-mug", variant_id: "v-default", quantity: 1 },
+  { product_id: "fixture-vase", variant_id: "v-vase", quantity: 1 },
+  { product_id: "fixture-bowl", variant_id: "v-bowl", quantity: 1 },
+];
+function focusCartClient(remaining, items = threeItems) {
+  return bagClient(name => {
+    if (name === "load_variant_cart")
+      return Promise.resolve({ data: { id: "cart-1", items }, error: null });
+    return Promise.resolve({ data: { id: "cart-1", items: remaining }, error: null });
+  });
+}
+const focusedLabel = () => {
+  const active = document.activeElement;
+  if (!active) return "";
+  return active.getAttribute("aria-label") || active.getAttribute("data-cart-empty-title") || active.tagName;
+};
+
+test("removing a middle Cart line with the keyboard moves the focus to the next line", async () => {
+  focusCartClient(threeItems.filter(item => item.variant_id !== "v-vase"));
+  await mount(withProviders(userAuth, React.createElement(CartPage), threeCatalog));
+  const remove = buttonByLabel("Remove Fixture vase");
+  await act(async () => { remove.focus(); });
+  assert.equal(document.activeElement === remove, true, "the Remove control holds the focus before the removal");
+  await click(remove);
+  await flush();
+  assert.equal(host.querySelectorAll(".bag-notice").length, 1, "the removal is still announced");
+  assert.equal(focusedLabel(), "Remove Fixture bowl", "the focus moves to the next Cart line");
+});
+
+test("removing the last Cart line with the keyboard moves the focus to the previous line", async () => {
+  focusCartClient(threeItems.filter(item => item.variant_id !== "v-bowl"));
+  await mount(withProviders(userAuth, React.createElement(CartPage), threeCatalog));
+  const remove = buttonByLabel("Remove Fixture bowl");
+  await act(async () => { remove.focus(); });
+  await click(remove);
+  await flush();
+  assert.equal(host.querySelectorAll(".bag-notice").length, 1, "the removal is still announced");
+  assert.equal(focusedLabel(), "Remove Fixture vase", "the focus moves to the previous Cart line");
+});
+
+test("removing the only Cart line with the keyboard moves the focus to the empty Cart heading", async () => {
+  focusCartClient([], [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 1 }]);
+  await mount(withProviders(userAuth, React.createElement(CartPage), threeCatalog));
+  const remove = buttonByLabel("Remove Fixture mug");
+  await act(async () => { remove.focus(); });
+  await click(remove);
+  await flush();
+  assert.equal(host.querySelectorAll(".bag-notice").length, 1, "the removal is still announced");
+  assert.match(host.textContent, /Your Cart is taking a slow day/);
+  assert.equal(document.activeElement === host.querySelector("[data-cart-empty-title]"), true, "the focus moves to the empty Cart heading");
+});
+
+// Prevention guard, not a historical defect detector.
+test("a Cart removal that did not hold the focus leaves the focus where it was", async () => {
+  focusCartClient(threeItems.filter(item => item.variant_id !== "v-vase"));
+  await mount(withProviders(userAuth, React.createElement(CartPage), threeCatalog));
+  const elsewhere = host.querySelector('a.back-link');
+  await act(async () => { elsewhere.focus(); });
+  await click(buttonByLabel("Remove Fixture vase"));
+  await flush();
+  assert.equal(document.activeElement === elsewhere, true, "the focus is not stolen by a removal the customer did not focus");
+});
+for(const result of ['success','rejection','moved','moved-away','unmounted']) test('deferred keyboard Cart removal: '+result,async()=>{
+  const change=deferred();
+  const calls=bagClient(name=>name==='load_variant_cart'?Promise.resolve({data:{id:'cart-1',items:threeItems},error:null}):change.promise);
+  await mount(withProviders(userAuth,React.createElement(CartPage),threeCatalog));
+  const remove=buttonByLabel('Remove Fixture vase');
+  await act(async()=>remove.focus());
+  await click(remove);
+  assert.equal(document.activeElement,remove,'pending removal retains keyboard focus');
+  assert.equal(remove.disabled,false);
+  assert.equal(remove.getAttribute('aria-disabled'),'true');
+  await click(remove);
+  assert.equal(calls.filter(call=>call.name==='change_variant_cart').length,1,'repeat activation blocked');
+  const elsewhere=host.querySelector('a.back-link');
+  if(result==='moved' || result==='moved-away') await act(async()=>elsewhere.focus());
+  if(result==='moved-away') elsewhere.blur();
+  if(result==='unmounted') await act(async()=>root.render(React.createElement('button',{id:'other'},'Other route')));
+  await settle(change,result==='rejection'?{data:null,error:{code:'42501',message:'fixture rejection'}}:{data:{id:'cart-1',items:threeItems.filter(item=>item.variant_id!=='v-vase')},error:null});
+  await flush();
+  if(result==='success') assert.equal(focusedLabel(),'Remove Fixture bowl');
+  if(result==='rejection'){assert.equal(document.activeElement,remove);assert.equal(remove.getAttribute('aria-disabled'),'false');assert.doesNotMatch(host.textContent,/Removed Fixture vase from/);}
+  if(result==='moved') assert.equal(document.activeElement,elsewhere,'completion respects moved focus');
+  if(result==='moved-away') assert.equal(document.activeElement,document.body,'a later loss of the chosen focus does not revive the removal request');
+  if(result==='unmounted') assert.equal(host.querySelector('[data-cart-remove]'),null);
 });

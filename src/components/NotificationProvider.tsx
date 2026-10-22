@@ -31,26 +31,30 @@ function focusPageIfNoticeHasFocus() {
 }
 
 /** A notification together with the route and the session that created it. */
-type ActiveNotification = { message: BagNoticeMessage; path: string; owner: string | null };
+type ActiveNotification = { message: BagNoticeMessage; path: string; owner: string | null; generation: number };
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   // A notification can carry customer-specific information, so it belongs to the
   // authenticated session that created it. The owner is taken from the trusted
   // auth context above this provider, never from the caller.
-  const owner = useAuth().session?.user.id ?? null;
+  const { session, sessionGeneration } = useAuth();
+  const owner = session?.user.id ?? null;
   const [active, setActive] = useState<ActiveNotification | null>(null);
   const activeRef = useRef<ActiveNotification | null>(null);
   const nextId = useRef(0);
   const previousPath = useRef(pathname);
   const previousOwner = useRef(owner);
-  // The route the customer is on. It is written during the commit, before any
-  // route can announce itself, so a notifier captured on an earlier route can
+  // The route the customer is on and the authentication lifetime it belongs to.
+  // Both are written during the commit, before any route can announce itself, so
+  // a notifier captured on an earlier route or in an earlier sign-in lifetime can
   // be recognised as stale at the moment it is called.
   const currentPath = useRef(pathname);
+  const currentGeneration = useRef(sessionGeneration);
   useInsertionEffect(() => {
     currentPath.current = pathname;
-  }, [pathname]);
+    currentGeneration.current = sessionGeneration;
+  }, [pathname, sessionGeneration]);
 
   const dismiss = useCallback((id?: NotificationId) => {
     const current = activeRef.current;
@@ -79,6 +83,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     // would bring that message back the next time the same pathname becomes
     // current again.
     if (currentPath.current !== pathname) return 0;
+    // A notifier retained from an earlier sign-in lifetime is stale as well, even
+    // when the customer id is unchanged. It must not replace the current
+    // customer's notification, and it must not publish into a later lifetime.
+    if (currentGeneration.current !== sessionGeneration) return 0;
     const message = input.message.trim();
     if (!message) return 0;
 
@@ -101,17 +109,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       },
       path: pathname,
       owner,
+      generation: sessionGeneration,
     };
     activeRef.current = next;
     setActive(next);
     return next.message.id;
-  }, [pathname, owner]);
+  }, [pathname, owner, sessionGeneration]);
 
   // A notification belongs to the route and to the session that created it.
   // The render guard keeps the previous route's toast out of the new route's
   // first committed render, and keeps another customer's toast out of the
   // first committed render of a new session.
-  const visible = active && active.path === pathname && active.owner === owner ? active.message : null;
+  const visible = active && active.path === pathname && active.owner === owner && active.generation === sessionGeneration ? active.message : null;
 
   useEffect(() => {
     if (previousPath.current === pathname) return;
@@ -128,12 +137,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // it can neither be read in the new session nor come back if that customer
   // returns later.
   useEffect(() => {
-    if (previousOwner.current === owner) return;
+    if (previousOwner.current === owner && (!activeRef.current || activeRef.current.generation === sessionGeneration)) return;
     previousOwner.current = owner;
     const current = activeRef.current;
-    if (!current || current.owner === owner) return;
+    if (!current || (current.owner === owner && current.generation === sessionGeneration)) return;
     clearActive();
-  }, [owner, clearActive]);
+  }, [owner, sessionGeneration, clearActive]);
 
   // The expiry carries the notification id, so a timer that was already queued
   // when a newer notification replaced this one can never dismiss it.

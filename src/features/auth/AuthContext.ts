@@ -9,7 +9,7 @@ import type { Session } from "@supabase/supabase-js";
  */
 export type SignOutResult = { ok: true } | { ok: false; message: string };
 
-export type AuthState = { loading: boolean; session: Session | null; error: string | null; signIn: (adminReturnTo?: string) => Promise<void>; signOut: () => Promise<SignOutResult> };
+export type AuthState = { loading: boolean; session: Session | null; error: string | null; signIn: (adminReturnTo?: string) => Promise<void>; signOut: () => Promise<SignOutResult>; sessionGeneration: number };
 
 /** What a signed-in customer surface needs to render and start a sign-out. */
 export type CustomerSignOut = {
@@ -79,5 +79,8 @@ export const AuthContext = createContext<AuthState & { signOutController: SignOu
   signIn: async () => {},
   signOut: async () => ({ ok: true }),
   signOutController: createSignOutController(async () => ({ ok: true })),
+  // A new sign-in lifetime starts here. The same customer can sign in again
+  // later, so the customer id alone cannot identify a lifetime.
+  sessionGeneration: 0,
 });
 export const useAuth = () => useContext(AuthContext);
