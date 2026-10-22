@@ -6,7 +6,7 @@ import { deliveryConfig } from "../../config/fulfilment";
 function ContactLink() { return <a href={`mailto:${customerContent.contactEmail}`}>{customerContent.contactEmail}</a>; }
 
 export function DeliveryPickupPage() {
-  return <ContentPage title="Delivery & Pickup" intro="Choose the arrangement that fits your order, with clear details before you place it.">
+  return <ContentPage title="Delivery & Pickup" intro="Choose the arrangement that fits your order, with clear details before you place it." trail={[{ label: 'Shop', to: '/' }, { label: 'Help & Contact', to: '/help' }]}>
     <section><h2>Supported Freetown delivery areas</h2><p>Delivery is available for supported areas in Freetown. At checkout, choose the supported area that matches your address. The delivery fee is derived from that selection and included in the displayed total.</p><ul>{deliveryConfig.zones.filter(zone => zone.active).map(zone => <li key={zone.id}>{zone.coverage}</li>)}</ul><p>These area descriptions are provisional delivery options, not precise mapped boundaries. If you are unsure which area applies, contact us before placing your order.</p></section>
     <section><h2>Free pickup in Lumley</h2><p>Pickup in {deliveryConfig.pickupLocation} is free. Fulfilment arrangements and pickup readiness are confirmed separately. Placing an order does not mean it is ready to collect.</p></section>
     <section><h2>Your contact and delivery details</h2><p>Provide an accurate name, contact number and email. For delivery, include your street address or landmark, area and city, plus any useful delivery instructions. Check these details before placing your order.</p></section>
@@ -16,7 +16,7 @@ export function DeliveryPickupPage() {
 }
 
 export function ReturnsRefundsPage() {
-  return <ContentPage title="Returns & Refunds" intro="Tell us what happened so your request can be reviewed in the context of your order.">
+  return <ContentPage title="Returns & Refunds" intro="Tell us what happened so your request can be reviewed in the context of your order." trail={[{ label: 'Shop', to: '/' }, { label: 'Help & Contact', to: '/help' }]}>
     <section><h2>Requesting an eligible return</h2><p>You have <strong>7 calendar days from receipt to request an eligible return</strong>. This is a return-request window, not an automatic refund guarantee. Eligibility is reviewed before a return is confirmed.</p><p>The item should generally be unused, undamaged and in its original condition, with original packaging where applicable.</p></section>
     <section><h2>Damaged, defective or incorrect items</h2><p>If an item arrives damaged, is defective or differs from what you ordered, report the problem with your order reference and a description. Supporting information or photos may be requested to help review it.</p></section>
     <section><h2>How to make a request</h2><p>Email <ContactLink /> with your order reference, the item and your reason for requesting a return. Please wait for confirmation and return arrangements before sending an item back.</p></section>
@@ -25,7 +25,7 @@ export function ReturnsRefundsPage() {
 }
 
 export function PrivacyPage() {
-  return <ContentPage title="Privacy Policy" intro="How information is used in the current Lumé House application.">
+  return <ContentPage title="Privacy Policy" intro="How information is used in the current Lumé House application." trail={[{ label: 'Shop', to: '/' }]}>
     <section><h2>Signing in with Google</h2><p>Lumé House uses Google sign-in through Supabase Auth. Supabase manages the application identity and session. Lumé House does not manage a password for these Google accounts.</p></section>
     <section><h2>Optional profile information</h2><p>You can save a name, contact phone and default street address, area and city in your profile. These details can prefill checkout. Changes made at checkout apply to that order and do not silently update your profile.</p></section>
     <section><h2>Your Cart</h2><p>Guest item choices and quantities are kept in this browser tab’s session storage. When signed in, your Cart is saved with your account in Supabase. Guest choices are combined with the account Cart when you sign in.</p></section>
@@ -36,7 +36,7 @@ export function PrivacyPage() {
 }
 
 export function TermsPage() {
-  return <ContentPage title="Terms & Conditions" intro="Guidance for using the current Lumé House experience and understanding an order.">
+  return <ContentPage title="Terms & Conditions" intro="Guidance for using the current Lumé House experience and understanding an order." trail={[{ label: 'Shop', to: '/' }]}>
     <section><h2>Use of Lumé House</h2><p>Lumé House is currently a portfolio ecommerce product by Naj Builds. Use the application responsibly and provide accurate information when placing an order or contacting us.</p></section>
     <section><h2>Accounts</h2><p>Accounts use Google sign-in through Supabase. Use your own account and keep your Google account secure. Lumé House does not manage a password for these accounts.</p></section>
     <section><h2>Product information</h2><p>Review the description, imagery and details shown for each product. Styling props in editorial imagery are not included unless the product information says they are.</p></section>

@@ -74,3 +74,11 @@ input[aria-invalid="true"] { border-color: #9b4037; }
  .ui-confirm-dialog button { min-height: 44px; }
  .admin-workspace-header { align-items: flex-start; flex-wrap: wrap; }
 }
+
+/* Breadcrumbs wrap within the page, including uninterrupted product names. */
+.breadcrumb-list { display: flex; flex-wrap: wrap; align-items: center; list-style: none; padding: 0; margin: 0 0 .75rem; font-size: .875rem; color: var(--ui-muted); text-align: left; }
+.breadcrumb-list li { display: flex; align-items: center; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.breadcrumb-list a { display: inline-flex; align-items: center; min-height: 44px; min-width: 0; text-decoration: underline; text-underline-offset: .2em; }
+.breadcrumb-separator { flex: none; margin-inline: .5rem; }
+.breadcrumb-list [aria-current="page"] { color: var(--color-ink); }
+.empty-state > nav[aria-label="Breadcrumb"] { width: 100%; }

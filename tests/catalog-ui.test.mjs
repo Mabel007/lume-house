@@ -5,12 +5,83 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { createServer } from "vite";
 import { readFileSync } from "node:fs";
+import { JSDOM } from "jsdom";
 
 let server;
 let ProductContext, CartContext, AuthContext, ShopPage, CartPage, CheckoutPage;
 let contentPages, routeTitle, aboutFragmentTarget;
 let Layout, SiteFooter, AccountExperience, accountInitials, ProductDetails, ProductDetailsPage;
 let NotificationProvider;
+let PageHeader;
+
+function checkBreadcrumbs(html, ancestors, current) {
+  const dom = new JSDOM(html);
+  try {
+    const document = dom.window.document;
+    const nav = document.querySelector('nav[aria-label="Breadcrumb"]');
+    assert.ok(nav, "breadcrumb landmark exists");
+    const list = nav.firstElementChild;
+    assert.equal(list.tagName, "OL");
+    assert.equal(list.children.length, ancestors.length + 1);
+    assert.ok([...list.children].every(item => item.tagName === "LI"));
+    assert.deepEqual([...nav.querySelectorAll('a')].map(link => [link.textContent, link.getAttribute('href')]), ancestors);
+    const active = nav.querySelector('[aria-current="page"]');
+    assert.equal(nav.querySelectorAll('[aria-current]').length, 1);
+    assert.equal(active.tagName, "SPAN");
+    assert.equal(active.textContent, current);
+    assert.equal(active.closest('a'), null);
+    assert.equal(active.closest('li'), list.lastElementChild);
+    assert.equal(active.getAttribute('tabindex'), null);
+    assert.ok([...nav.querySelectorAll('a')].every(link => link.tabIndex === 0));
+    assert.ok([...nav.querySelectorAll('.breadcrumb-separator')].every(separator => separator.getAttribute('aria-hidden') === 'true'));
+    assert.equal(document.querySelectorAll('h1').length, 1);
+  } finally { dom.window.close(); }
+}
+
+test("Cart breadcrumbs preserve Shop and a single heading in every Cart and catalog state", () => {
+  const ready = { status: 'ready', products: [fixture] };
+  for (const [status, state, cart] of [
+    ['loading', ready, items], ['checking-out', ready, items],
+    ['error', ready, items], ['error', {status:'error'}, items],
+    ['ready', ready, []], ['ready', ready, items], ['saving', ready, items],
+    ['ready', {status:'loading'}, items], ['ready', {status:'error'}, items],
+  ]) {
+    const html = renderToStaticMarkup(React.createElement(MemoryRouter, null,
+      React.createElement(ProductContext.Provider, {value:{state, refresh(){}}},
+        React.createElement(CartContext.Provider, {value:{items:cart, status, dispatch:async()=>({kind:'confirmed',items:[]})}},
+          React.createElement(NotificationProvider, null, React.createElement(CartPage))))));
+    checkBreadcrumbs(html, [['Shop', '/']], cart.length ? 'Your Cart.' : 'Your Cart');
+    assert.doesNotMatch(html, /Continue shopping/);
+    if (!cart.length) assert.match(html, /<h1 tabindex="-1" data-cart-empty-title="true">Your Cart is taking a slow day\.<\/h1>/);
+  }
+});
+
+test("Product Details keeps Shop ancestry and one heading for long names and unavailable states", () => {
+  const name = 'Considered hand-finished everyday piece ' + 'UninterruptedProductName'.repeat(12);
+  checkBreadcrumbs(renderDetails({...fixture, name}), [['Shop', '/']], name);
+  for (const state of [{status:'loading'}, {status:'error'}, {status:'ready',products:[]}]) {
+    const html = renderToStaticMarkup(React.createElement(MemoryRouter, {initialEntries:['/products/missing']},
+      React.createElement(ProductContext.Provider, {value:{state,refresh(){}}},
+        React.createElement(Routes, null, React.createElement(Route, {path:'/products/:productId',element:React.createElement(ProductDetailsPage)})))));
+    checkBreadcrumbs(html, [['Shop','/']], state.status === 'ready' ? 'This piece is unavailable.' : 'Product details.');
+    assert.doesNotMatch(html, /Back to the collection/);
+  }
+});
+
+test("Help and policy breadcrumbs preserve nested ancestors without nesting legal or About pages under Help", () => {
+  for (const [path, title] of [['/help','Help & Contact'], ['/help/delivery-pickup','Delivery & Pickup'], ['/help/returns-refunds','Returns & Refunds'], ['/privacy','Privacy Policy'], ['/terms','Terms & Conditions']]) {
+    const ancestors = [['Shop','/']];
+    if (path.startsWith('/help/')) ancestors.push(['Help & Contact','/help']);
+    checkBreadcrumbs(renderContent(path), ancestors, title);
+  }
+  assert.doesNotMatch(renderContent('/about'), /aria-label="Breadcrumb"/);
+});
+
+test("legacy PageHeader breadcrumbs retain their parent link and top-level headers omit breadcrumb navigation", () => {
+  const header = props => renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(PageHeader, props)));
+  checkBreadcrumbs(header({title:'Checkout',breadcrumb:{label:'Cart',to:'/cart'}}), [['Cart','/cart']], 'Checkout');
+  assert.doesNotMatch(header({title:'Shop'}), /aria-label="Breadcrumb"/);
+});
 before(async () => {
   server = await createServer({
     server: { middlewareMode: true, hmr: false },
@@ -50,6 +121,7 @@ before(async () => {
   ({ SiteFooter } = await server.ssrLoadModule("/src/components/SiteFooter.tsx"));
   ({ AccountExperience } = await server.ssrLoadModule("/src/features/account/AccountExperience.tsx"));
   ({ accountInitials } = await server.ssrLoadModule("/src/features/account/accountInitials.ts"));
+  ({ PageHeader } = await server.ssrLoadModule("/src/components/PageHeader.tsx"));
 });
 
 function renderContent(path) {
