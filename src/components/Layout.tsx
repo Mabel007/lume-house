@@ -11,6 +11,7 @@ import { useAuth } from "../features/auth/AuthContext";
 import { accountInitials } from "../features/account/accountInitials";
 import { accountDisplayName } from "../features/account/accountIdentity";
 import { AccountMenu } from "./AccountMenu";
+import { CurrencySelector } from "../features/currency/CurrencySelector";
 import { useCustomerSignOut } from "../features/auth/useCustomerSignOut";
 
 export function Layout() {
@@ -76,6 +77,7 @@ export function Layout() {
           ) : (
             <NavLink to="/account">Account</NavLink>
           )}
+          <CurrencySelector />
           <NavLink to="/cart" className="cart-link" aria-label={`Cart (${count})`}>
             <BagIcon />
             <span>Cart</span>

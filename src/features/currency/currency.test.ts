@@ -70,6 +70,8 @@ test('isValidRate validates positive finite numbers', () => {
 test('parseFrankfurterResponse parses the array form', () => {
   const raw = [
     { date: '2026-10-22', base: 'SLE', quote: 'GNF', rate: 552.74 },
+    { date: '2026-10-22', base: 'SLE', quote: 'GHS', rate: 0.73113 },
+    { date: '2026-10-22', base: 'SLE', quote: 'NGN', rate: 83.54 },
     { date: '2026-10-22', base: 'SLE', quote: 'USD', rate: 0.06266 },
   ];
   const parsed = parseFrankfurterResponse(raw);
