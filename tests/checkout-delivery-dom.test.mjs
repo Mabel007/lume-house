@@ -1,3 +1,4 @@
+let CurrencyProvider;
 import assert from 'node:assert/strict';
 import {test,before,after,afterEach} from 'node:test';
 import React,{act} from 'react';
@@ -19,6 +20,7 @@ let CheckoutPage, ProductContext, CartContext, AuthContext;
 
 before(async()=>{
   server=await createServer({configFile:false,envDir:false,server:{middlewareMode:true,hmr:false},plugins:[{name:'isolated-checkout-delivery-client',enforce:'pre',load(id){if(id.replaceAll('\\','/').endsWith('/src/lib/supabase/client.ts'))return 'export function getSupabaseClient(){return globalThis.__checkoutDeliveryClient;}';}}]});
+  ({ CurrencyProvider } = await server.ssrLoadModule('/src/features/currency/CurrencyProvider.tsx'));
   ({CheckoutPage}=await server.ssrLoadModule('/src/features/checkout/CheckoutPage.tsx'));
   ({ProductContext}=await server.ssrLoadModule('/src/features/products/ProductContext.ts'));
   ({CartContext}=await server.ssrLoadModule('/src/features/cart/CartContext.ts'));
@@ -41,7 +43,7 @@ async function mount({authSession=null,cartStatus='ready',items=[{productId:fixt
   globalThis.__checkoutDeliveryClient=client??fakeClient();
   if(root){await act(async()=>root.unmount());root=undefined;host.replaceChildren();}
   root=createRoot(host);
-  await act(async()=>root.render(
+  await act(async()=>renderCurrency(
     React.createElement(MemoryRouter,null,
       React.createElement(AuthContext.Provider,{value:{loading:false,session:authSession,error:null,signIn:async()=>{},signOut:async()=>{}}},
         React.createElement(ProductContext.Provider,{value:{state:{status:'ready',products},refresh:refreshProducts}},
@@ -430,3 +432,5 @@ test('a repeated submit while placement is in flight does not place a second ord
   assert.equal(calls.length,1);
   await act(async()=>resolveInvoke({data:null,error:null}));
 });
+
+function renderCurrency(element) { root.render(React.createElement(CurrencyProvider, null, element)); }

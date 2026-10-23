@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test, before, after, mock } from 'node:test';
+before(() => mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-23T12:00:00Z') }));
+after(() => mock.timers.reset());
 
 // Minimal localStorage polyfill for node test environment.
 const store: Record<string, string> = {};
@@ -24,6 +26,9 @@ import {
   readCurrencyPreference,
   writeCurrencyPreference,
   loadRates,
+  loadRatesEntry,
+  isStale,
+  RATES_TIMEOUT_MS,
   clearRatesCache,
   decimalsFor,
   type RatesPayload,
@@ -189,4 +194,77 @@ test('decimalsFor uses 0 for GNF and 2 otherwise', () => {
   assert.equal(decimalsFor('USD'), 2);
   assert.equal(decimalsFor('GHS'), 2);
   assert.equal(decimalsFor('NGN'), 2);
+});
+
+
+test('every response row requires SLE, including mixed bases and missing base', () => {
+  const rows = Object.entries(samplePayload.rates).map(([quote, rate]) => ({base:'SLE', quote, rate, date:samplePayload.date}));
+  for (const base of ['USD', undefined, 'sle']) {
+    assert.equal(parseFrankfurterResponse(rows.map((row, i) => i === 2 ? {...row, base} : row)), null);
+  }
+  assert.equal(parseFrankfurterResponse([...rows, rows[0]]), null);
+});
+
+test('calendar, reference-age boundary, future date, mixed date and missing pair are rejected', () => {
+  const now = Date.parse('2026-10-23T00:00:00Z');
+  for (const date of ['2026-02-30', '2026-10-24', '2026-10-16', '2000-01-01']) {
+    assert.equal(parseRatesPayload({...samplePayload, date}, now), null);
+  }
+  assert.ok(parseRatesPayload({...samplePayload, date:'2026-10-17'}, now));
+  const rows = Object.entries(samplePayload.rates).map(([quote, rate]) => ({base:'SLE', quote, rate, date:samplePayload.date}));
+  assert.equal(parseFrankfurterResponse(rows.slice(1), now), null);
+  assert.equal(parseFrankfurterResponse(rows.map((r, i) => i ? r : {...r, date:'2026-10-21'}), now), null);
+});
+
+test('freshly fetched stale, future and wrong-base responses are neither returned nor cached', async () => {
+  for (const patch of [{date:'2000-01-01'}, {date:'2026-10-24'}, {base:'USD'}]) {
+    clearRatesCache();
+    const rows = Object.entries(samplePayload.rates).map(([quote, rate]) => ({base:'SLE', quote, rate, date:samplePayload.date, ...patch}));
+    assert.equal(await loadRates(async () => new Response(JSON.stringify(rows))), null);
+    assert.equal(localStorage.getItem(RATES_STORAGE_KEY), null);
+  }
+});
+
+test('cache hits retain original storedAt; future/corrupt/expired entries fall back safely', async () => {
+  const now = Date.now(), storedAt = now - RATES_TTL_MS + 1000;
+  localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify({storedAt, payload:samplePayload}));
+  const hit = await loadRatesEntry(async () => { throw Error('must use cache'); });
+  assert.equal(hit?.storedAt, storedAt);
+  assert.equal(isStale(samplePayload, storedAt, now + 1000), true);
+  for (const stamp of [now + 1, now - RATES_TTL_MS, -Infinity]) {
+    localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify({storedAt:stamp, payload:samplePayload}));
+    let calls = 0;
+    assert.equal(await loadRates(async () => { calls++; throw Error('offline'); }), null);
+    assert.equal(calls, 1);
+  }
+  clearRatesCache();
+});
+
+test('unsafe conversion output is omitted rather than throwing into a customer render', () => {
+  const huge = {...samplePayload, rates:{...samplePayload.rates, USD:Number.MAX_VALUE}};
+  for (const input of [Number.MAX_SAFE_INTEGER, NaN, Infinity, -1, 1.2]) {
+    assert.equal(estimateFor(input, 'USD', huge), null);
+  }
+});
+
+test('simultaneous callers share one request', async () => {
+  clearRatesCache();
+  let calls = 0;
+  const rows = Object.entries(samplePayload.rates).map(([quote, rate]) => ({base:'SLE', quote, rate, date:samplePayload.date}));
+  const fetcher = async () => { calls++; return new Response(JSON.stringify(rows)); };
+  const values = await Promise.all([loadRates(fetcher), loadRates(fetcher), loadRates(fetcher)]);
+  assert.equal(calls, 1);
+  assert.ok(values.every(Boolean));
+  clearRatesCache();
+});
+
+test('a hanging fetch times out and releases inFlight without blocking subsequent requests', async t => {
+  clearRatesCache();
+  t.mock.timers.enable({apis:['setTimeout']});
+  const request: { signal?: AbortSignal | null } = {};
+  const pending = loadRates(async (_url, options) => { request.signal = options?.signal; return new Promise(() => {}); });
+  t.mock.timers.tick(RATES_TIMEOUT_MS);
+  assert.equal(await pending, null);
+  assert.equal(request.signal?.aborted, true);
+  assert.equal(await loadRates(async () => new Response('', {status:503})), null);
 });

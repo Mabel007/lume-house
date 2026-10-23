@@ -1,3 +1,4 @@
+import { CurrencyEstimate } from '../currency/CurrencySelector';
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { useCart } from "./CartContext";
@@ -112,7 +113,7 @@ export function CartPage() {
                 <p className="product-category">{product.category}</p>
                 <h2><Link to={`/products/${encodeURIComponent(product.id)}`}>{product.name}</Link></h2>
                 {variant && variantLabel(variant) && <p>{variantLabel(variant)}</p>}
-                <p>{formatMoney(product.price)} each</p>
+                <p>{formatMoney(product.price)} each<CurrencyEstimate minorUnits={product.price} /></p>
                 <div className="quantity-actions">
                   <div className="quantity-control">
                     <button
@@ -179,7 +180,7 @@ export function CartPage() {
                   </button>
                 </div>
               </div>
-              <strong className="line-price">{formatMoney(lineTotal)}</strong>
+              <strong className="line-price">{formatMoney(lineTotal)}<CurrencyEstimate minorUnits={lineTotal} /></strong>
             </article>
           );})}
         </div>
@@ -187,7 +188,7 @@ export function CartPage() {
           <h2>Order summary</h2>
           {lines.length > 0 ? (
             <>
-              <OrderSummary subtotal={subtotal} />
+              <OrderSummary subtotal={subtotal} estimates />
               {unavailable.length === 0 ? (
                 <Link to="/checkout" className="button w-full">
                   Continue to checkout <span aria-hidden="true">→</span>

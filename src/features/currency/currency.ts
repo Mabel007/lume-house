@@ -47,13 +47,14 @@ function isRealCalendarDate(value: unknown): value is string {
   );
 }
 
-export function parseRatesPayload(raw: unknown): RatesPayload | null {
+export function parseRatesPayload(raw: unknown, now = Date.now()): RatesPayload | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
   // 1. Exact response base SLE.
   if (o.base !== 'SLE') return null;
   // 3. Real calendar dates.
   if (!isRealCalendarDate(o.date)) return null;
+  if (!Number.isFinite(now) || Date.parse(o.date) > now || now - Date.parse(o.date) >= MAX_REFERENCE_AGE_MS) return null;
   // 2. Supported quote currency codes; 6. explicit completeness policy:
   //    every supported pair must be present and valid, otherwise reject.
   if (!o.rates || typeof o.rates !== 'object' || Array.isArray(o.rates)) return null;
@@ -101,8 +102,12 @@ export function estimateFor(
   const rate = payload.rates[currency];
   if (!isValidRate(rate)) return null;
   const decimals = decimalsFor(currency);
-  const converted = convertMinorUnits(minorUnits, rate, decimals);
-  return formatEstimateAmount(converted, currency, decimals);
+  try {
+    const converted = convertMinorUnits(minorUnits, rate, decimals);
+    return formatEstimateAmount(converted, currency, decimals);
+  } catch {
+    return null;
+  }
 }
 
 export function isSupportedCurrency(value: unknown): value is SelectedCurrency {
@@ -128,8 +133,8 @@ export function writeCurrencyPreference(currency: SelectedCurrency): void {
 }
 
 // Parse the Frankfurter v2 array response into a RatesPayload.
-// Array items carry quote/rate/date but no base; SLE is asserted by the caller.
-export function parseFrankfurterResponse(raw: unknown): RatesPayload | null {
+// Every row must identify the requested base; never relabel another base.
+export function parseFrankfurterResponse(raw: unknown, now = Date.now()): RatesPayload | null {
   if (!Array.isArray(raw)) return null;
   if (raw.length === 0) return null;
   const rates: Record<string, number> = {};
@@ -137,8 +142,10 @@ export function parseFrankfurterResponse(raw: unknown): RatesPayload | null {
   for (const item of raw) {
     if (!item || typeof item !== 'object') return null;
     const o = item as Record<string, unknown>;
+    if (o.base !== INTERNAL_CURRENCY) return null;
     if (typeof o.quote !== 'string') return null;
     if (!SUPPORTED_ESTIMATE_CURRENCIES.includes(o.quote as EstimateCurrency)) return null;
+    if (Object.hasOwn(rates, o.quote)) return null;
     if (!isValidRate(o.rate)) return null;
     if (!isRealCalendarDate(o.date)) return null;
     if (date && date !== o.date) return null;
@@ -146,62 +153,68 @@ export function parseFrankfurterResponse(raw: unknown): RatesPayload | null {
     rates[o.quote] = o.rate as number;
   }
   if (!date) return null;
-  return parseRatesPayload({ base: 'SLE', date, rates });
+  return parseRatesPayload({ base: 'SLE', date, rates }, now);
 }
 
-let inFlight: Promise<RatesPayload | null> | null = null;
+let inFlight: Promise<RatesCacheEntry | null> | null = null;
+export const RATES_TIMEOUT_MS = 8000;
 
-export async function loadRates(fetchImpl: typeof fetch = fetch, now: number = Date.now()): Promise<RatesPayload | null> {
-  // Cache check: finite, nonfuture storedAt, valid payload, within TTL, fresh reference date.
+export async function loadRatesEntry(fetchImpl: typeof fetch = fetch, clock: () => number = Date.now): Promise<RatesCacheEntry | null> {
+  const now = clock();
   try {
     const cached = localStorage.getItem(RATES_STORAGE_KEY);
     if (cached) {
       const entry = JSON.parse(cached) as RatesCacheEntry;
-      if (
-        entry &&
-        typeof entry.storedAt === 'number' &&
-        Number.isFinite(entry.storedAt) &&
-        entry.storedAt <= now &&
-        now - entry.storedAt < RATES_TTL_MS
-      ) {
-        const payload = parseRatesPayload(entry.payload);
-        if (payload && !isStale(payload, entry.storedAt, now)) return payload;
+      if (entry && typeof entry.storedAt === 'number' && Number.isFinite(entry.storedAt) && entry.storedAt <= now && now - entry.storedAt < RATES_TTL_MS) {
+        const payload = parseRatesPayload(entry.payload, now);
+        if (payload && !isStale(payload, entry.storedAt, now)) return { storedAt: entry.storedAt, payload };
       }
     }
-  } catch {
-    // ignore corrupt cache
-  }
-
+  } catch { /* unavailable storage or corrupt cache */ }
   if (inFlight) return inFlight;
-
   inFlight = (async () => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const res = await fetchImpl(RATES_URL);
-      if (!res.ok) return null;
-      const json = await res.json();
-      const payload = parseFrankfurterResponse(json);
+      const json = await Promise.race([
+        (async () => {
+          const res = await fetchImpl(RATES_URL, { signal: controller.signal });
+          if (!res.ok) throw new Error('Reference rates unavailable');
+          return res.json() as Promise<unknown>;
+        })(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => { controller.abort(); reject(new Error('Reference rate timeout')); }, RATES_TIMEOUT_MS);
+        }),
+      ]);
+      const storedAt = clock();
+      const payload = parseFrankfurterResponse(json, storedAt);
       if (!payload) return null;
-      try {
-        const entry: RatesCacheEntry = { storedAt: now, payload };
-        localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(entry));
-      } catch {
-        // ignore
-      }
-      return payload;
+      const entry: RatesCacheEntry = { storedAt, payload };
+      try { localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(entry)); } catch { /* optional cache */ }
+      return entry;
     } catch {
       return null;
     } finally {
+      clearTimeout(timer);
       inFlight = null;
     }
   })();
-
   return inFlight;
+}
+
+export async function loadRates(fetchImpl: typeof fetch = fetch, now?: number): Promise<RatesPayload | null> {
+  return (await loadRatesEntry(fetchImpl, now === undefined ? Date.now : () => now))?.payload ?? null;
+}
+
+export function rateExpiresAt(entry: RatesCacheEntry): number {
+  return Math.min(entry.storedAt + RATES_TTL_MS, Date.parse(entry.payload.date) + MAX_REFERENCE_AGE_MS);
 }
 
 // Freshness policy: an indefinitely open tab must not show an expired estimate
 // as current. Stale when cache is missing/expired or the reference date is too
 // old or in the future. Cache-write time (storedAt) is never the rate date.
 export function isStale(payload: RatesPayload, fetchedAt: number | null, now: number): boolean {
+  if (!Number.isFinite(now) || !isRealCalendarDate(payload.date)) return true;
   if (fetchedAt == null || !Number.isFinite(fetchedAt) || fetchedAt > now) return true;
   if (now - fetchedAt >= RATES_TTL_MS) return true;
   const reference = Date.parse(payload.date);

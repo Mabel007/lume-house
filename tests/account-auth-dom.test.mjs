@@ -1,3 +1,4 @@
+let CurrencyProvider;
 import assert from 'node:assert/strict';
 import {test,before,after,afterEach} from 'node:test';
 import React,{act} from 'react';
@@ -19,6 +20,7 @@ before(async()=>{
   server=await createServer({root:process.cwd(),configFile:false,envDir:false,server:{middlewareMode:true,hmr:false},plugins:[{name:'account-auth-fixture',enforce:'pre',load(id){
     if(id.replaceAll('\\','/').endsWith('/src/lib/supabase/client.ts'))return 'export function getSupabaseClient(){return globalThis.__accountAuthClient;}';
   }}]});
+  ({ CurrencyProvider } = await server.ssrLoadModule('/src/features/currency/CurrencyProvider.tsx'));
   ({AuthContext,useAuth}=await server.ssrLoadModule('/src/features/auth/AuthContext.ts'));
   ({createSignOutController}=await server.ssrLoadModule('/src/features/auth/AuthContext.ts'));
   ({ProductContext}=await server.ssrLoadModule('/src/features/products/ProductContext.ts'));
@@ -41,7 +43,7 @@ function fakeClient(){
   return {client,calls};
 }
 const flush=async()=>{await act(async()=>{await new Promise(resolve=>setTimeout(resolve,0));});};
-async function mount(path,value,element){root=createRoot(host);await act(async()=>root.render(React.createElement(MemoryRouter,{initialEntries:[path]},React.createElement(AuthContext.Provider,{value},React.createElement(NotificationProvider,null,element)))));}
+async function mount(path,value,element){root=createRoot(host);await act(async()=>renderCurrency(React.createElement(MemoryRouter,{initialEntries:[path]},React.createElement(AuthContext.Provider,{value},React.createElement(NotificationProvider,null,element)))));}
 // The context carries the shared single-in-flight sign-out controller. Harnesses
 // override `signOut` with a stub; deriving the controller from the effective
 // stub keeps them exercising the same guarantee the real AuthProvider provides.
@@ -61,7 +63,7 @@ test('sign-out swaps the signed-in account trigger for the guest Account link wi
               React.createElement(Route,{path:'*',element:React.createElement('h1',null,'Page')})))))));
   }
   root=createRoot(host);
-  await act(async()=>root.render(React.createElement(Harness)));
+  await act(async()=>renderCurrency(React.createElement(Harness)));
   const trigger=host.querySelector('header button[aria-haspopup="menu"]');
   assert.ok(trigger,'the signed-in header must expose a menu trigger button');
   assert.equal(trigger.getAttribute('aria-label'),'Account, signed in');
@@ -170,7 +172,7 @@ async function mountMenu({path='/',signOut=async()=>({ok:true})}={}){
               React.createElement(Route,{path:'*',element:React.createElement('h1',null,'Page')})))))));
   }
   root=createRoot(host);
-  await act(async()=>root.render(React.createElement(Harness)));
+  await act(async()=>renderCurrency(React.createElement(Harness)));
   return host.querySelector('header button[aria-haspopup="menu"]');
 }
 
@@ -342,7 +344,7 @@ async function mountAccountPage({signOut=async()=>({ok:true})}={}){
   }
   globalThis.__accountAuthClient=fakeClient().client;
   root=createRoot(host);
-  await act(async()=>root.render(React.createElement(Harness)));
+  await act(async()=>renderCurrency(React.createElement(Harness)));
   return host.querySelector('.account-session button.text-link');
 }
 
@@ -398,7 +400,7 @@ async function mountHeaderAndPage(signOut){
   }
   globalThis.__accountAuthClient=fakeClient().client;
   root=createRoot(host);
-  await act(async()=>root.render(React.createElement(Harness)));
+  await act(async()=>renderCurrency(React.createElement(Harness)));
   return {
     trigger:host.querySelector('header button[aria-haspopup="menu"]'),
     page:host.querySelector('.account-session button.text-link'),
@@ -502,7 +504,7 @@ test('signing out leaves the guest Cart untouched and clears no cart data',async
               React.createElement(Route,{path:'*',element:React.createElement(Probe)})))))));
   }
   root=createRoot(host);
-  await act(async()=>root.render(React.createElement(Harness)));
+  await act(async()=>renderCurrency(React.createElement(Harness)));
   // The Cart surface stays present and unchanged after sign-out; nothing clears it.
   assert.match(host.textContent,/Cart 0/);
   const trigger=host.querySelector('header button[aria-haspopup="menu"]');
@@ -534,7 +536,7 @@ test('the real AuthProvider preserves the session and reports failure when Supab
   let observed;
   function Probe(){observed=useAuth();return React.createElement('p',null,observed.session?'signed-in':'signed-out');}
   root=createRoot(host);
-  await act(async()=>root.render(React.createElement(AuthProvider,null,React.createElement(Probe))));
+  await act(async()=>renderCurrency(React.createElement(AuthProvider,null,React.createElement(Probe))));
   await act(async()=>{restoreSession({data:{session:signedInSession},error:null});});
   assert.equal(observed.session?.user.id,signedInSession.user.id,'the session must be restored before sign-out');
   let result;
@@ -559,7 +561,7 @@ test('the real AuthProvider clears the session only when Supabase confirms sign-
   let observed;
   function Probe(){observed=useAuth();return React.createElement('p',null,observed.session?'signed-in':'signed-out');}
   root=createRoot(host);
-  await act(async()=>root.render(React.createElement(AuthProvider,null,React.createElement(Probe))));
+  await act(async()=>renderCurrency(React.createElement(AuthProvider,null,React.createElement(Probe))));
   await act(async()=>{restoreSession({data:{session:signedInSession},error:null});});
   let result;
   await act(async()=>{result=await observed.signOut();});
@@ -653,7 +655,7 @@ function profileFixture({pending=null,loads={}}={}){
 }
 const sessionA={user:{id:'customer-a',email:'a@example.invalid'},access_token:'jwt-a'};
 const sessionB={user:{id:'customer-b',email:'b@example.invalid'},access_token:'jwt-b'};
-async function renderAccount(value,element){await act(async()=>root.render(React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(AuthContext.Provider,{value},React.createElement(NotificationProvider,null,element))))); }
+async function renderAccount(value,element){await act(async()=>renderCurrency(React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(AuthContext.Provider,{value},React.createElement(NotificationProvider,null,element))))); }
 const saveControl=()=>host.querySelector('.profile-actions button.button');
 const cancelControl=()=>[...host.querySelectorAll('button')].find(node=>node.textContent==='Cancel');
 const nameField=()=>host.querySelector('[name="full_name"]');
@@ -868,7 +870,7 @@ test('a valid save still announces exactly once under StrictMode',async()=>{
   const fixture=profileFixture();
   globalThis.__accountAuthClient=fixture.client;
   root=createRoot(host);
-  await act(async()=>{root.render(React.createElement(React.StrictMode,null,React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(NotificationProvider,null,React.createElement(AuthContext.Provider,{value:auth({session:sessionA})},React.createElement(AccountPage))))));await new Promise(resolve=>setTimeout(resolve,0));});
+  await act(async()=>{renderCurrency(React.createElement(React.StrictMode,null,React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(NotificationProvider,null,React.createElement(AuthContext.Provider,{value:auth({session:sessionA})},React.createElement(AccountPage))))));await new Promise(resolve=>setTimeout(resolve,0));});
   await flush();
   await act(async()=>{inputValue(nameField(),'Customer A saved');});
   await act(async()=>{saveControl().click();});
@@ -890,7 +892,7 @@ test('a save that completes after the identity update is scheduled never reaches
     return React.createElement(AuthContext.Provider,{value:auth({session})},React.createElement(NotificationProvider,null,React.createElement(CustomerAccount)));
   }
   root=createRoot(host);
-  await act(async()=>{root.render(React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(Harness)));await new Promise(resolve=>setTimeout(resolve,0));});
+  await act(async()=>{renderCurrency(React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(Harness)));await new Promise(resolve=>setTimeout(resolve,0));});
   await flush();
   await act(async()=>{inputValue(nameField(),'Customer A edited');});
   await act(async()=>{saveControl().click();});
@@ -919,7 +921,7 @@ test('a notification of one customer is never visible in another customer sessio
     return React.createElement(AuthContext.Provider,{value:auth({session})},React.createElement(NotificationProvider,null,React.createElement(CustomerAccount)));
   }
   root=createRoot(host);
-  await act(async()=>{root.render(React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(Harness)));await new Promise(resolve=>setTimeout(resolve,0));});
+  await act(async()=>{renderCurrency(React.createElement(MemoryRouter,{initialEntries:['/account']},React.createElement(Harness)));await new Promise(resolve=>setTimeout(resolve,0));});
   await flush();
   // The customer saves and the confirmation is visible on their own page.
   await act(async()=>{inputValue(nameField(),'Customer A saved');});
@@ -942,7 +944,7 @@ for (const initial of [null, sessionA]) test('real AuthProvider notification lif
   globalThis.__accountAuthClient={auth:{onAuthStateChange(callback){emit=callback;return {data:{subscription:{unsubscribe(){}}}};},getSession:async()=>({data:{session:initial},error:null})}};
   function Probe(){observed=useAuth();notify=useNotifications().notify;return null;}
   root=createRoot(host);
-  await act(async()=>root.render(React.createElement(MemoryRouter,null,React.createElement(AuthProvider,null,React.createElement(NotificationProvider,null,React.createElement(Probe))))));
+  await act(async()=>renderCurrency(React.createElement(MemoryRouter,null,React.createElement(AuthProvider,null,React.createElement(NotificationProvider,null,React.createElement(Probe))))));
   await flush();
   assert.equal(observed.session?.user.id,initial?.user.id);
   const send=async(event,session)=>{await act(async()=>emit(event,session));};
@@ -972,3 +974,5 @@ for (const initial of [null, sessionA]) test('real AuthProvider notification lif
   assert.match(host.textContent,/after batch/);
   assert.doesNotMatch(host.textContent,/obsolete batch/);
 });
+
+function renderCurrency(element) { root.render(React.createElement(CurrencyProvider, null, element)); }

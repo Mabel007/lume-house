@@ -1,101 +1,71 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import {
-  loadRates,
-  readCurrencyPreference,
-  writeCurrencyPreference,
-  estimateFor,
-  isStale,
-  type RatesPayload,
-  type SelectedCurrency,
-  PRIMARY_CURRENCY,
-} from './currency';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { CurrencyContext } from './CurrencyContext';
+import { estimateFor, isStale, loadRatesEntry, rateExpiresAt, readCurrencyPreference, writeCurrencyPreference, type RatesCacheEntry, type SelectedCurrency } from './currency';
 
-export interface CurrencyContextValue {
-  currency: SelectedCurrency;
-  setCurrency: (next: SelectedCurrency) => void;
-  estimate: (minorUnits: number) => string | null;
-  payload: RatesPayload | null;
-  loading: boolean;
-  failed: boolean;
-}
-
-const CurrencyContext = createContext<CurrencyContextValue | null>(null);
-
-// Revalidation interval for an indefinitely open tab: a rate shown hours after
-// it was fetched must not be presented as current without a freshness check.
-const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+const REVALIDATE_MS = 15 * 60 * 1000;
 
 export function CurrencyProvider({ children }: { children: ReactNode }) {
-  const [currency, setCurrencyState] = useState<SelectedCurrency>(() => readCurrencyPreference());
-  const [payload, setPayload] = useState<RatesPayload | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  const refresh = useCallback((): Promise<void> => {
-    const now = Date.now();
-    if (payload && !isStale(payload, fetchedAt, now)) return Promise.resolve();
-    setLoading(true);
-    setFailed(false);
-    return loadRates().then((p) => {
-      setLoading(false);
-      if (p) {
-        setPayload(p);
-        setFetchedAt(Date.now());
-        setFailed(false);
-      } else {
-        setPayload(null);
-        setFetchedAt(null);
-        setFailed(true);
-      }
-    });
-  }, [payload, fetchedAt]);
-
-  // Load on mount (preference may be non-NLE) and revalidate when stale so an
-  // indefinitely open tab never presents an expired estimate as current.
+  const [currency, setSelection] = useState<SelectedCurrency>(readCurrencyPreference);
+  const [result, setResult] = useState<{ entry: RatesCacheEntry | null } | null>(null);
+  const [now, setNow] = useState(Date.now);
+  const nextAttempt = useRef(0);
+  const request = useRef<Promise<RatesCacheEntry | null> | null>(null);
+  const mounted = useRef(false);
   useEffect(() => {
-    if (currency === PRIMARY_CURRENCY) {
-      setPayload(null);
-      setFetchedAt(null);
-      setFailed(false);
-      setLoading(false);
-      return;
-    }
-    void refresh();
-  }, [currency, refresh]);
-
-  // Periodic freshness revalidation while a non-primary currency is selected.
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const enabled = currency !== 'NLE';
   useEffect(() => {
-    if (currency === PRIMARY_CURRENCY) return undefined;
-    const id = setInterval(() => {
+    if (!enabled) return;
+    let pending = false;
+    let current: RatesCacheEntry | null = null;
+    const refresh = async () => {
       const now = Date.now();
-      if (payload && isStale(payload, fetchedAt, now) && !loading) void refresh();
-    }, REFRESH_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [currency, payload, fetchedAt, loading, refresh]);
-
+      if (pending || (current && !isStale(current.payload, current.storedAt, now))) return;
+      if (!request.current) {
+        if (now < nextAttempt.current) return;
+        nextAttempt.current = now + REVALIDATE_MS;
+        request.current = loadRatesEntry().finally(() => { request.current = null; });
+      }
+      pending = true;
+      const entry = await request.current;
+      pending = false;
+      if (!mounted.current) return;
+      current = entry;
+      setResult({ entry });
+      setNow(Date.now());
+    };
+    // Responses never resubscribe this effect or initiate another request.
+    void refresh();
+    const interval = setInterval(() => { void refresh(); }, REVALIDATE_MS);
+    const onFocus = () => { setNow(Date.now()); void refresh(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [enabled]);
+  const entry = result?.entry;
+  useEffect(() => {
+    if (!entry || !enabled) return;
+    // Cache hits retain storedAt; expire at the earlier reference-age/TTL limit.
+    const delay = rateExpiresAt(entry) - Date.now();
+    if (delay <= 0) return;
+    const timer = setTimeout(() => setNow(Date.now()), delay);
+    return () => clearTimeout(timer);
+  }, [entry, enabled]);
   const setCurrency = useCallback((next: SelectedCurrency) => {
     writeCurrencyPreference(next);
-    setCurrencyState(next);
-    if (next === PRIMARY_CURRENCY) {
-      setPayload(null);
-      setFetchedAt(null);
-      setFailed(false);
-      setLoading(false);
-    }
+    setSelection(next);
+    setNow(Date.now());
   }, []);
-
-  const estimate = useCallback((minorUnits: number) => estimateFor(minorUnits, currency, payload), [currency, payload]);
-
-  return (
-    <CurrencyContext.Provider value={{ currency, setCurrency, estimate, payload, loading, failed }}>
-      {children}
-    </CurrencyContext.Provider>
-  );
-}
-
-export function useCurrency(): CurrencyContextValue {
-  const ctx = useContext(CurrencyContext);
-  if (!ctx) throw new Error('useCurrency must be used within a CurrencyProvider');
-  return ctx;
+  const payload = enabled && entry && !isStale(entry.payload, entry.storedAt, now) ? entry.payload : null;
+  const estimate = (minorUnits: number) => {
+    if (!entry || isStale(entry.payload, entry.storedAt, now)) return null;
+    return estimateFor(minorUnits, currency, payload);
+  };
+  return <CurrencyContext.Provider value={{ currency, setCurrency, estimate, payload, loading: enabled && result === null, failed: enabled && result !== null && !payload }}>{children}</CurrencyContext.Provider>;
 }
