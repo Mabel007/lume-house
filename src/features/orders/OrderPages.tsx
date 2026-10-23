@@ -8,7 +8,7 @@ import { getSupabaseClient } from '../../lib/supabase/client';
 import { formatMoney } from '../../config/shop';
 import { loadOrders,loadOrder,retryConfirmation,historyPageSize } from './orderRepository';
 import { orderLabel,type Order,type OrderListItem } from './orders';
-import { PageHeader } from '../../components/PageHeader';
+import { PageHeader, Breadcrumbs, type BreadcrumbItem } from '../../components/PageHeader';
 
 
 export function OrderHistory({ orders }: {orders:OrderListItem[]}) {
@@ -37,12 +37,21 @@ export function OrderHistory({ orders }: {orders:OrderListItem[]}) {
   );
 }
 
-function AccountRequired() {
+type AccountRequiredProps = {
+  title?: string;
+  trail?: readonly BreadcrumbItem[];
+};
+
+// Guest and session-restoring order gates keep the same navigable trail as
+// the signed-in orders pages. Private order information is never used here:
+// the title stays generic until an owner-scoped order has loaded.
+function AccountRequired({ title = 'Your orders.', trail = [{ label: 'Shop', to: '/' }, { label: 'Account', to: '/account' }] }: AccountRequiredProps) {
   const auth = useAuth();
   return (
     <section className="wrap page-section orders-gate motion-enter">
+      <Breadcrumbs title={title} ancestors={trail} />
       <p className="eyebrow">YOUR LUMÉ HOUSE</p>
-      <h1>Your orders.</h1>
+      <h1>{title}</h1>
       <p className="account-intro">Your selected pieces, all in one place.</p>
       {auth.loading ? <p role="status">Restoring your session…</p> : <Link className="button" to="/account">Sign in to view your orders</Link>}
     </section>
@@ -145,7 +154,15 @@ export function OrderDetailPage({ success = false }: { success?: boolean }) {
     return () => { active = false };
   }, [userId, orderId, revision]);
 
-  if (!userId || auth.loading) return <AccountRequired />;
+  if (!userId || auth.loading)
+    return <AccountRequired
+      title="Your order."
+      trail={[
+        { label: 'Shop', to: '/' },
+        { label: 'Account', to: '/account' },
+        { label: 'My Orders', to: '/account/orders' },
+      ]}
+    />;
 
   async function retryEmail() {
     if (!order) return;
@@ -169,7 +186,6 @@ export function OrderDetailPage({ success = false }: { success?: boolean }) {
           { label: 'My Orders', to: '/account/orders' },
         ]}
       />
-      <h1 style={{ display: 'none' }}>{order?.order_reference || 'Your order.'}</h1>
       {busy ? (
         <p role="status">Loading your order…</p>
       ) : error ? (
