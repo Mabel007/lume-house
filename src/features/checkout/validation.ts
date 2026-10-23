@@ -11,6 +11,7 @@ export const checkoutMessages = {
   zone: "Choose your delivery zone.",
   contactPhone: "Enter your phone number.",
   paymentPhone: "Enter your mobile-money number.",
+  unsupportedCity: "Delivery to this location isn't available yet. We currently deliver to selected areas of Freetown, Sierra Leone. You can choose a supported delivery area or Lumley pickup.",
 } as const;
 
 export function cityProblem(
@@ -20,7 +21,7 @@ export function cityProblem(
   const trimmed = city.trim();
   if (!trimmed) return checkoutMessages.city;
   if (trimmed.toLowerCase() !== serviceCity.trim().toLowerCase())
-    return `Delivery is currently limited to ${serviceCity}.`;
+    return checkoutMessages.unsupportedCity;
   return undefined;
 }
 

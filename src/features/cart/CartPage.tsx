@@ -14,6 +14,7 @@ import { OrderSummary } from "../checkout/OrderSummary";
 import { useAuth } from "../auth/AuthContext";
 import { PageHeader } from '../../components/PageHeader';
 import { UiStatus } from '../../components/UiStatus';
+import { deliveryConfig } from "../../config/fulfilment";
 
 export function CartPage() {
   const { items, dispatch, status } = useCart();
@@ -89,8 +90,11 @@ export function CartPage() {
     <section className="wrap page-section">
       <p className="eyebrow">YOUR EVERYDAY FINDS</p>
       <PageHeader title="Your Cart." description="Review your pieces before checkout." trail={trail}/>
-      <p className="muted mb-8">
+      <p className="small-note mb-8">
         {auth.session ? items.some(item=>!item.variantId) ? "Available selections are saved to your account. Unavailable guest items are retained in this browser until removed." : "Your Cart is saved to your account." : "Sign in to save your Cart across visits. Guest items are kept only in this browser tab."}
+      </p>
+      <p className="checkout-notice mb-8">
+        Lumé House currently supports selected Freetown delivery areas and free pickup in {deliveryConfig.pickupLocation}.
       </p>
       <div className="checkout-grid">
         <div ref={listRef}>
