@@ -1,7 +1,8 @@
+let CurrencyProvider;
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as plainMarkup } from "react-dom/server";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { createServer } from "vite";
 import { readFileSync } from "node:fs";
@@ -96,6 +97,7 @@ before(async () => {
   ({ AuthContext } = await server.ssrLoadModule(
     "/src/features/auth/AuthContext.ts",
   ));
+  ({ CurrencyProvider } = await server.ssrLoadModule('/src/features/currency/CurrencyProvider.tsx'));
   ({ ProductDetails, ProductDetailsPage } = await server.ssrLoadModule("/src/features/products/ProductDetailsPage.tsx"));
   ({ NotificationProvider } = await server.ssrLoadModule("/src/components/NotificationProvider.tsx"));
   ({ ShopPage } = await server.ssrLoadModule(
@@ -609,3 +611,5 @@ test('responsive role tokens retain user font preferences and aligned admin cont
  const css=readFileSync('src/typography.css','utf8');for(const token of ['hero','h1','h2','h3','body','functional','name','meta','eyebrow','footer','tertiary'])assert.ok(css.includes(`--type-${token}:`));assert.match(css,/--type-hero: 2.75rem/);assert.match(css,/--type-hero: 3.75rem/);assert.match(css,/--type-hero: 4.75rem/);assert.match(css,/--type-body: 1.0625rem/);assert.match(css,/min-width: 700px/);assert.match(css,/min-width: 1000px/);assert.doesNotMatch(css,/(?:html|:root)\s*\{[^}]*font-size:/);assert.match(css,/\.footer-staff-access a \{ font-size: var\(--type-functional\)/);assert.match(css,/min-height: 44px/);
  const admin=readFileSync('src/features/admin/admin.css','utf8');assert.match(admin,/\.admin-order-filters \{ display: grid;[^}]*align-items: end/);assert.match(admin,/\.admin-workspace \.admin-order-filters label \{ margin: 0/);
 });
+
+function renderToStaticMarkup(element) { return plainMarkup(React.createElement(CurrencyProvider, null, element)); }

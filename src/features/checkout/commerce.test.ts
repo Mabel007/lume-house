@@ -180,7 +180,7 @@ test("checkout city validation mirrors the trusted Freetown-only rule", () => {
   assert.equal(cityProblem("   ", "Freetown"), checkoutMessages.city);
   assert.equal(
     cityProblem("Bo", "Freetown"),
-    "Delivery is currently limited to Freetown.",
+    checkoutMessages.unsupportedCity,
   );
 });
 test("checkout email check accepts native-shaped addresses and rejects malformed input", () => {

@@ -4,6 +4,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { createBrowserRouter, createRoutesFromElements, Link, Route, RouterProvider } from "react-router-dom";
 import { CartProvider } from "./features/cart/CartProvider";
+import { CurrencyProvider } from "./features/currency/CurrencyProvider";
 import { Layout } from "./components/Layout";
 import { ShopPage } from "./features/products/ShopPage";
 import { CartPage } from "./features/cart/CartPage";
@@ -19,7 +20,7 @@ import "./typography.css";
 import "./refinement.css";
 
 const router = createBrowserRouter(createRoutesFromElements(
-            <Route element={<AuthProvider><ProductProvider><CartProvider><NotificationProvider><Layout /></NotificationProvider></CartProvider></ProductProvider></AuthProvider>}>
+            <Route element={<AuthProvider><ProductProvider><CartProvider><CurrencyProvider><NotificationProvider><Layout /></NotificationProvider></CurrencyProvider></CartProvider></ProductProvider></AuthProvider>}>
               <Route path="/" element={<ShopPage />} />
               <Route path="/admin/*" element={<AdminPage />} />
               <Route path="/products/:productId" element={<ProductDetailsPage />} />

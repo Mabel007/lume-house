@@ -1,3 +1,4 @@
+let CurrencyProvider;
 import { test, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import React, { act, useEffect } from "react";
@@ -34,6 +35,7 @@ before(async () => {
       },
     }],
   });
+  ({ CurrencyProvider } = await server.ssrLoadModule('/src/features/currency/CurrencyProvider.tsx'));
   ({ CartProvider } = await server.ssrLoadModule("/src/features/cart/CartProvider.tsx"));
   ({ ShopPage } = await server.ssrLoadModule("/src/features/products/ShopPage.tsx"));
   ({ ProductDetails } = await server.ssrLoadModule("/src/features/products/ProductDetailsPage.tsx"));
@@ -72,7 +74,7 @@ const button = text => [...host.querySelectorAll("button")].find(item => item.te
 const buttonByLabel = label => host.querySelector(`button[aria-label="${label}"]`);
 async function mount(element) {
   root = createRoot(host);
-  await act(async () => { root.render(element); await new Promise(resolve => setTimeout(resolve, 0)); });
+  await act(async () => { renderCurrency(element); await new Promise(resolve => setTimeout(resolve, 0)); });
 }
 async function click(element) {
   await act(async () => { element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); await Promise.resolve(); });
@@ -87,7 +89,7 @@ async function flush() {
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 }
 async function rerender(element) {
-  await act(async () => { root.render(element); await new Promise(resolve => setTimeout(resolve, 0)); });
+  await act(async () => { renderCurrency(element); await new Promise(resolve => setTimeout(resolve, 0)); });
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 }
 function layoutTree(auth, path = "/", page, catalogValue = catalog) {
@@ -559,7 +561,7 @@ test("a saved Cart refresh that crosses an identity change never reaches the nex
   await settleError(change, new TypeError("Failed to fetch"));
   await act(async () => {
     dom.window.__cart.refreshSavedCart();
-    root.render(layoutTree(guestAuth));
+    renderCurrency(layoutTree(guestAuth));
     await Promise.resolve();
   });
   await settle(load, { data: { id: "cart-1", items: [{ product_id: "fixture-mug", variant_id: "v-default", quantity: 4 }] }, error: null });
@@ -673,3 +675,5 @@ test("a confirmed change supersedes a pending saved Cart recovery", async () => 
   assert.equal(operationIds.length, 2);
   assert.notEqual(operationIds[0], operationIds[1], "the unconfirmed change is never replayed under its own operation id");
 });
+
+function renderCurrency(element) { root.render(React.createElement(CurrencyProvider, null, element)); }

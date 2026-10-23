@@ -1,3 +1,4 @@
+let CurrencyProvider;
 import { test, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import React, { act } from "react";
@@ -41,6 +42,7 @@ before(async () => {
       },
     }],
   });
+  ({ CurrencyProvider } = await server.ssrLoadModule('/src/features/currency/CurrencyProvider.tsx'));
   ({ CartProvider } = await server.ssrLoadModule("/src/features/cart/CartProvider.tsx"));
   ({ useCart } = await server.ssrLoadModule("/src/features/cart/CartContext.ts"));
   ({ ShopPage } = await server.ssrLoadModule("/src/features/products/ShopPage.tsx"));
@@ -81,7 +83,7 @@ const buttonByLabel = label => host.querySelector(`button[aria-label="${label}"]
 
 async function mount(element) {
   root = createRoot(host);
-  await act(async () => { root.render(element); await new Promise(resolve => setTimeout(resolve, 0)); });
+  await act(async () => { renderCurrency(element); await new Promise(resolve => setTimeout(resolve, 0)); });
 }
 async function remount(element) {
   if (root) await act(async () => { root.unmount(); });
@@ -113,7 +115,7 @@ function withProviders(auth, children, catalogValue = catalog) {
           React.createElement(NotificationProvider, null, children)))));
 }
 async function rerender(element) {
-  await act(async () => { root.render(element); await new Promise(resolve => setTimeout(resolve, 0)); });
+  await act(async () => { renderCurrency(element); await new Promise(resolve => setTimeout(resolve, 0)); });
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 }
 function layoutTree(auth, path = "/", page) {
@@ -1602,7 +1604,7 @@ for(const result of ['success','rejection','moved','moved-away','unmounted']) te
   const elsewhere=host.querySelector('nav[aria-label="Breadcrumb"] a[href="/"]');
   if(result==='moved' || result==='moved-away') await act(async()=>elsewhere.focus());
   if(result==='moved-away') elsewhere.blur();
-  if(result==='unmounted') await act(async()=>root.render(React.createElement('button',{id:'other'},'Other route')));
+  if(result==='unmounted') await act(async()=>renderCurrency(React.createElement('button',{id:'other'},'Other route')));
   await settle(change,result==='rejection'?{data:null,error:{code:'42501',message:'fixture rejection'}}:{data:{id:'cart-1',items:threeItems.filter(item=>item.variant_id!=='v-vase')},error:null});
   await flush();
   if(result==='success') assert.equal(focusedLabel(),'Remove Fixture bowl');
@@ -1611,3 +1613,5 @@ for(const result of ['success','rejection','moved','moved-away','unmounted']) te
   if(result==='moved-away') assert.equal(document.activeElement,document.body,'a later loss of the chosen focus does not revive the removal request');
   if(result==='unmounted') assert.equal(host.querySelector('[data-cart-remove]'),null);
 });
+
+function renderCurrency(element) { root.render(React.createElement(CurrencyProvider, null, element)); }

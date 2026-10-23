@@ -1341,3 +1341,8 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 .collection-results { margin:1rem 0 1.5rem; color:#68685e; }
 .catalogue-no-results { padding:2rem 0 3rem; }
 .catalogue-no-results p { margin:0.75rem 0 1.5rem; }
+
+/* Secondary display-only estimates; primary money typography stays in NLE. */
+.currency-estimate { display: block; font-size: .8125rem; font-weight: 400; line-height: 1.5; color: var(--muted, #5d665b); overflow-wrap: anywhere; }
+.currency-selector select { min-height: 44px; max-width: 5rem; background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 4px; padding: .25rem; font: inherit; font-size: .8125rem; }
+.currency-disclosure { margin-block: 0 1rem; font-size: .8125rem; line-height: 1.5; overflow-wrap: anywhere; }

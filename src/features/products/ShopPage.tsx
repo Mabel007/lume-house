@@ -5,6 +5,7 @@ import type { Product } from "./products";
 import { useProducts } from "./ProductContext";
 import { ProductStatus } from "./ProductStatus";
 import { formatMoney, shop } from "../../config/shop";
+import { CurrencyEstimate } from "../currency/CurrencySelector";
 import { useCart } from "../cart/CartContext";
 import { defaultVariant, MAX_QUANTITY } from "../cart/cart";
 import { bagAddedText, bagAddFailedText } from "../cart/bagFeedback";
@@ -95,6 +96,7 @@ export function ShopPage() {
                     <figcaption>
                       {product.name}
                       <span>{cataloguePrice(product).from?'From ':''}{formatMoney(product.price)}</span>
+                      <CurrencyEstimate minorUnits={product.price} />
                     </figcaption>
                   </figure>
                 ))}
@@ -196,6 +198,7 @@ export function ShopPage() {
                       <span className="price">
                         {displayPrice.from?'From ':''}{formatMoney(displayPrice.price)}
                       </span>
+                      <CurrencyEstimate minorUnits={displayPrice.price} />
                     </div>
                     <p className="product-description">{product.description}</p>
                     {requiresOptions(product.variants) ? <Link className="add-button" to={`/products/${encodeURIComponent(product.id)}`}>Choose options <span aria-hidden="true">→</span></Link> : <button

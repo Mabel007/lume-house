@@ -1,9 +1,11 @@
+let CurrencyProvider;
 import assert from 'node:assert/strict';
 import {test,before,after,afterEach} from 'node:test';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
 import {createServer} from 'vite';
 import {MemoryRouter} from 'react-router-dom';
+import {checkoutMessages} from '../src/features/checkout/validation.ts';
 
 // Isolated checkout DOM evidence. Supabase is replaced at the module boundary;
 // no credential, endpoint or network call is used. Delivery fees are display
@@ -18,6 +20,7 @@ let CheckoutPage, ProductContext, CartContext, AuthContext;
 
 before(async()=>{
   server=await createServer({configFile:false,envDir:false,server:{middlewareMode:true,hmr:false},plugins:[{name:'isolated-checkout-delivery-client',enforce:'pre',load(id){if(id.replaceAll('\\','/').endsWith('/src/lib/supabase/client.ts'))return 'export function getSupabaseClient(){return globalThis.__checkoutDeliveryClient;}';}}]});
+  ({ CurrencyProvider } = await server.ssrLoadModule('/src/features/currency/CurrencyProvider.tsx'));
   ({CheckoutPage}=await server.ssrLoadModule('/src/features/checkout/CheckoutPage.tsx'));
   ({ProductContext}=await server.ssrLoadModule('/src/features/products/ProductContext.ts'));
   ({CartContext}=await server.ssrLoadModule('/src/features/cart/CartContext.ts'));
@@ -40,7 +43,7 @@ async function mount({authSession=null,cartStatus='ready',items=[{productId:fixt
   globalThis.__checkoutDeliveryClient=client??fakeClient();
   if(root){await act(async()=>root.unmount());root=undefined;host.replaceChildren();}
   root=createRoot(host);
-  await act(async()=>root.render(
+  await act(async()=>renderCurrency(
     React.createElement(MemoryRouter,null,
       React.createElement(AuthContext.Provider,{value:{loading:false,session:authSession,error:null,signIn:async()=>{},signOut:async()=>{}}},
         React.createElement(ProductContext.Provider,{value:{state:{status:'ready',products},refresh:refreshProducts}},
@@ -87,13 +90,13 @@ test('delivery eligibility explains the Freetown limitation, lists active zones 
   await blur(cityField());
   assert.equal(cityField().getAttribute('aria-invalid'),'true');
   assert.match(cityField().getAttribute('aria-describedby'),/city-error/);
-  assert.equal(host.querySelector('#city-error').textContent,'Delivery is currently limited to Freetown.');
+  assert.equal(host.querySelector('#city-error').textContent,checkoutMessages.unsupportedCity);
   assert.equal(button().disabled,true);
   await setValue(cityField(),' Freetown ');
   await blur(cityField());
   await selectZone('zone-2');
   assert.equal(cityField().getAttribute('aria-invalid'),null);
-  assert.doesNotMatch(host.textContent,/Delivery is currently limited to Freetown/);
+  assert.doesNotMatch(host.textContent,/Delivery to this location isn't available yet/);
   assert.match(host.textContent,/Lumley to Congo Cross, including Aberdeen\. Delivery: NLE 50\./);
   assert.deepEqual(totals(),['NLE 36','NLE 50','NLE 86']);
   assert.equal(button().disabled,false);
@@ -365,7 +368,7 @@ test('unsupported city and missing zone get accurate field-associated messages',
   await setValue(cityField(),'Bo');
   await submit();
   assert.equal(city.calls.length,0);
-  assert.equal(errorText('city-error'),'Delivery is currently limited to Freetown.');
+  assert.equal(errorText('city-error'),checkoutMessages.unsupportedCity);
   assert.equal(invalidAttr('city'),'true');
   assert.equal(errorText('delivery-zone-error'),null);
 
@@ -429,3 +432,5 @@ test('a repeated submit while placement is in flight does not place a second ord
   assert.equal(calls.length,1);
   await act(async()=>resolveInvoke({data:null,error:null}));
 });
+
+function renderCurrency(element) { root.render(React.createElement(CurrencyProvider, null, element)); }

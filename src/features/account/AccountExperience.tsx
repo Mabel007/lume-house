@@ -5,6 +5,7 @@ import type { Profile } from "./profile";
 
 import { accountInitials } from "./accountInitials";
 import { AccountNavigation } from "./AccountNavigation";
+import { Breadcrumbs } from "../../components/PageHeader";
 import "./account.css";
 
 const fields = {
@@ -37,13 +38,14 @@ export function AccountExperience({ profile, savedName, email, authenticatedName
     });
     return () => cancelAnimationFrame(frame);
   }, [hash, locationKey]);
+
   const displayName = savedName.trim() || authenticatedName?.trim() || "";
   const name = displayName || "Your account";
   function field(key: keyof Profile) {
     return <div key={key}><label htmlFor={key}>{fields[key].label}</label><input id={key} name={key} autoComplete={fields[key].autoComplete} type={key === "phone" ? "tel" : "text"} maxLength={200} disabled={!ready || busy} value={profile[key]} onChange={event => onChange(key, event.target.value)} /></div>;
   }
   return <section ref={section} className="wrap page-section account-page motion-enter">
-    <header className="account-heading"><p className="eyebrow">MY ACCOUNT</p><h1>Your account.</h1><div className="account-summary"><span className="account-avatar" aria-hidden="true">{accountInitials(displayName)}</span><div><p className="account-name">{name}</p><p className="account-email">{email}</p><p className="small-note">Signed in with Google</p></div></div></header>
+    <header className="account-heading"><Breadcrumbs title="Your account." ancestors={[{ label: 'Shop', to: '/' }]} /><p className="eyebrow">MY ACCOUNT</p><h1>Your account.</h1><div className="account-summary"><span className="account-avatar" aria-hidden="true">{accountInitials(displayName)}</span><div><p className="account-name">{name}</p><p className="account-email">{email}</p><p className="small-note">Signed in with Google</p></div></div></header>
     <AccountNavigation />
     <div className="account-layout">
       <form className="profile-surface" onSubmit={onSave} aria-label="Profile and delivery details" aria-describedby="account-defaults-note">

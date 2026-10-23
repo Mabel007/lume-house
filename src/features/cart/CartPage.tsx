@@ -1,3 +1,4 @@
+import { CurrencyEstimate } from '../currency/CurrencySelector';
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { useCart } from "./CartContext";
@@ -14,6 +15,7 @@ import { OrderSummary } from "../checkout/OrderSummary";
 import { useAuth } from "../auth/AuthContext";
 import { PageHeader } from '../../components/PageHeader';
 import { UiStatus } from '../../components/UiStatus';
+import { deliveryConfig } from "../../config/fulfilment";
 
 export function CartPage() {
   const { items, dispatch, status } = useCart();
@@ -89,8 +91,11 @@ export function CartPage() {
     <section className="wrap page-section">
       <p className="eyebrow">YOUR EVERYDAY FINDS</p>
       <PageHeader title="Your Cart." description="Review your pieces before checkout." trail={trail}/>
-      <p className="muted mb-8">
+      <p className="small-note mb-8">
         {auth.session ? items.some(item=>!item.variantId) ? "Available selections are saved to your account. Unavailable guest items are retained in this browser until removed." : "Your Cart is saved to your account." : "Sign in to save your Cart across visits. Guest items are kept only in this browser tab."}
+      </p>
+      <p className="checkout-notice mb-8">
+        Lumé House currently supports selected Freetown delivery areas and free pickup in {deliveryConfig.pickupLocation}.
       </p>
       <div className="checkout-grid">
         <div ref={listRef}>
@@ -108,7 +113,7 @@ export function CartPage() {
                 <p className="product-category">{product.category}</p>
                 <h2><Link to={`/products/${encodeURIComponent(product.id)}`}>{product.name}</Link></h2>
                 {variant && variantLabel(variant) && <p>{variantLabel(variant)}</p>}
-                <p>{formatMoney(product.price)} each</p>
+                <p>{formatMoney(product.price)} each<CurrencyEstimate minorUnits={product.price} /></p>
                 <div className="quantity-actions">
                   <div className="quantity-control">
                     <button
@@ -175,7 +180,7 @@ export function CartPage() {
                   </button>
                 </div>
               </div>
-              <strong className="line-price">{formatMoney(lineTotal)}</strong>
+              <strong className="line-price">{formatMoney(lineTotal)}<CurrencyEstimate minorUnits={lineTotal} /></strong>
             </article>
           );})}
         </div>
@@ -183,7 +188,7 @@ export function CartPage() {
           <h2>Order summary</h2>
           {lines.length > 0 ? (
             <>
-              <OrderSummary subtotal={subtotal} />
+              <OrderSummary subtotal={subtotal} estimates />
               {unavailable.length === 0 ? (
                 <Link to="/checkout" className="button w-full">
                   Continue to checkout <span aria-hidden="true">→</span>

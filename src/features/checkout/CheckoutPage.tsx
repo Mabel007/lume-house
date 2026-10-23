@@ -1,3 +1,4 @@
+import { CurrencyEstimate } from '../currency/CurrencySelector';
 import { FormField } from '../../components/FormField';
 import { variantLabel } from "../products/variants";
 import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
@@ -463,7 +464,7 @@ export function CheckoutPage() {
                   {variant && variantLabel(variant) && <p>{variantLabel(variant)}</p>}
                   <span>Qty {quantity}</span>
                 </div>
-                <span>{formatMoney(lineTotal)}</span>
+                <span>{formatMoney(lineTotal)}<CurrencyEstimate minorUnits={lineTotal} /></span>
               </li>
             ))}
           </ul>
@@ -471,6 +472,7 @@ export function CheckoutPage() {
             <OrderSummary
               subtotal={lines.reduce((sum, line) => sum + line.lineTotal, 0)}
               deliveryFee={deliveryFee}
+              estimates
             />
           </div>
           {auth.session ? (
