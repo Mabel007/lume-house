@@ -3,8 +3,8 @@ import { useEffect, useRef, type FormEvent } from "react";
 import { useLocation } from "react-router-dom";
 import type { Profile } from "./profile";
 
-import { accountInitials } from "./accountInitials";
 import { AccountNavigation } from "./AccountNavigation";
+import { PageHeader } from "../../components/PageHeader";
 import "./account.css";
 
 const fields = {
@@ -24,7 +24,7 @@ type Props = {
   signOut: { signingOut: boolean; error: string | null; signOut: () => Promise<void> };
 };
 
-export function AccountExperience({ profile, savedName, email, authenticatedName, ready, busy, status, profileError, error, onChange, onSave, onCancel, signOut }: Props) {
+export function AccountExperience({ profile, email, ready, busy, status, profileError, error, onChange, onSave, onCancel, signOut }: Props) {
   const section = useRef<HTMLElement>(null);
   const { hash, key: locationKey } = useLocation();
   useEffect(() => {
@@ -37,13 +37,12 @@ export function AccountExperience({ profile, savedName, email, authenticatedName
     });
     return () => cancelAnimationFrame(frame);
   }, [hash, locationKey]);
-  const displayName = savedName.trim() || authenticatedName?.trim() || "";
-  const name = displayName || "Your account";
+
   function field(key: keyof Profile) {
     return <div key={key}><label htmlFor={key}>{fields[key].label}</label><input id={key} name={key} autoComplete={fields[key].autoComplete} type={key === "phone" ? "tel" : "text"} maxLength={200} disabled={!ready || busy} value={profile[key]} onChange={event => onChange(key, event.target.value)} /></div>;
   }
   return <section ref={section} className="wrap page-section account-page motion-enter">
-    <header className="account-heading"><p className="eyebrow">MY ACCOUNT</p><h1>Your account.</h1><div className="account-summary"><span className="account-avatar" aria-hidden="true">{accountInitials(displayName)}</span><div><p className="account-name">{name}</p><p className="account-email">{email}</p><p className="small-note">Signed in with Google</p></div></div></header>
+    <PageHeader title="Your account." trail={[{ label: 'Shop', to: '/' }]} />
     <AccountNavigation />
     <div className="account-layout">
       <form className="profile-surface" onSubmit={onSave} aria-label="Profile and delivery details" aria-describedby="account-defaults-note">
