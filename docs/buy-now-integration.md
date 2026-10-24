@@ -36,6 +36,8 @@ After direct success, the saved Bag can contain a now-unavailable item because i
 
 `supabase/functions/place-direct-order/index.ts` uses `commerceHandler('direct')`. It validates the actual bearer JWT with Auth getUser, request/body limits, protocol, integer quantity and exact quote shape, then calls only `place_direct_variant_order` under the caller JWT. Service role is used only by existing post-persistence confirmation processing.
 
+Only `place-direct-order` enables platform `verify_jwt = true` in both Supabase configuration files, in addition to mandatory handler `auth.getUser` verification. Other functions retain their existing platform settings. Hosted acceptance of genuine staging ES256 user JWTs remains NOT RUN until separately authorized deployment and authenticated smoke tests.
+
 Request:
 
 ```text
