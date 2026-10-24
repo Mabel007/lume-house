@@ -94,6 +94,7 @@ export function Layout() {
       <main id="main" ref={main} tabIndex={-1}>
         {!administration && status === "loading" && <p className="wrap" role="status">Loading your Cart…</p>}
         {!administration && status === "saving" && <p className="wrap" role="status">Saving your Cart…</p>}
+        {!administration && status === "deferred" && <p className="wrap" role="status">Your saved Cart is kept separate from Buy Now. <Link to="/cart">Open your Cart</Link> to restore it and resume saved-item changes.</p>}
         {!administration && error && <div className="wrap" role="alert">{error} <button onClick={retry}>Retry saved Cart</button></div>}
         {!administration && recovery && (
           <div className="wrap cart-recovery" aria-busy={recovery.status === "refreshing"}>

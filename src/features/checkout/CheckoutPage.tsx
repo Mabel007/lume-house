@@ -1,13 +1,13 @@
 import { CurrencyEstimate } from '../currency/CurrencySelector';
 import { FormField } from '../../components/FormField';
 import { variantLabel } from "../products/variants";
-import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type InputHTMLAttributes } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../cart/CartContext";
 import { getCartLines } from "../cart/cart";
 import { useProducts } from "../products/ProductContext";
 import { ProductStatus } from "../products/ProductStatus";
-import { formatMoney } from "../../config/shop";
+import { formatMoney, shop } from "../../config/shop";
 import {
   deliveryConfig,
   getDeliveryFee,
@@ -28,18 +28,26 @@ import { useAuth } from "../auth/AuthContext";
 import { loadProfile } from "../account/profile";
 import { getSupabaseClient } from "../../lib/supabase/client";
 import { checkoutDefaults } from "./profileDefaults";
-import { CheckoutError, findCheckout, placeOrder } from '../orders/orderRepository';
-import { clearRequest,pendingRequest,rememberRequest } from '../orders/pendingCheckout';
+import { CheckoutError, placeOrder, placeDirectOrder, recoverCheckout } from '../orders/orderRepository';
+import { completeAttempt, readAttempt, rememberAttempt, withCheckoutLock, type CheckoutAttempt } from '../orders/checkoutAttempt';
+import { cancelDirectIntent, directCheckoutPath, finishDirectIntent, restoreDirectIntent, type DirectIntent } from './directIntent';
+import { prepareCustomerAuthReturn } from '../auth/customerAuthIntent';
+import { loadProducts } from '../products/productRepository';
 
 function phoneProblem(value: string, emptyMessage: string): string | undefined {
   if (!value.trim()) return emptyMessage;
   return validatePaymentPhone(value) ? invalidPhoneMessage : undefined;
 }
 
-export function CheckoutPage() {
-  const { items, status: cartStatus, retry, beginCheckout, finishCheckout } = useCart();
+export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
+  const { items: bagItems, status: bagStatus, retry, beginCheckout, finishCheckout } = useCart();
+  const items=direct?[{productId:direct.productId,variantId:direct.variantId,quantity:direct.quantity}]:bagItems;
+  const cartStatus=direct?'ready':bagStatus;
   const navigate = useNavigate();
   const auth = useAuth();
+  const identity=useRef('');
+  const lifetime=`${auth.session?.user.id??'guest'}:${auth.sessionGeneration??0}`;
+  useLayoutEffect(()=>{identity.current=lifetime;return()=>{identity.current='';};},[lifetime]);
   const dirty = useRef(false);
   const mounted=useRef(true);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
@@ -51,6 +59,10 @@ export function CheckoutPage() {
   const submittingRef=useRef(false);
   const [orderError,setOrderError]=useState('');
   const [recovering,setRecovering]=useState(false);
+  const [signingIn,setSigningIn]=useState(false);
+  const signInGuard=useRef(false);
+  const [pendingAttempt,setPendingAttempt]=useState<CheckoutAttempt|null>(null);
+  const [recoveryBlocked,setRecoveryBlocked]=useState(false);
   const requestId=useRef<string|null>(null);
   const [fulfilment, setFulfilment] = useState<Fulfilment>("delivery");
   const [city, setCity] = useState("");
@@ -68,6 +80,28 @@ export function CheckoutPage() {
   const pendingFocus = useRef<string | null>(null);
   const userId = auth.session?.user.id;
   const userEmail = auth.session?.user.email;
+  function current(){return mounted.current&&identity.current===lifetime;}
+  function accepted(id:string,attempt:CheckoutAttempt,ticket?:number|null){
+    if(!current())return;
+    try{completeAttempt(attempt.ownerId,attempt.requestId);}catch{/* Accepted order remains recoverable. */}
+    if(direct){try{finishDirectIntent(direct.id);}catch{/* Preserve selection if storage is unavailable. */}}
+    else {
+      // An accepted ID may be an older replay. Only the server knows which Bag
+      // converted; reconcile its current state instead of clearing newer items.
+      finishCheckout?.(false,ticket);retry?.();
+    }
+    navigate(`/orders/${id}/success`,{replace:true});
+  }
+  async function checkPrevious(attempt:CheckoutAttempt){
+    setRecovering(true);setOrderError('');
+    try{
+      const id=await recoverCheckout(getSupabaseClient(),attempt);
+      if(!current())return;
+      if(id)accepted(id,attempt);
+      else setOrderError('No completed result is visible yet. Your request is retained: review this checkout and retry the same request, or check My Orders.');
+    }catch{if(current())setOrderError('The previous checkout could not be verified. Its request is retained; check My Orders or retry checking.');}
+    finally{if(current())setRecovering(false);}
+  }
   useEffect(() => {
     const target = pendingFocus.current;
     if (!target) return;
@@ -77,18 +111,17 @@ export function CheckoutPage() {
   }, [focusRequest]);
   useEffect(()=>{
     let active=true;
-    const saved=userId?pendingRequest(userId):null;
-    if(saved && userId) {
-      requestId.current=saved;
-      void (async()=>{
-        setRecovering(true);
-        try {
-          const id=await findCheckout(getSupabaseClient(),saved);
-          if(active&&id){clearRequest(userId);retry?.();navigate(`/orders/${id}/success`,{replace:true});}
-        }catch{if(active)setOrderError('A previous checkout could not be checked. Retry with the same request, or check My Orders before starting another.');}
-        finally{if(active)setRecovering(false);}
-      })();
-    }
+    void (async()=>{
+    await Promise.resolve();if(!active)return;
+    if(userId)try{
+      const saved=readAttempt(userId,direct?'direct':'bag');setPendingAttempt(saved);
+      if(saved){
+        if(saved.source!==(direct?'direct':'bag')||saved.source==='direct'&&saved.intentId!==direct?.id){setRecoveryBlocked(true);return;}
+        requestId.current=saved.requestId;
+        void (async()=>{if(active)await checkPrevious(saved);})();
+      }
+    }catch{setRecoveryBlocked(true);setOrderError('Checkout recovery storage is unavailable or inconsistent. Keep this browser data and check My Orders before starting another purchase.');}
+    })();
     return()=>{active=false};
     // Identity-keyed route mounts once; callbacks must not restart recovery.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -151,7 +184,7 @@ export function CheckoutPage() {
     : undefined;
   async function submit(event:React.FormEvent) {
     event.preventDefault();
-    if(submittingRef.current||state.status!=='ready'||!userId)return;
+    if(submittingRef.current||recovering||recoveryBlocked||state.status!=='ready'||!userId)return;
     setAttempted(true);
     if(problems.length){
       pendingFocus.current=problems[0].id;
@@ -160,25 +193,65 @@ export function CheckoutPage() {
       setOrderError(phonesOnly?'Enter valid 8-digit Sierra Leone contact and payment numbers.':'Please check your contact and delivery details before placing your order.');
       return;
     }
-    const checkoutTicket=beginCheckout?.();
-    if(beginCheckout && checkoutTicket==null){setOrderError('Wait for your Cart changes to finish saving.');return;}
+    const checkoutTicket=direct?null:beginCheckout?.();
+    if(!direct && beginCheckout && checkoutTicket==null){setOrderError('Wait for your Cart changes to finish saving.');return;}
     submittingRef.current=true;setSubmitting(true);setOrderError('');
-    requestId.current ||= pendingRequest(userId)||crypto.randomUUID();
-    rememberRequest(userId,requestId.current);
+    let hadPending=false;
     try {
-      const expected=getCartLines(items,state.products).map(({product,variant,quantity})=>({product_id:product.id,variant_id:variant!.id,quantity,unit_price:product.price})).sort((a,b)=>a.variant_id.localeCompare(b.variant_id));
-      const result=await placeOrder(getSupabaseClient(),requestId.current,{full_name:fullName,email,contact_phone:normalizePhone(contactPhone),payment_phone:normalizePhone(paymentPhone),provider,fulfilment,zone_id:zoneId,street:address,area,city,instructions},expected,userId);
-      clearRequest(userId);finishCheckout?.(true,checkoutTicket);
-      if(mounted.current)navigate(`/orders/${result.id}/success`,{replace:true});
+      await withCheckoutLock(userId,!!direct,async()=>{
+        if(!current())return;
+        const existing=readAttempt(userId,direct?'direct':'bag');hadPending=!!existing;
+        if(existing)setPendingAttempt(existing);
+        if(existing&&(existing.source!==(direct?'direct':'bag')||existing.source==='direct'&&existing.intentId!==direct?.id))throw new Error('OTHER_CHECKOUT_PENDING');
+        if(existing){
+          setPendingAttempt(existing);
+          const id=await recoverCheckout(getSupabaseClient(),existing);
+          if(!current())return;
+          if(id){accepted(id,existing,checkoutTicket);return;}
+        }
+        let expected=getCartLines(items,state.products).map(({product,variant,quantity})=>({product_id:product.id,variant_id:variant!.id,quantity,unit_price:product.price})).sort((a,b)=>a.variant_id.localeCompare(b.variant_id));
+        if(direct){
+          if(direct.ownerId!==userId)throw new CheckoutError('AUTH_REQUIRED');
+          const fresh=await loadProducts(getSupabaseClient(),shop.currency,new AbortController().signal).catch(()=>{throw new CheckoutError('CATALOG_UNAVAILABLE');});
+          if(!current())return;
+          const freshLines=getCartLines(items,fresh);
+          if(freshLines.length!==1||!freshLines[0].product.variants){refresh();throw new CheckoutError('PRODUCT_UNAVAILABLE');}
+          if(expected.length!==1||freshLines[0].product.price!==expected[0].unit_price){refresh();throw new CheckoutError('QUOTE_CHANGED');}
+          expected=[{product_id:freshLines[0].product.id,variant_id:freshLines[0].variant!.id,quantity:direct.quantity,unit_price:freshLines[0].product.price}];
+        }
+        const candidate:CheckoutAttempt=direct
+          ?{version:1,source:'direct',ownerId:userId,requestId:direct.id,intentId:direct.id,productId:direct.productId,variantId:direct.variantId,quantity:direct.quantity}
+          :{version:1,source:'bag',ownerId:userId,requestId:existing?.requestId||requestId.current||crypto.randomUUID()};
+        const attempt=rememberAttempt(candidate);requestId.current=attempt.requestId;setPendingAttempt(attempt);
+        const checkout={full_name:fullName,email,contact_phone:normalizePhone(contactPhone),payment_phone:normalizePhone(paymentPhone),provider,fulfilment,zone_id:zoneId,street:address,area,city,instructions};
+        const result=attempt.source==='direct'
+          ?await placeDirectOrder(getSupabaseClient(),attempt,checkout,expected[0])
+          :await placeOrder(getSupabaseClient(),attempt.requestId,checkout,expected,userId);
+        accepted(result.id,attempt,checkoutTicket);
+      });
     }catch(error){
-      finishCheckout?.(false,checkoutTicket);
+      if(!direct)finishCheckout?.(false,checkoutTicket);
+      if(!current())return;
       const code=error instanceof CheckoutError?error.code:'ORDER_UNAVAILABLE';
-      if(['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART','OUT_OF_STOCK'].includes(code)){setOrderError(code==='OUT_OF_STOCK'?'A selected quantity is no longer available. Review your Cart and current availability before trying again.':'Your Cart or current prices changed. Review the refreshed Cart before placing your order.');refresh();retry?.();}
+      if(direct&&error instanceof CheckoutError&&error.definitive&&!hadPending&&!['CHECKOUT_SOURCE_CONFLICT','CHECKOUT_SELECTION_CONFLICT'].includes(code)){
+        try{completeAttempt(userId,direct.id);setPendingAttempt(null);}catch{/* Keep recovery if cleanup cannot be confirmed. */}
+      }
+      if(error instanceof Error&&['OTHER_CHECKOUT_PENDING','CHECKOUT_RECOVERY_INVALID'].includes(error.message)){setRecoveryBlocked(true);setOrderError('Another checkout is unresolved. Check its result before starting this purchase.');}
+      else if(error instanceof Error&&error.message==='CHECKOUT_LOCK_UNAVAILABLE')setOrderError('This browser cannot coordinate a safe Buy Now checkout. Use a current browser with Web Locks support.');
+      else if(error instanceof Error&&error.message==='CHECKOUT_BUSY')setOrderError('Checkout is active in another tab. Wait for it to finish, then check the previous order.');
+      else if(['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART','OUT_OF_STOCK','QUOTE_CHANGED'].includes(code)){setOrderError(direct?'The selected price or availability changed. Review the refreshed selection before retrying. Any previous request is retained.':code==='OUT_OF_STOCK'?'A selected quantity is no longer available. Review your Cart and current availability before trying again.':'Your Cart or current prices changed. Review the refreshed Cart before placing your order.');refresh();if(!direct)retry?.();}
       else if(code==='AUTH_REQUIRED')setOrderError('Your session expired. Please sign in again before placing your order.');
+      else if(code==='DIRECT_UNAVAILABLE')setOrderError('Buy Now is unavailable on this server. Your request is retained; check My Orders or retry checking.');
+      else if(code==='CATALOG_UNAVAILABLE')setOrderError('Current prices could not be checked. Your selection and any previous request are retained. Retry when product services are available.');
+      else if(['CHECKOUT_SOURCE_CONFLICT','CHECKOUT_SELECTION_CONFLICT'].includes(code)){setRecoveryBlocked(true);setOrderError('This request belongs to a different checkout. Check My Orders before continuing.');}
       else if(code.startsWith('INVALID_'))setOrderError('Please check your contact, payment and Freetown delivery details.');
       else setOrderError('We could not confirm order placement. Your retry uses the same request to prevent duplicates. Check My Orders or try again.');
-    }finally{submittingRef.current=false;setSubmitting(false);}
+    }finally{submittingRef.current=false;if(current())setSubmitting(false);}
   }
+  async function directSignIn(){if(signInGuard.current)return;signInGuard.current=true;setSigningIn(true);try{prepareCustomerAuthReturn();await auth.signIn();}catch{if(current())setOrderError('Sign-in continuation could not be saved. Please keep this tab and retry.');}finally{signInGuard.current=false;if(current())setSigningIn(false);}}
+  function cancelSelection(){try{cancelDirectIntent();navigate(direct?`/products/${encodeURIComponent(direct.productId)}`:'/');}catch{setOrderError('Checkout selection could not be cleared. Please retry.');}}
+  const recoveryControls=pendingAttempt&&<div className="checkout-notice"><p>A previous checkout request is retained until its result is confirmed.</p><button type="button" className="text-link" disabled={recovering||submitting} onClick={()=>void checkPrevious(pendingAttempt)}>Check previous order</button> <Link to="/account/orders">My Orders</Link></div>;
+  if(recoveryBlocked)return <section className="wrap page-section"><h1>Review your previous checkout.</h1><p role="alert">{orderError||'An unresolved checkout must be reviewed before starting another purchase.'}</p>{pendingAttempt?.source==='direct'?<button type="button" className="button" onClick={()=>{restoreDirectIntent({id:pendingAttempt.intentId,productId:pendingAttempt.productId,variantId:pendingAttempt.variantId,quantity:pendingAttempt.quantity,ownerId:pendingAttempt.ownerId});navigate(directCheckoutPath);}}>Resume Buy Now</button>:<Link className="button" to="/cart">Return to your Cart</Link>} <Link to="/account/orders">Check My Orders</Link></section>;
   if(recovering)return <section className="wrap page-section"><h1>Checking your order…</h1><p role="status">Restoring the result of your previous checkout.</p></section>;
   if (cartStatus === "loading" || cartStatus === "error") return <section className="wrap page-section"><h1>Checkout.</h1><p>Waiting for your saved Cart.</p></section>;
   if (!items.length) return orderError ? <section className="wrap page-section"><p role="alert">{orderError}</p><Link to="/account/orders">Check My Orders</Link></section> : <EmptyCart />;
@@ -193,13 +266,16 @@ export function CheckoutPage() {
   if (lines.length !== items.length)
     return (
       <section className="empty-state">
-        <h1>Your Cart needs a quick update.</h1>
+        <h1>{direct?'Your selected piece is unavailable.':'Your Cart needs a quick update.'}</h1>
         <p>
           Some products are no longer available. Please remove them before
           continuing.
         </p>
-        <Link className="button" to="/cart">
-          Review your Cart
+        {direct&&recoveryControls}
+        {direct&&<button type="button" className="text-link" onClick={refresh}>Check availability again</button>}
+        {direct&&<button type="button" className="text-link" disabled={!!pendingAttempt||submitting} onClick={cancelSelection}>Cancel selection</button>}
+        <Link className="button" to={direct?`/products/${encodeURIComponent(direct.productId)}`:'/cart'}>
+          {direct?'Back to product':'Review your Cart'}
         </Link>
       </section>
     );
@@ -207,13 +283,16 @@ export function CheckoutPage() {
   const zone = deliveryConfig.zones.find((zone) => zone.id === zoneId);
   return (
     <section className="wrap page-section">
-      <Link to="/cart" className="back-link">
-        Back to Cart
+      <Link to={direct?`/products/${encodeURIComponent(direct.productId)}`:'/cart'} className="back-link">
+        {direct?'Back to product':'Back to Cart'}
       </Link>
       <p className="eyebrow">YOUR HOME, CONSIDERED</p>
       <h1>Checkout.</h1>
+      {direct&&<p className="checkout-notice">Buy Now — only this selected piece will be ordered. Your saved Cart is kept separate.</p>}
       <p className="checkout-notice" id="checkout-payment"><strong>Payment awaits confirmation.</strong>Placing an order saves your order and requests a confirmation email. Selecting mobile money does not charge or verify your account.</p>
       {orderError&&<p role="alert" className="field-error">{orderError}</p>}
+      {direct&&auth.error&&<p role="alert" className="field-error">{auth.error}</p>}
+      {recoveryControls}
       <div className="checkout-grid">
         <form
           id="checkout-form"
@@ -488,14 +567,12 @@ export function CheckoutPage() {
           ) : auth.loading ? (
             <p className="small-note" role="status">Restoring your session…</p>
           ) : (
-            <Link className="button w-full" to="/account" aria-describedby="checkout-payment">Sign in to place your order</Link>
+            direct?<button type="button" className="button w-full" disabled={signingIn} onClick={()=>void directSignIn()} aria-describedby="checkout-payment">{signingIn?'Opening Google sign-in…':'Sign in with Google to continue'}</button>:<Link className="button w-full" to="/account" aria-describedby="checkout-payment">Sign in to place your order</Link>
           )}
           <p className="small-note">
             {auth.session ? "Your checkout details will be saved with this order, independently of your profile." : auth.loading ? "Checking your session before order placement." : "An account is required before you can place your order."}
           </p>
-          <Link to="/cart" className="text-link">
-            Edit your Cart
-          </Link>
+          {direct?<button type="button" className="text-link" disabled={submitting||!!pendingAttempt} onClick={cancelSelection}>Cancel selection</button>:<Link to="/cart" className="text-link">Edit your Cart</Link>}
         </aside>
       </div>
     </section>

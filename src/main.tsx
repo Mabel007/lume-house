@@ -1,4 +1,5 @@
 import { ProductDetailsPage } from "./features/products/ProductDetailsPage";
+import { DirectCheckoutPage } from './features/checkout/DirectCheckoutPage';
 import { AdminPage } from "./features/admin/AdminPage";
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -32,6 +33,7 @@ const router = createBrowserRouter(createRoutesFromElements(
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/cart" element={<CartPage />} />
               <Route path="/checkout" element={<CustomerCheckout />} />
+              <Route path="/checkout/buy-now" element={<DirectCheckoutPage />} />
               <Route path="/account" element={<CustomerAccount />} />
               <Route path="/account/orders" element={<CustomerOrders />} />
               <Route path="/account/orders/:orderId" element={<CustomerOrder />} />

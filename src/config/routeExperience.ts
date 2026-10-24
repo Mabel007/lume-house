@@ -4,6 +4,7 @@ const routeTitles: Readonly<Record<string, string>> = {
   "/": "Shop",
   "/cart": "Your Cart",
   "/checkout": "Checkout",
+  "/checkout/buy-now": "Buy Now checkout",
   "/account": "Your account",
   "/auth/callback": "Your account",
   "/about": "About",

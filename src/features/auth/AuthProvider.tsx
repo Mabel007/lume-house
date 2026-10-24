@@ -4,6 +4,7 @@ import { getSupabaseClient } from "../../lib/supabase/client";
 import { AuthContext, createSignOutController, type SignOutResult } from "./AuthContext";
 import { authRedirect, startGoogleSignIn, watchSession } from "./auth";
 import { setAdminAuthIntent } from './adminAuthIntent';
+import { clearCustomerAuthReturn } from './customerAuthIntent';
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [sessionGeneration, setSessionGeneration] = useState(0);
@@ -28,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
   async function signIn(adminReturnTo?: string) {
     setError(null);
-    try { setAdminAuthIntent(window.sessionStorage, adminReturnTo); await startGoogleSignIn(getSupabaseClient(), authRedirect(window.location.origin, import.meta.env.VITE_AUTH_REDIRECT_URL)); }
+    try { if(adminReturnTo)clearCustomerAuthReturn();setAdminAuthIntent(window.sessionStorage, adminReturnTo); await startGoogleSignIn(getSupabaseClient(), authRedirect(window.location.origin, import.meta.env.VITE_AUTH_REDIRECT_URL)); }
     catch { try { setAdminAuthIntent(window.sessionStorage); } catch { /* Browser storage may be unavailable. */ } setError("Google sign-in could not start. Please try again."); }
   }
   const requestSignOut = useCallback(async (): Promise<SignOutResult> => {

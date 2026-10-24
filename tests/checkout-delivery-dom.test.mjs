@@ -26,7 +26,7 @@ before(async()=>{
   ({CartContext}=await server.ssrLoadModule('/src/features/cart/CartContext.ts'));
   ({AuthContext}=await server.ssrLoadModule('/src/features/auth/AuthContext.ts'));
 });
-afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;host.replaceChildren();delete globalThis.__checkoutDeliveryClient;dom.window.sessionStorage.clear();});
+afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;host.replaceChildren();delete globalThis.__checkoutDeliveryClient;dom.window.sessionStorage.clear();dom.window.localStorage.clear();});
 after(async()=>{await server.close();dom.window.close();});
 
 const session={access_token:'synthetic-jwt',user:{id:'11111111-1111-4111-8111-111111111111',email:'fixture@example.invalid'}};
@@ -35,7 +35,7 @@ const noop=()=>{};
 
 function fakeClient(invoke){return {
   auth:{getSession:async()=>({data:{session}})},
-  from(){return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:null,error:null})};},
+  from(){return {select(){return this;},eq(){return this;},setHeader(){return this;},maybeSingle:async()=>({data:null,error:null})};},
   functions:{invoke:invoke??(async()=>({data:null,error:null}))},
 };}
 

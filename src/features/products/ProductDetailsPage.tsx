@@ -1,6 +1,9 @@
 import { CurrencyEstimate } from '../currency/CurrencySelector';
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
+import { directCheckoutPath, restoreDirectIntent, startDirectIntent } from '../checkout/directIntent';
+import { readAttempt } from '../orders/checkoutAttempt';
 import { useProducts } from './ProductContext';
 import { ProductStatus } from './ProductStatus';
 import { ProductGallery } from './ProductGallery';
@@ -23,11 +26,14 @@ export function ProductDetailsPage() {
 }
 
 export function ProductDetails({product}:{product:Product}) {
+  const auth=useAuth();const navigate=useNavigate();
   const {items,dispatch,status}=useCart();
   const {notify}=useNotifications();
   const [selection,setSelection]=useState('');
   const [amount,setAmount]=useState(1);
   const [pending,setPending]=useState(false);
+  const [buyStarting,setBuyStarting]=useState(false);
+  const [buyError,setBuyError]=useState('');
   const pendingSeq=useRef(0);
   const alive=useRef(true);
   // Reset on (re)mount: StrictMode dev runs cleanup then re-runs the effect,
@@ -40,6 +46,17 @@ export function ProductDetails({product}:{product:Product}) {
   const quantity=items.find(item=>item.variantId===variant?.id || !item.variantId && item.productId===product.id)?.quantity??0;
   const busy=['loading','saving','error','checking-out'].includes(status??'');
   const price=variant?.price??cataloguePrice(product).price;
+  function buyNow(){
+    if(!variant||!compatible||buyStarting||pending)return;
+    setBuyStarting(true);setBuyError('');
+    try{
+      const previous=auth.session?readAttempt(auth.session.user.id):null;
+      if(previous?.source==='bag'){navigate('/checkout');return;}
+      if(previous?.source==='direct')restoreDirectIntent({id:previous.intentId,productId:previous.productId,variantId:previous.variantId,quantity:previous.quantity,ownerId:previous.ownerId});
+      else startDirectIntent(product.id,variant.id,amount,auth.session?.user.id??null);
+      navigate(directCheckoutPath);
+    }catch{setBuyStarting(false);setBuyError('Buy Now could not preserve this selection safely. Check My Orders or retry with browser storage enabled.');}
+  }
   async function addToBag() {
     if(!variant)return;
     const name=product.name;const detail=variantLabel(variant);const addedAmount=amount;
@@ -64,7 +81,7 @@ export function ProductDetails({product}:{product:Product}) {
             <button
               type="button"
               aria-label={`Decrease ${product.name} quantity`}
-              disabled={pending || busy || amount === 1}
+              disabled={pending || buyStarting || amount === 1}
               onClick={() => setAmount(current => Math.max(1, current - 1))}
             >
               −
@@ -77,7 +94,7 @@ export function ProductDetails({product}:{product:Product}) {
               max={MAX_QUANTITY}
               step={1}
               value={amount}
-              disabled={pending || busy}
+              disabled={pending || buyStarting}
               onChange={event => {
                 const raw = event.target.valueAsNumber;
                 if (!Number.isFinite(raw) || !Number.isInteger(raw) || raw < 1) return;
@@ -88,7 +105,7 @@ export function ProductDetails({product}:{product:Product}) {
             <button
               type="button"
               aria-label={`Increase ${product.name} quantity`}
-              disabled={pending || busy || amount >= MAX_QUANTITY}
+              disabled={pending || buyStarting || amount >= MAX_QUANTITY}
               onClick={() => setAmount(current => Math.min(MAX_QUANTITY, current + 1))}
             >
               +
@@ -96,9 +113,11 @@ export function ProductDetails({product}:{product:Product}) {
           </div>
         </div>
         <div className="product-details-actions">
+          <button type="button" className="button product-details-buy" disabled={!compatible||pending||buyStarting||auth.loading} onClick={buyNow}>{buyStarting?'Opening checkout…':'Buy Now'}</button>
           <button className="button product-details-add" disabled={!compatible||busy||pending||quantity+amount>MAX_QUANTITY} aria-label={`Add ${product.name} to Cart`} onClick={addToBag}>{pending?'Adding…':quantity+amount>MAX_QUANTITY?'Quantity limit reached':'Add to Cart'}</button>
           <Link className="text-link" to="/cart">View your Cart →</Link>
         </div>
+        {buyError&&<p role="alert" className="field-error">{buyError}</p>}
         <p className="small-note">Payment awaits confirmation after order placement.</p>
       </div>
     </div>

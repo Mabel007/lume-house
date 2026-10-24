@@ -36,6 +36,9 @@ inspector_port = 8083
 [functions.place-order]
 verify_jwt = false
 import_map = "./functions/deno.json"
+[functions.place-direct-order]
+verify_jwt = false
+import_map = "./functions/deno.json"
 [functions.order-email]
 verify_jwt = false
 import_map = "./functions/deno.json"

@@ -677,3 +677,37 @@ test("a confirmed change supersedes a pending saved Cart recovery", async () => 
 });
 
 function renderCurrency(element) { root.render(React.createElement(CurrencyProvider, null, element)); }
+
+test('Buy Now defers all cart restoration and guest merge across login, token and catalogue changes until explicit Cart entry',async()=>{
+ const direct=await server.ssrLoadModule('/src/features/checkout/directIntent.ts');
+ sessionStorage.setItem('lume-guest-cart',JSON.stringify([{productId:product.id,variantId:'v-default',quantity:2}]));
+ const intent=direct.startDirectIntent(product.id,'v-default',1,null);
+ const calls=bagClient(()=>emptyCart());
+ await mount(layoutTree(guestAuth,'/checkout/buy-now',()=>React.createElement('p',null,'Direct review')));
+ assert.equal(calls.length,0);
+ await rerender(layoutTree(userAuth,'/checkout/buy-now',()=>React.createElement('p',null,'Direct review'),nextCatalog()));
+ await rerender(layoutTree({...userAuth,session:{...userAuth.session,access_token:'refreshed-local-token'}},'/checkout/buy-now',()=>React.createElement('p',null,'Direct review'),nextCatalog()));
+ assert.equal(calls.length,0);assert.match(sessionStorage.getItem('lume-guest-cart'),/fixture-mug/);
+ await act(async()=>direct.finishDirectIntent(intent.id));
+ assert.equal(calls.length,0,'success does not implicitly restore or merge');
+ await act(async()=>root.unmount());root=null;
+ await mount(layoutTree(userAuth,'/cart'));
+ assert.ok(calls.some(c=>c.name==='load_variant_cart'));
+ assert.ok(calls.some(c=>c.name==='change_variant_cart'&&c.args.p_mode==='merge'));
+ assert.equal(JSON.parse(sessionStorage.getItem('lume-guest-cart')).items.length,0,'guest intent checkpointed only after confirmed merge');
+});
+test('an overlapping guest merge keeps its receipt for safe reconciliation after Buy Now',async()=>{
+ const direct=await server.ssrLoadModule('/src/features/checkout/directIntent.ts');
+ sessionStorage.setItem('lume-guest-cart',JSON.stringify([{productId:product.id,variantId:'v-default',quantity:2}]));
+ const merge=deferred();let first=true;
+ const calls=bagClient(name=>name==='load_variant_cart'?emptyCart():first?(first=false,merge.promise):Promise.resolve({data:{id:'cart-1',items:[{product_id:product.id,variant_id:'v-default',quantity:2}]},error:null}));
+ await mount(layoutTree(userAuth));assert.equal(calls.filter(c=>c.name==='change_variant_cart').length,1);
+ const receipt=calls.find(c=>c.name==='change_variant_cart').args.p_operation_id;
+ await act(async()=>direct.startDirectIntent(product.id,'v-default',1,null));
+ await settle(merge,{data:{id:'cart-1',items:[{product_id:product.id,variant_id:'v-default',quantity:2}]},error:null});
+ assert.equal(JSON.parse(sessionStorage.getItem('lume-guest-cart')).items[0].mergeId,receipt);
+ assert.equal(calls.filter(c=>c.name==='change_variant_cart').length,1,'no new merge while direct flow is active');
+ await act(async()=>root.unmount());root=null;await mount(layoutTree(userAuth,'/cart'));
+ assert.equal(calls.filter(c=>c.name==='change_variant_cart')[1].args.p_operation_id,receipt,'reconciliation reuses the accepted operation receipt');
+ assert.equal(JSON.parse(sessionStorage.getItem('lume-guest-cart')).items.length,0);
+});

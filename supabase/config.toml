@@ -6,6 +6,11 @@ project_id = "lume-house"
 verify_jwt = false
 import_map = "./functions/deno.json"
 
+# Dedicated direct purchase; the handler validates the real JWT explicitly.
+[functions.place-direct-order]
+verify_jwt = false
+import_map = "./functions/deno.json"
+
 # GET serves only linked active-product media; POST validates Auth and membership itself.
 [functions.product-media]
 verify_jwt = false
