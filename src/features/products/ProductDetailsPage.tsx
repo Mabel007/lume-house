@@ -19,9 +19,9 @@ import { PageHeader } from '../../components/PageHeader';
 export function ProductDetailsPage() {
   const { productId }=useParams();
   const { state }=useProducts();
-  if(state.status!=='ready') return <section className="wrap page-section"><PageHeader title="Product details." trail={[{label: 'Shop', to: '/'}]} /><ProductStatus /></section>;
+  if(state.status!=='ready') return <section className="wrap page-section"><PageHeader title="Product details." trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} /><ProductStatus /></section>;
   const product=state.products.find(product=>product.id===productId);
-  if(!product)return <section className="wrap page-section empty-state"><PageHeader title="This piece is unavailable." trail={[{label: 'Shop', to: '/'}]} /><p>It may no longer be part of the active collection.</p><Link className="button" to="/">Explore the collection</Link></section>;
+  if(!product)return <section className="wrap page-section empty-state"><PageHeader title="This piece is unavailable." trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} /><p>It may no longer be part of the active collection.</p><Link className="button" to="/">Explore the collection</Link></section>;
   return <ProductDetails key={product.id} product={product} />;
 }
 
@@ -70,7 +70,7 @@ export function ProductDetails({product}:{product:Product}) {
     else if(outcome.kind==='rejected')notify({tone:'error',message:bagAddFailedText(name,outcome.failure)});
   }
   return <section className="wrap page-section product-details">
-    <PageHeader title={product.name} trail={[{label: 'Shop', to: '/'}]} />
+    <PageHeader title={product.name} trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} />
     <div className="product-details-grid"><ProductGallery key={product.id} product={product}/>
       <div className="product-details-copy"><p className="eyebrow">{product.category}</p>
         <p className="product-details-price">{!variant&&optionsRequired?'From ':''}{formatMoney(price)}<CurrencyEstimate minorUnits={price} /></p><p className="product-details-description">{product.description}</p>

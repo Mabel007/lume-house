@@ -23,7 +23,7 @@ export function ShopPage() {
   const [addingId, setAddingId] = useState<string | null>(null);
   const { notify } = useNotifications();
   const { items, dispatch, status: cartStatus } = useCart();
-  const { state, refresh } = useProducts();
+  const { state } = useProducts();
   const products = state.status === "ready" ? state.products : [];
   const categories = [
     "All pieces",
@@ -162,9 +162,6 @@ export function ShopPage() {
               </div>
               <div className="flex items-center gap-4">
                 <span className="currency-note">Prices in {shop.currency}</span>
-                <button className="remove-button" onClick={refresh}>
-                  Refresh products
-                </button>
               </div>
             </div>
             <p className="collection-results" role="status">{visible.length} {visible.length===1?'piece':'pieces'} found{activeCategory!=='All pieces'?` in ${activeCategory}`:''}.</p>

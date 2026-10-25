@@ -87,15 +87,22 @@ test('delivery eligibility explains the Freetown limitation, lists active zones 
   assert.deepEqual(totals(),['NLE 36','Choose at checkout','Delivery details needed']);
   assert.equal(button().disabled,true);
   await setValue(cityField(),'Bo');
-  await blur(cityField());
-  assert.equal(cityField().getAttribute('aria-invalid'),'true');
+  assert.equal(cityField().getAttribute('aria-invalid'),'true','an unsupported city warns before blur');
   assert.match(cityField().getAttribute('aria-describedby'),/city-error/);
+  assert.equal(host.querySelector('#city-error').textContent,checkoutMessages.unsupportedCity);
+  const note=host.querySelector('#delivery-unavailable-note');
+  assert.ok(note,'the unsupported-city explanation appears promptly');
+  assert.match(note.textContent,/Place Order stays unavailable while the delivery city is outside our delivered areas in Freetown\./);
+  assert.match(button().getAttribute('aria-describedby'),/delivery-unavailable-note/);
+  assert.equal(button().disabled,true);
+  await blur(cityField());
   assert.equal(host.querySelector('#city-error').textContent,checkoutMessages.unsupportedCity);
   assert.equal(button().disabled,true);
   await setValue(cityField(),' Freetown ');
   await blur(cityField());
   await selectZone('zone-2');
   assert.equal(cityField().getAttribute('aria-invalid'),null);
+  assert.equal(host.querySelector('#delivery-unavailable-note'),null,'the explanation disappears for a supported delivery city');
   assert.doesNotMatch(host.textContent,/Delivery to this location isn't available yet/);
   assert.match(host.textContent,/Lumley to Congo Cross, including Aberdeen\. Delivery: NLE 50\./);
   assert.deepEqual(totals(),['NLE 36','NLE 50','NLE 86']);
@@ -180,7 +187,24 @@ test('contact phone exposes network-neutral help, a telephone keypad and field-a
   assert.equal(contact.getAttribute('inputmode'),'tel');
   assert.equal(contact.getAttribute('autocomplete'),'tel');
   assert.equal(contact.getAttribute('aria-describedby'),'contact-phone-help');
-  assert.match(host.textContent,/Enter an 8-digit Sierra Leone phone number, with or without 0 or \+232\. Example: 0XX XXX XXX\./);
+  assert.match(host.textContent,/Enter an 8-digit Sierra Leone phone number\./);
+  const formatTrigger=Array.from(host.querySelectorAll('.help-disclosure-trigger')).find(node=>/Number format help/.test(node.textContent));
+  assert.ok(formatTrigger,'the concise phone hint links to a fuller format disclosure');
+  assert.equal(formatTrigger.getAttribute('aria-expanded'),'false');
+  assert.equal(formatTrigger.getAttribute('aria-controls'),null,'a collapsed disclosure references no panel');
+  assert.equal(host.querySelector('#phone-format-panel'),null);
+  await toggle(formatTrigger);
+  assert.equal(formatTrigger.getAttribute('aria-expanded'),'true');
+  assert.equal(formatTrigger.getAttribute('aria-controls'),'phone-format-panel','the open disclosure references its existing panel');
+  const formatPanel=host.querySelector('#phone-format-panel');
+  assert.ok(formatPanel);
+  assert.match(formatPanel.textContent,/leading 0 or \+232/);
+  assert.match(formatPanel.textContent,/Example: 0XX XXX XXX\./);
+  assert.match(formatPanel.textContent,/spaces and dashes are removed automatically/);
+  await toggle(formatTrigger);
+  assert.equal(formatTrigger.getAttribute('aria-expanded'),'false');
+  assert.equal(host.querySelector('#phone-format-panel'),null);
+  assert.equal(formatTrigger.getAttribute('aria-controls'),null,'closing removes the reference together with the panel');
   await setValue(contact,'not a phone');
   assert.equal(host.querySelector('#contact-phone-error'),null);
   await blur(contact);
@@ -198,12 +222,24 @@ test('contact phone exposes network-neutral help, a telephone keypad and field-a
   assert.equal(contact.getAttribute('aria-invalid'),null);
 });
 
-test('any Sierra Leone network is accepted at placement with telephone keypads on contact and payment', async()=>{
+test('payment guidance stays concise and network-neutral with telephone keypads on contact and payment', async()=>{
   const calls=[];
   await mount({authSession:session,client:fakeClient(async(name,options)=>{calls.push({name,options});return {data:null,error:{context:new Response(JSON.stringify({error:'INVALID_DELIVERY_ZONE'}),{status:400,headers:{'Content-Type':'application/json'}})}};})});
   assert.equal(host.querySelector('#payment-phone').getAttribute('type'),'tel');
   assert.equal(host.querySelector('#payment-phone').getAttribute('inputmode'),'tel');
-  assert.match(host.textContent,/Any Sierra Leone mobile network is accepted\./);
+  assert.match(host.textContent,/8-digit Sierra Leone mobile-money number\./);
+  assert.doesNotMatch(host.textContent,/Any Sierra Leone mobile network is accepted/);
+  const detailsTrigger=Array.from(host.querySelectorAll('.help-disclosure-trigger')).find(node=>/Payment number details/.test(node.textContent));
+  assert.ok(detailsTrigger);
+  assert.equal(detailsTrigger.getAttribute('aria-controls'),null,'a collapsed disclosure references no panel');
+  assert.equal(host.querySelector('#payment-details-panel'),null);
+  await toggle(detailsTrigger);
+  assert.equal(detailsTrigger.getAttribute('aria-controls'),'payment-details-panel','the open disclosure references its existing panel');
+  const details=host.querySelector('#payment-details-panel');
+  assert.ok(details);
+  assert.match(details.textContent,/does not verify registration with the selected provider/);
+  assert.match(details.textContent,/follows your contact number/);
+  assert.match(details.textContent,/restores your separately entered payment number/);
   await fillRequired();
   await setValue(host.querySelector('[name="contact-phone"]'),'088 790011');
   await toggle(host.querySelector('#reuse-phone'));
@@ -213,6 +249,38 @@ test('any Sierra Leone network is accepted at placement with telephone keypads o
   assert.equal(calls[0].options.body.checkout.contact_phone,'+23288790011');
   assert.equal(calls[0].options.body.checkout.payment_phone,'+23288790011');
   assert.match(alertTexts().join(' '),/Please check your contact, payment and Freetown delivery details\./);
+});
+
+test('labelled "Use my contact number": reuse syncs read-only and untoggling restores the separate payer number', async()=>{
+  const {calls,client}=recordingClient();
+  await mount({authSession:session,client});
+  const reuseLabel=host.querySelector('label[for="reuse-phone"]');
+  assert.match(reuseLabel.textContent,/Use my contact number/);
+  assert.doesNotMatch(reuseLabel.textContent,/Use my contact phone number/);
+  const payment=host.querySelector('#payment-phone');
+  await setValue(host.querySelector('[name="contact-phone"]'),'088 790011');
+  await setValue(payment,'077 123 456');
+  await toggle(host.querySelector('#reuse-phone'));
+  assert.ok(payment.hasAttribute('readonly'),'the payer number is read-only while it follows the contact number');
+  assert.equal(payment.value,'088 790011','the payer number syncs to the contact number');
+  await toggle(host.querySelector('#reuse-phone'));
+  assert.equal(payment.hasAttribute('readonly'),false);
+  assert.equal(payment.value,'077 123 456','the separately entered payer number is restored rather than overwritten');
+  assert.equal(calls.length,0,'the checkbox transition alone places no order');
+});
+
+test('an invalid contact number with reuse selected is announced on the payer field and blocks placement', async()=>{
+  const {calls,client}=recordingClient();
+  await mount({authSession:session,client});
+  await fillRequired();
+  await setValue(host.querySelector('[name="contact-phone"]'),'not a phone');
+  await toggle(host.querySelector('#reuse-phone'));
+  assert.equal(errorText('payment-error'),'Enter a valid 8-digit Sierra Leone phone number.');
+  assert.match(host.querySelector('#payment-phone').getAttribute('aria-describedby'),/payment-error/);
+  await submit();
+  assert.equal(calls.length,0);
+  assert.match(alertTexts().join(' '),/Enter valid 8-digit Sierra Leone contact and payment numbers\./);
+  assert.equal(dom.window.document.activeElement.getAttribute('name'),'contact-phone');
 });
 
 const errorText=id=>host.querySelector(`#${id}`)?.textContent??null;
@@ -283,6 +351,7 @@ test('pristine fields stay quiet until blur, then show Lumé copy and clear on c
   for(const id of ['full-name-error','email-error','address-error','area-error','city-error','delivery-zone-error','contact-phone-error'])
     assert.equal(errorText(id),null,`${id} starts quiet`);
   assert.equal(errorText('payment-error') || null,null,'payment-error starts quiet');
+  assert.equal(host.querySelector('#delivery-unavailable-note'),null,'an empty untouched city shows no unsupported-city explanation');
   const name=host.querySelector('[name="full-name"]');
   await blur(name);
   assert.equal(errorText('full-name-error'),'Enter your full name.');

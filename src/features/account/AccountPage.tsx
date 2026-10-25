@@ -63,14 +63,14 @@ export function AccountPage() {
   }, [id]);
   if (auth.loading) return (
     <section className="wrap page-section">
-      <Breadcrumbs title="Your account." ancestors={[{ label: 'Shop', to: '/' }]} />
+      <Breadcrumbs title="My Account" ancestors={[{ label: 'Home', to: '/' }]} />
       <h1>Your account.</h1>
       <p role="status">Restoring your session…</p>
     </section>
   );
   if (!id) return (
     <section className="wrap page-section sign-in-page motion-enter">
-      <Breadcrumbs title="Welcome to Lumé House." ancestors={[{ label: 'Shop', to: '/' }]} />
+      <Breadcrumbs title="My Account" ancestors={[{ label: 'Home', to: '/' }]} />
       <div className="sign-in-copy"><p className="eyebrow">YOUR LUMÉ HOUSE</p><h1>Welcome to<br/>Lumé House.</h1><p className="account-intro">A considered home begins with the pieces you love.</p><p>Sign in to save your profile and Cart, and keep your orders in one place.</p><button className="button google-sign-in" onClick={() => void auth.signIn()}><span aria-hidden="true" className="google-mark">G</span>Sign in with Google</button><p className="small-note">Your profile defaults stay separate from each order’s delivery details.</p><p className="feedback" role="alert">{auth.error || (pathname === "/auth/callback" ? "Sign-in was not completed. Please try again." : "")}</p><Link className="text-link" to="/">Explore the collection →</Link></div><figure className="sign-in-image"><img src="/images/a-place-for-the-everyday.webp" alt="A warm living room with vases and candles on a wooden tray"/><figcaption>Beautiful things live here.</figcaption></figure></section>
   );
   if (pathname === "/auth/callback") return <Navigate to="/account" replace />;

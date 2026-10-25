@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { CurrencyContext } from './CurrencyContext';
-import { estimateFor, isStale, loadRatesEntry, rateExpiresAt, readCurrencyPreference, writeCurrencyPreference, type RatesCacheEntry, type SelectedCurrency } from './currency';
+import {
+  estimateFor,
+  isStale,
+  loadRatesEntry,
+  rateExpiresAt,
+  writeCurrencyPreference,
+  type RatesCacheEntry,
+} from './currency';
+import { initialCurrencyPreference } from './localeCurrency';
+import type { SelectedCurrency } from './currency';
 
 const REVALIDATE_MS = 15 * 60 * 1000;
 
 export function CurrencyProvider({ children }: { children: ReactNode }) {
-  const [currency, setSelection] = useState<SelectedCurrency>(readCurrencyPreference);
+  const [currency, setSelection] = useState<SelectedCurrency>(initialCurrencyPreference);
   const [result, setResult] = useState<{ entry: RatesCacheEntry | null } | null>(null);
   const [now, setNow] = useState(Date.now);
   const nextAttempt = useRef(0);

@@ -1,5 +1,6 @@
 import { CurrencyEstimate } from '../currency/CurrencySelector';
 import { FormField } from '../../components/FormField';
+import { HelpDisclosure } from '../../components/HelpDisclosure';
 import { variantLabel } from "../products/variants";
 import { useEffect, useLayoutEffect, useRef, useState, type InputHTMLAttributes } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -166,6 +167,14 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
   const paymentPhoneProblem = phoneProblem(paymentPhone, checkoutMessages.paymentPhone);
   if (paymentPhoneProblem)
     problems.push({ id: "payment-phone", message: paymentPhoneProblem });
+  // Immediate, accessible feedback for a non-blank delivery city we cannot
+  // serve. Blank cities keep the quieter blur-gated behaviour; the database
+  // stays authoritative on real orders.
+  const unsupportedCity =
+    fulfilment === "delivery" &&
+    city.trim() !== "" &&
+    cityProblem(city, deliveryConfig.serviceCity) ===
+      checkoutMessages.unsupportedCity;
   const problemFor = (id: string) =>
     problems.find((problem) => problem.id === id)?.message;
   const markTouched = (id: string) =>
@@ -175,7 +184,8 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
   const emailError = showsError("email") ? problemFor("email") : undefined;
   const addressError = showsError("address") ? problemFor("address") : undefined;
   const areaError = showsError("area") ? problemFor("area") : undefined;
-  const cityError = showsError("city") ? problemFor("city") : undefined;
+  const cityError =
+    showsError("city") || unsupportedCity ? problemFor("city") : undefined;
   const zoneError = showsError("delivery-zone") ? problemFor("delivery-zone") : undefined;
   const paymentError =
     reusePhone || showsError("payment-phone") ? problemFor("payment-phone") : undefined;
@@ -329,7 +339,7 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
                   markTouched("contact-phone");
                   setContactPhone(normalizePhone(event.currentTarget.value));
                 }}
-                hint="Enter an 8-digit Sierra Leone phone number, with or without 0 or +232. Example: 0XX XXX XXX."
+                hint="Enter an 8-digit Sierra Leone phone number."
                 error={contactError ?? undefined}
               />
               <Field
@@ -342,6 +352,13 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
                 onBlur={() => markTouched("email")}
                 error={emailError}
               />
+              <HelpDisclosure label="Number format help" id="phone-format">
+                <p>
+                  Accepted formats include numbers with or without a leading 0
+                  or +232; spaces and dashes are removed automatically.
+                </p>
+                <p>Example: 0XX XXX XXX.</p>
+              </HelpDisclosure>
             </div>
             <p className="small-note" role="status">{profileNote || (!auth.session ? "Sign in to use your saved profile defaults. Online order placement will require an account." : "Checkout edits do not change your saved profile.")}</p>
           </fieldset>
@@ -400,6 +417,18 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
                     error={cityError}
                     onBlur={() => markTouched("city")}
                   />
+                  {unsupportedCity && (
+                    <div className="sm:col-span-2">
+                      <p
+                        className="small-note"
+                        id="delivery-unavailable-note"
+                        role="status"
+                      >
+                        Place Order stays unavailable while the delivery city is
+                        outside our delivered areas in {deliveryConfig.serviceCity}.
+                      </p>
+                    </div>
+                  )}
                   <div className="sm:col-span-2">
                     <label htmlFor="delivery-zone">Delivery zone *</label>
                     <select
@@ -506,17 +535,27 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
                     checked={reusePhone}
                     onChange={(event) => setReusePhone(event.target.checked)}
                   />
-                  Use my contact phone number
+                  Use my contact number
                 </label>
                 <p className="small-note" id="payment-help">
-                  Any Sierra Leone mobile network is accepted. Use 8 digits, with
-                  or without 0 or +232. Example: 0XX XXX XXX. Number format only;
-                  this does not verify registration with the selected provider.
+                  Enter the payer’s 8-digit Sierra Leone mobile-money
+                  number.
                 </p>
-                <p className="small-note">
-                  When selected, this follows your contact number. Turning it
-                  off restores your separately entered payment number.
-                </p>
+                <HelpDisclosure label="Payment number details" id="payment-details">
+                  <p>
+                    Accepted formats include numbers with or without a leading 0
+                    or +232. Example: 0XX XXX XXX.
+                  </p>
+                  <p>
+                    Number format only; this does not verify registration with
+                    the selected provider.
+                  </p>
+                  <p>
+                    With “Use my contact number” selected, this number follows
+                    your contact number. Turning it off restores your separately
+                    entered payment number.
+                  </p>
+                </HelpDisclosure>
                 <p id="payment-error" className="field-error">
                   {paymentError}
                 </p>
@@ -525,7 +564,7 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
           </fieldset>
           <p className="small-note">
             Required fields are marked *. Payment awaits confirmation after placement;
-            selecting a provider does not initiate payment. Checkout edits do not update your profile.
+            selecting a provider does not initiate payment.
           </p>
         </form>
         <aside className="summary">
@@ -560,7 +599,11 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
               form="checkout-form"
               className="button w-full"
               disabled={submitting || cartStatus==='saving' || cartStatus==='loading' || cartStatus==='error' || recovering || deliveryFee===null}
-              aria-describedby="checkout-payment"
+              aria-describedby={
+                unsupportedCity
+                  ? "checkout-payment delivery-unavailable-note"
+                  : "checkout-payment"
+              }
             >
               {submitting?'Placing order…':'Place order'}
             </button>

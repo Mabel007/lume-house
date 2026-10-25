@@ -45,7 +45,7 @@ type AccountRequiredProps = {
 // Guest and session-restoring order gates keep the same navigable trail as
 // the signed-in orders pages. Private order information is never used here:
 // the title stays generic until an owner-scoped order has loaded.
-function AccountRequired({ title = 'Your orders.', trail = [{ label: 'Shop', to: '/' }, { label: 'Account', to: '/account' }] }: AccountRequiredProps) {
+function AccountRequired({ title = 'Your orders.', trail = [{ label: 'Home', to: '/' }, { label: 'My Account', to: '/account' }] }: AccountRequiredProps) {
   const auth = useAuth();
   return (
     <section className="wrap page-section orders-gate motion-enter">
@@ -94,7 +94,7 @@ export function MyOrdersPage() {
 
   return (
     <section className="wrap page-section orders-page motion-enter">
-      <PageHeader title="Orders for your home." trail={[{ label: 'Shop', to: '/' }, { label: 'Account', to: '/account' }]} />
+      <PageHeader title="Orders for your home." breadcrumbLabel="My Orders" trail={[{ label: 'Home', to: '/' }, { label: 'My Account', to: '/account' }]} />
       <p className="account-intro">A record of the pieces you have chosen.</p>
       {busy && <p role="status">Loading your orders…</p>}
       {error && (
@@ -158,8 +158,8 @@ export function OrderDetailPage({ success = false }: { success?: boolean }) {
     return <AccountRequired
       title="Your order."
       trail={[
-        { label: 'Shop', to: '/' },
-        { label: 'Account', to: '/account' },
+        { label: 'Home', to: '/' },
+        { label: 'My Account', to: '/account' },
         { label: 'My Orders', to: '/account/orders' },
       ]}
     />;
@@ -180,9 +180,10 @@ export function OrderDetailPage({ success = false }: { success?: boolean }) {
     <section className="wrap page-section order-page motion-enter">
       <PageHeader
         title={order?.order_reference || 'Your order.'}
+        breadcrumbLabel={order?.order_reference || 'Your order.'}
         trail={[
-          { label: 'Shop', to: '/' },
-          { label: 'Account', to: '/account' },
+          { label: 'Home', to: '/' },
+          { label: 'My Account', to: '/account' },
           { label: 'My Orders', to: '/account/orders' },
         ]}
       />

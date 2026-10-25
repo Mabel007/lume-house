@@ -124,6 +124,19 @@ export function readCurrencyPreference(): SelectedCurrency {
   return 'NLE';
 }
 
+// Distinction needed by first-visit locale detection: null means no usable
+// stored value (absent, storage unavailable or an unsupported code), whereas
+// readCurrencyPreference() defaults to NLE for existing call sites.
+export function readStoredCurrencyPreference(): SelectedCurrency | null {
+  try {
+    const value = localStorage.getItem(CURRENCY_STORAGE_KEY);
+    if (isSupportedCurrency(value)) return value;
+  } catch {
+    // Storage unavailable or unusable value — treat as no stored preference.
+  }
+  return null;
+}
+
 export function writeCurrencyPreference(currency: SelectedCurrency): void {
   try {
     localStorage.setItem(CURRENCY_STORAGE_KEY, currency);
