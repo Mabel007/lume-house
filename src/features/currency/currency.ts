@@ -19,8 +19,16 @@ export const RATES_URL =
 
 export interface RatesPayload {
   base: 'SLE';
-  date: string; // ISO calendar date, the Frankfurter reference (as-of) date
+  // The Frankfurter reference (as-of) date. For a mixed-date response
+  // (QA-FX-01) this is the oldest pair date: the conservative anchor for
+  // shared staleness checks, never presented as every pair's date.
+  date: string;
   rates: Record<string, number>;
+  // Every supported pair's actual reference date, present only when the
+  // provider reported differing dates; absent entries share the payload-level
+  // date, and older cached payloads without the whole map remain valid. The
+  // map must round-trip through the localStorage cache unchanged.
+  quoteDates?: Record<string, string>;
 }
 
 export interface RatesCacheEntry {
@@ -47,24 +55,76 @@ function isRealCalendarDate(value: unknown): value is string {
   );
 }
 
+// The unchanged seven-day maximum age and future-date rejection, applied to
+// every reference date exactly once. Used for the payload-level anchor and
+// for each pair's own date.
+function isCurrentReferenceDate(value: unknown, now: number): value is string {
+  if (!isRealCalendarDate(value)) return false;
+  if (!Number.isFinite(now)) return false;
+  const reference = Date.parse(value);
+  if (reference > now) return false; // future reference date
+  if (now - reference >= MAX_REFERENCE_AGE_MS) return false;
+  return true;
+}
+
+// Supported pairs may carry their own reference dates (mixed valid dates are
+// accepted); the whole-payload all-required-rates policy is unchanged, so an
+// invalid, expired or future date on ANY pair rejects the payload entirely.
+// A partial per-pair date map or unknown extra entries are malformed input.
 export function parseRatesPayload(raw: unknown, now = Date.now()): RatesPayload | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
   // 1. Exact response base SLE.
   if (o.base !== 'SLE') return null;
-  // 3. Real calendar dates.
-  if (!isRealCalendarDate(o.date)) return null;
-  if (!Number.isFinite(now) || Date.parse(o.date) > now || now - Date.parse(o.date) >= MAX_REFERENCE_AGE_MS) return null;
+  // 3. Real calendar dates, never future, within the reference-age window.
+  if (!isCurrentReferenceDate(o.date, now)) return null;
   // 2. Supported quote currency codes; 6. explicit completeness policy:
   //    every supported pair must be present and valid, otherwise reject.
   if (!o.rates || typeof o.rates !== 'object' || Array.isArray(o.rates)) return null;
   const rates: Record<string, number> = {};
+  let quoteDates: Record<string, string> | undefined;
+  // A present per-pair map must be a proper object: null, scalars, arrays,
+  // partial maps and unknown codes are malformed input and reject the payload.
+  if (o.quoteDates !== undefined && (o.quoteDates === null || typeof o.quoteDates !== 'object' || Array.isArray(o.quoteDates))) return null;
+  const pairDates = o.quoteDates as Record<string, unknown> | undefined;
   for (const code of SUPPORTED_ESTIMATE_CURRENCIES) {
     const value = (o.rates as Record<string, unknown>)[code];
     if (!isValidRate(value)) return null; // missing or invalid pair -> reject whole payload
     rates[code] = value;
+    // QA-FX-01: the actual date associated with this pair, falling back to the
+    // shared payload date for older cached payloads without per-pair dates.
+    const pairDate = pairDates === undefined ? o.date : (pairDates as Record<string, unknown>)[code];
+    if (pairDate === undefined) return null; // partial per-pair map is malformed
+    if (!isCurrentReferenceDate(pairDate, now)) return null;
+    if (pairDates !== undefined) {
+      // Full per-pair map: without minimization a mixed payload round-trips
+      // through the localStorage cache with every pair's date intact.
+      quoteDates = quoteDates ?? {};
+      quoteDates[code] = pairDate as string;
+    }
   }
-  return { base: 'SLE', date: o.date, rates };
+  if (pairDates !== undefined) {
+    for (const key of Object.keys(pairDates as Record<string, unknown>)) {
+      if (!(SUPPORTED_ESTIMATE_CURRENCIES as readonly string[]).includes(key)) return null;
+    }
+    // QA-FX-01 R2 (Codex Finding 1): the payload-level anchor must equal the
+    // oldest validated per-pair date — the value every shared staleness check
+    // (isStale / rateExpiresAt) reads. A cached aggregate claiming a newer
+    // anchor would keep stale pairs visible after the oldest pair had expired,
+    // so an inconsistent cached payload is rejected outright (the cache read
+    // path recovers by refetching); an anchor older than every mapped pair is
+    // inconsistent in the same way and is rejected too.
+    let oldestPairDate: string | null = null;
+    for (const code of SUPPORTED_ESTIMATE_CURRENCIES) {
+      const mapped = (pairDates as Record<string, unknown>)[code] as string;
+      if (oldestPairDate === null || mapped < oldestPairDate) oldestPairDate = mapped;
+    }
+    if (oldestPairDate !== o.date) return null;
+  }
+  // A map whose every entry repeats the anchor is a uniform payload: drop the
+  // key so the stored and returned shape match the legacy uniform shape.
+  if (quoteDates && Object.keys(quoteDates).every(code => quoteDates![code] === o.date)) quoteDates = undefined;
+  return { base: 'SLE', date: o.date, rates, ...(quoteDates ? { quoteDates } : {}) };
 }
 
 export function decimalsFor(code: string): number {
@@ -147,26 +207,48 @@ export function writeCurrencyPreference(currency: SelectedCurrency): void {
 
 // Parse the Frankfurter v2 array response into a RatesPayload.
 // Every row must identify the requested base; never relabel another base.
+// Rows may report different reference dates (QA-FX-01): valid differing dates
+// are preserved per pair with the oldest becoming the payload-level anchor.
 export function parseFrankfurterResponse(raw: unknown, now = Date.now()): RatesPayload | null {
   if (!Array.isArray(raw)) return null;
   if (raw.length === 0) return null;
   const rates: Record<string, number> = {};
-  let date = '';
+  const pairDates: Record<string, string> = {};
   for (const item of raw) {
     if (!item || typeof item !== 'object') return null;
     const o = item as Record<string, unknown>;
     if (o.base !== INTERNAL_CURRENCY) return null;
     if (typeof o.quote !== 'string') return null;
     if (!SUPPORTED_ESTIMATE_CURRENCIES.includes(o.quote as EstimateCurrency)) return null;
-    if (Object.hasOwn(rates, o.quote)) return null;
+    const quote = o.quote as EstimateCurrency;
+    if (Object.hasOwn(rates, quote)) return null;
     if (!isValidRate(o.rate)) return null;
     if (!isRealCalendarDate(o.date)) return null;
-    if (date && date !== o.date) return null;
-    date = o.date;
-    rates[o.quote] = o.rate as number;
+    pairDates[quote] = o.date;
+    rates[quote] = o.rate as number;
   }
-  if (!date) return null;
-  return parseRatesPayload({ base: 'SLE', date, rates }, now);
+  const dates = SUPPORTED_ESTIMATE_CURRENCIES.map(code => pairDates[code]);
+  if (dates.some(date => date === undefined)) return null; // a supported pair row is missing
+  let oldest = dates[0] as string;
+  for (const date of dates) if ((date as string) < oldest) oldest = date as string;
+  const mixed = dates.some(date => date !== oldest);
+  const payload: RatesPayload & { quoteDates?: Record<string, string> } = { base: 'SLE', date: oldest, rates };
+  if (mixed) payload.quoteDates = Object.fromEntries(SUPPORTED_ESTIMATE_CURRENCIES.map(code => [code, pairDates[code] as string]));
+  return parseRatesPayload(payload, now);
+}
+
+// Group the supported pairs by their actual reference date for truthful
+// display: a uniform payload yields one group for all four codes, a mixed
+// payload yields one group per distinct date in ascending date order.
+export function referenceDateGroups(payload: RatesPayload): Array<{ date: string; currencies: EstimateCurrency[] }> {
+  const groups: Array<{ date: string; currencies: EstimateCurrency[] }> = [];
+  for (const code of SUPPORTED_ESTIMATE_CURRENCIES) {
+    const date = payload.quoteDates?.[code] ?? payload.date;
+    const group = groups.find(candidate => candidate.date === date);
+    if (group) group.currencies.push(code);
+    else groups.push({ date, currencies: [code] });
+  }
+  return groups.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
 let inFlight: Promise<RatesCacheEntry | null> | null = null;

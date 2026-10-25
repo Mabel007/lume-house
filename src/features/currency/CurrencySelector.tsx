@@ -1,5 +1,6 @@
+import type { ReactNode } from 'react';
 import { useCurrencyEstimate } from './useCurrency';
-import type { SelectedCurrency } from './currency';
+import { referenceDateGroups, type SelectedCurrency } from './currency';
 
 // Footer-hosted manual display-currency control (B2.7 presentation).
 // The primary navigation stays checkout-focused; this is the single visible
@@ -35,16 +36,41 @@ export function CurrencyEstimate({ minorUnits }: { minorUnits: number }) {
 }
 // One explanation per customer layout, not one per product/price. The concise
 // visible line carries the two customer-facing limitations; reference
-// provider, rate date and the payment-provider quote limitation collapse into
-// a keyboard-accessible <details> so the storefront does not repeat technical
+// provider, the pair reference dates (listed per pair when they differ,
+// QA-FX-01) and the payment-provider quote limitation collapse into a
+// keyboard-accessible <details> so the storefront does not repeat technical
 // notices. No persistent live announcement: totals surfaces announce their own
 // guidance once.
 export function CurrencyDisclosure() {
   const { currency, payload, loading } = useCurrencyEstimate();
   if (currency === 'NLE') return null;
-  const referenceLine = payload
-    ? <>Informational estimates from Frankfurter, reference rates as of <time dateTime={payload.date}>{payload.date}</time>.</>
-    : loading ? 'Loading Frankfurter reference-rate estimates.' : 'Reference-rate estimates are unavailable.';
+  let referenceLine: ReactNode;
+  if (!payload) {
+    referenceLine = loading
+      ? 'Loading Frankfurter reference-rate estimates.'
+      : 'Reference-rate estimates are unavailable.';
+  } else {
+    // A shared-date sentence only when every pair truly shares one date;
+    // otherwise list each distinct pair date truthfully, oldest first.
+    const groups = referenceDateGroups(payload);
+    if (groups.length === 1) {
+      referenceLine = <>Informational estimates from Frankfurter, reference rates as of <time dateTime={payload.date}>{payload.date}</time>.</>;
+    } else {
+      referenceLine = (
+        <>
+          Informational estimates from Frankfurter, reference rates:{' '}
+          {groups.map((group, index) => (
+            <span key={group.date} className="currency-reference-group">
+              {index > 0 && (index === groups.length - 1 ? ' and ' : ', ')}
+              {group.currencies.join(', ')} as of{' '}
+              <time dateTime={group.date}>{group.date}</time>
+            </span>
+          ))}
+          .
+        </>
+      );
+    }
+  }
   return <div id="currency-disclosure" className="currency-disclosure">
     <p className="currency-disclosure-primary">Foreign amounts are estimates. Checkout and payment amounts remain in NLE.</p>
     <details>

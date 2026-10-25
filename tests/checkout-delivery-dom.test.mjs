@@ -11,13 +11,22 @@ import {checkoutMessages} from '../src/features/checkout/validation.ts';
 // no credential, endpoint or network call is used. Delivery fees are display
 // only here — trusted SQL remains authoritative.
 const dom=new JSDOM('<!doctype html><html><body><div id="checkout-root"></div></body></html>',{url:'http://localhost/'});
-for(const name of ['window','document','Element','HTMLElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','MutationObserver','FormData','sessionStorage','location'])Object.defineProperty(globalThis,name,{configurable:true,value:dom.window[name]});
+for(const name of ['window','document','Element','HTMLElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','MutationObserver','FormData','sessionStorage','localStorage','location'])Object.defineProperty(globalThis,name,{configurable:true,value:dom.window[name]});
 globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 const {createRoot}=await import('react-dom/client');
 let server,root;
 const host=dom.window.document.getElementById('checkout-root');
 let CheckoutPage, ProductContext, CartContext, AuthContext;
 
+// QA-FX-01 R2 locale isolation (Codex Finding 3): every checkout mount
+// establishes the display currency deterministically. A stored NLE selection
+// outranks host-locale detection (the localeCurrency contract), the navigator
+// hands are replaced only inside the focused detection scenario, and global
+// fetch is a counted deterministic FX stub so no live Frankfurter request can
+// ever begin on any host.
+const CURRENCY_STORAGE_KEY='lume:currency';
+const nativeFetch=globalThis.fetch;
+const originalNavigator=Object.getOwnPropertyDescriptor(globalThis,'navigator');
 before(async()=>{
   server=await createServer({configFile:false,envDir:false,server:{middlewareMode:true,hmr:false},plugins:[{name:'isolated-checkout-delivery-client',enforce:'pre',load(id){if(id.replaceAll('\\','/').endsWith('/src/lib/supabase/client.ts'))return 'export function getSupabaseClient(){return globalThis.__checkoutDeliveryClient;}';}}]});
   ({ CurrencyProvider } = await server.ssrLoadModule('/src/features/currency/CurrencyProvider.tsx'));
@@ -26,7 +35,7 @@ before(async()=>{
   ({CartContext}=await server.ssrLoadModule('/src/features/cart/CartContext.ts'));
   ({AuthContext}=await server.ssrLoadModule('/src/features/auth/AuthContext.ts'));
 });
-afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;host.replaceChildren();delete globalThis.__checkoutDeliveryClient;dom.window.sessionStorage.clear();dom.window.localStorage.clear();});
+afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;host.replaceChildren();delete globalThis.__checkoutDeliveryClient;dom.window.sessionStorage.clear();dom.window.localStorage.clear();globalThis.fetch=nativeFetch;if(originalNavigator)Object.defineProperty(globalThis,'navigator',originalNavigator);else delete globalThis.navigator;});
 after(async()=>{await server.close();dom.window.close();});
 
 const session={access_token:'synthetic-jwt',user:{id:'11111111-1111-4111-8111-111111111111',email:'fixture@example.invalid'}};
@@ -39,9 +48,13 @@ function fakeClient(invoke){return {
   functions:{invoke:invoke??(async()=>({data:null,error:null}))},
 };}
 
-async function mount({authSession=null,cartStatus='ready',items=[{productId:fixture.id,quantity:2}],products=[fixture],client,refreshProducts=noop,retryCart=noop}={}){
+async function mount({authSession=null,cartStatus='ready',items=[{productId:fixture.id,quantity:2}],products=[fixture],client,refreshProducts=noop,retryCart=noop,currencyPreference='NLE'}={}){
   globalThis.__checkoutDeliveryClient=client??fakeClient();
   if(root){await act(async()=>root.unmount());root=undefined;host.replaceChildren();}
+  // Deterministic display currency for every scenario except the focused
+  // host-locale regression: the host locale can never decide this suite.
+  if(currencyPreference===null)dom.window.localStorage.removeItem(CURRENCY_STORAGE_KEY);
+  else dom.window.localStorage.setItem(CURRENCY_STORAGE_KEY,currencyPreference);
   root=createRoot(host);
   await act(async()=>renderCurrency(
     React.createElement(MemoryRouter,null,

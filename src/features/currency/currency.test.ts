@@ -28,6 +28,8 @@ import {
   loadRates,
   loadRatesEntry,
   isStale,
+  rateExpiresAt,
+  referenceDateGroups,
   RATES_TIMEOUT_MS,
   clearRatesCache,
   decimalsFor,
@@ -205,15 +207,175 @@ test('every response row requires SLE, including mixed bases and missing base', 
   assert.equal(parseFrankfurterResponse([...rows, rows[0]]), null);
 });
 
-test('calendar, reference-age boundary, future date, mixed date and missing pair are rejected', () => {
+test('calendar, reference-age and future-date anchors are rejected; missing pair rows are rejected', () => {
   const now = Date.parse('2026-10-23T00:00:00Z');
   for (const date of ['2026-02-30', '2026-10-24', '2026-10-16', '2000-01-01']) {
     assert.equal(parseRatesPayload({...samplePayload, date}, now), null);
   }
   assert.ok(parseRatesPayload({...samplePayload, date:'2026-10-17'}, now));
-  const rows = Object.entries(samplePayload.rates).map(([quote, rate]) => ({base:'SLE', quote, rate, date:samplePayload.date}));
+  const rows = Object.entries(samplePayload.rates).map(([quote, rate]) => ({base:'SLE', quote, rate, date:'2026-10-23'}));
   assert.equal(parseFrankfurterResponse(rows.slice(1), now), null);
-  assert.equal(parseFrankfurterResponse(rows.map((r, i) => i ? r : {...r, date:'2026-10-21'}), now), null);
+  assert.ok(parseFrankfurterResponse(rows, now), 'valid mixed pair dates are accepted (QA-FX-01)');
+});
+
+// QA-FX-01: Frankfurter mixes pair reference dates (for example GHS/GNF/NGN on
+// one date and USD two days earlier). Valid mixed rows are accepted with each
+// pair's own date preserved and the oldest as the conservative payload anchor.
+const mixedRows = () => [
+  { base:'SLE', quote:'GNF', rate:552.74, date:'2026-10-23' },
+  { base:'SLE', quote:'GHS', rate:0.73113, date:'2026-10-23' },
+  { base:'SLE', quote:'NGN', rate:83.54, date:'2026-10-23' },
+  { base:'SLE', quote:'USD', rate:0.06266, date:'2026-10-21' },
+];
+
+test('mixed valid reference dates are preserved per pair with the oldest conservative anchor', () => {
+  const parsed = parseFrankfurterResponse(mixedRows())!;
+  assert.ok(parsed);
+  assert.equal(parsed.date, '2026-10-21');
+  // Full per-pair map: every pair lists its own date (USD's equals the anchor,
+  // which also carries it as the payload-level date), and the map must
+  // round-trip through the localStorage cache unchanged.
+  assert.deepEqual(parsed.quoteDates, { GNF:'2026-10-23', GHS:'2026-10-23', NGN:'2026-10-23', USD:'2026-10-21' });
+  assert.deepEqual(referenceDateGroups(parsed), [
+    { date:'2026-10-21', currencies:['USD'] },
+    { date:'2026-10-23', currencies:['GNF','GHS','NGN'] },
+  ]);
+});
+
+test('uniform reference dates keep the exact legacy payload shape', () => {
+  assert.deepEqual(parseRatesPayload(samplePayload), samplePayload);
+  assert.deepEqual(parseFrankfurterResponse(mixedRows().map(row => ({ ...row, date:'2026-10-22' }))), samplePayload);
+  // A map whose every entry repeats the shared date drops the key and yields
+  // the exact legacy uniform shape.
+  assert.deepEqual(parseRatesPayload({ ...samplePayload, quoteDates:{ GNF:'2026-10-22', GHS:'2026-10-22', NGN:'2026-10-22', USD:'2026-10-22' } }), samplePayload);
+  assert.deepEqual(referenceDateGroups(samplePayload), [
+    { date:'2026-10-22', currencies:['GNF','GHS','NGN','USD'] },
+  ]);
+});
+
+test('malformed per-pair date maps and invalid pair dates reject the whole payload', () => {
+  const full = { GNF:'2026-10-22', GHS:'2026-10-22', NGN:'2026-10-22', USD:'2026-10-21' };
+  assert.equal(parseRatesPayload({ ...samplePayload, quoteDates:{ GNF:'2026-10-22', GHS:'2026-10-22', NGN:'2026-10-22' } }), null); // partial map
+  assert.equal(parseRatesPayload({ ...samplePayload, quoteDates:{ ...full, EUR:'2026-10-22' } }), null); // unknown code
+  assert.equal(parseRatesPayload({ ...samplePayload, quoteDates:[full] }), null); // array shape
+  assert.equal(parseRatesPayload({ ...samplePayload, quoteDates:'2026-10-22' }), null); // scalar
+  assert.equal(parseRatesPayload({ ...samplePayload, quoteDates:null }), null);
+  assert.equal(parseRatesPayload({ ...samplePayload, quoteDates:{ ...full, USD:'10-21-2026' } }), null); // wrong date shape
+  for (const usdDate of ['2026-02-30', '2026-10-24', '2026-10-16']) { // bad calendar / future / expired pair
+    assert.equal(parseRatesPayload({ ...samplePayload, quoteDates:{ ...full, USD:usdDate } }), null);
+    assert.equal(parseFrankfurterResponse(mixedRows().map(row => row.quote === 'USD' ? { ...row, date:usdDate } : row)), null);
+  }
+  // The anchor and the map must agree in either direction: an anchor that is
+  // not the smallest mapped pair date is malformed input, not merely unusual.
+  assert.equal(parseRatesPayload({ ...samplePayload, quoteDates:{ GNF:'2026-10-23', GHS:'2026-10-23', NGN:'2026-10-23', USD:'2026-10-21' } }), null); // map's oldest predates the anchor
+  assert.equal(parseRatesPayload({ ...samplePayload, date:'2026-10-21', quoteDates:{ GNF:'2026-10-22', GHS:'2026-10-22', NGN:'2026-10-22', USD:'2026-10-22' } }), null); // anchor predates every mapped pair
+});
+
+test('aggregate staleness stays conservative: the oldest pair date decides the shared horizon', () => {
+  const parsed = parseFrankfurterResponse(mixedRows())!;
+  assert.ok(parsed);
+  // A cache written near the end of the mixed payload's reference window; the
+  // fetchedAt TTL window stays satisfied throughout, so only the reference
+  // age differs between the two payloads below.
+  const storedAt = Date.parse('2026-10-27T12:00:00Z');
+  const oldestHorizon = Date.parse('2026-10-28T00:00:00Z'); // 2026-10-21 + 7d
+  assert.equal(isStale(parsed, storedAt, storedAt), false);
+  assert.equal(isStale(parsed, storedAt, oldestHorizon - 1), false, 'still current at the last instant of the oldest pair window');
+  // The oldest pair (USD, 2026-10-21) expires although GNF/GHS/NGN
+  // (2026-10-23) would still be current for two more days on their own.
+  assert.equal(isStale(parsed, storedAt, oldestHorizon), true);
+  assert.equal(isStale({...samplePayload, date:'2026-10-23'}, storedAt, oldestHorizon), false, 'fresher pairs alone would remain current: the oldest anchor decides');
+  const lateStoredAt = Date.parse('2026-10-27T13:00:00Z');
+  assert.equal(isStale(parsed, lateStoredAt, lateStoredAt), false);
+  assert.equal(rateExpiresAt({ storedAt: lateStoredAt, payload: parsed }), oldestHorizon,
+    'rateExpiresAt is anchored to the oldest pair date, not the freshest');
+});
+
+// QA-FX-01 R2 (Codex Finding 1): Frankfurter's exact mismatch fixture —
+// USD on 2026-10-23 and GHS/GNF/NGN on 2026-10-25, cached with the aggregate
+// date 2026-10-25 — accepted a newer-than-oldest anchor, so the shared
+// staleness checks (driven by the anchor) kept a seven-day-old USD pair
+// visible while 2026-10-30T00:00:00Z had already expired it. The corrected
+// parser rejects that inconsistent cached payload outright; parsing the rows
+// afresh always derives the true conservative anchor itself.
+const codexRows = () => [
+  { base:'SLE', quote:'USD', rate:0.06266, date:'2026-10-23' },
+  { base:'SLE', quote:'GNF', rate:552.74, date:'2026-10-25' },
+  { base:'SLE', quote:'GHS', rate:0.73113, date:'2026-10-25' },
+  { base:'SLE', quote:'NGN', rate:83.54, date:'2026-10-25' },
+];
+const codexMismatchPayload = () => ({
+  base: 'SLE' as const,
+  date: '2026-10-25',
+  rates: samplePayload.rates,
+  quoteDates: { GNF:'2026-10-25', GHS:'2026-10-25', NGN:'2026-10-25', USD:'2026-10-23' },
+});
+
+test('a cached aggregate anchor newer than the oldest pair date is rejected; parsed rows derive the true anchor', () => {
+  const now = Date.parse('2026-10-28T12:00:00Z'); // every reported date is individually current at this now
+  assert.equal(parseRatesPayload(codexMismatchPayload(), now), null,
+    'the cached aggregate 2026-10-25 is not the oldest pair date (USD 2026-10-23) and is rejected');
+  assert.equal(parseRatesPayload({ ...codexMismatchPayload(), date:'2026-10-21', quoteDates:{ GNF:'2026-10-25', GHS:'2026-10-25', NGN:'2026-10-25', USD:'2026-10-25' } }), null,
+    'an anchor older than every mapped pair is equally inconsistent');
+  const fresh = parseFrankfurterResponse(codexRows(), now)!;
+  assert.ok(fresh);
+  assert.equal(fresh.date, '2026-10-23', 'fresh rows derive the true conservative anchor, never the freshest date');
+  assert.deepEqual(fresh.quoteDates, { GNF:'2026-10-25', GHS:'2026-10-25', NGN:'2026-10-25', USD:'2026-10-23' });
+});
+
+test('the oldest pair date ends even a consistent cached payload at the exact 2026-10-30T00:00:00Z boundary', () => {
+  const consistent = parseFrankfurterResponse(codexRows(), Date.parse('2026-10-28T12:00:00Z'))!;
+  assert.ok(consistent);
+  const storedAt = Date.parse('2026-10-29T12:00:00Z'); // well inside the 24h cache TTL for every stake below
+  const usdHorizon = Date.parse('2026-10-30T00:00:00Z'); // exactly 2026-10-23 + 7 days for the USD pair
+  assert.equal(rateExpiresAt({ storedAt, payload: consistent }), usdHorizon,
+    'whole-payload expiry follows the oldest pair date, never the fresher 2026-10-25 pairs');
+  assert.equal(isStale(consistent, storedAt, usdHorizon - 1), false, 'current through the last instant before the oldest pair expires');
+  assert.equal(isStale(consistent, storedAt, usdHorizon), true, 'at the exact UTC boundary the seven-day-old USD pair expires the shared horizon');
+});
+
+test('localStorage recovery never uses an inconsistent cached aggregate and refetches deterministically', async () => {
+  clearRatesCache();
+  const now = Date.parse('2026-10-28T12:00:00Z');
+  localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify({ storedAt: now, payload: codexMismatchPayload() }));
+  let refetches = 0;
+  const recovered = await loadRatesEntry(async () => { refetches++; return new Response(JSON.stringify(codexRows())); }, () => now);
+  assert.equal(refetches, 1, 'cached recovery validates the blob instead of trusting it, and refetches on rejection');
+  assert.ok(recovered);
+  assert.equal(recovered!.payload.date, '2026-10-23', 'recovery derives the true conservative anchor');
+  assert.deepEqual(recovered!.payload.quoteDates, { GNF:'2026-10-25', GHS:'2026-10-25', NGN:'2026-10-25', USD:'2026-10-23' });
+  assert.deepEqual(JSON.parse(localStorage.getItem(RATES_STORAGE_KEY)!).payload, recovered!.payload,
+    'the recovered consistent payload replaces the inconsistent blob in the cache');
+  clearRatesCache();
+});
+
+test('mixed payloads cache with their per-pair dates; older payloads without the map still hit', async () => {
+  clearRatesCache();
+  const first = await loadRates(async () => new Response(JSON.stringify(mixedRows())));
+  assert.ok(first);
+  assert.deepEqual(first!.quoteDates, { GNF:'2026-10-23', GHS:'2026-10-23', NGN:'2026-10-23', USD:'2026-10-21' });
+  let calls = 0;
+  const hit = await loadRatesEntry(async () => { calls++; throw new Error('must use only the cache'); });
+  assert.equal(calls, 0);
+  assert.deepEqual(hit?.payload, first);
+  clearRatesCache();
+  // Pre-QA-FX-01 cache entries carry no per-pair map and remain valid hits.
+  localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify({ storedAt: Date.now(), payload: samplePayload }));
+  const legacy = await loadRatesEntry(async () => { calls++; throw new Error('must use only the cache'); });
+  assert.equal(calls, 0);
+  assert.deepEqual(legacy?.payload, samplePayload);
+  clearRatesCache();
+  // An expired pair date makes the whole cached payload unusable and refetches.
+  localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify({
+    storedAt: Date.now(),
+    payload: { base:'SLE', date:'2026-10-16', rates:samplePayload.rates, quoteDates:{ GNF:'2026-10-23', GHS:'2026-10-23', NGN:'2026-10-23', USD:'2026-10-16' } },
+  }));
+  let refetches = 0;
+  const refreshed = await loadRates(async () => { refetches++; return new Response(JSON.stringify(mixedRows())); });
+  assert.equal(refetches, 1);
+  assert.ok(refreshed);
+  assert.equal(refreshed!.date, '2026-10-21');
+  clearRatesCache();
 });
 
 test('freshly fetched stale, future and wrong-base responses are neither returned nor cached', async () => {

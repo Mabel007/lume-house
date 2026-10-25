@@ -37,6 +37,12 @@ let calls = 0;
 const CURRENCY_STORAGE_KEY = 'lume:currency';
 const rows = () => ['GNF', 'GHS', 'NGN', 'USD'].map((quote, i) => ({ base: 'SLE', date: referenceDate(), quote, rate: [552.74, .73113, 83.54, .06266][i] }));
 
+// QA-FX-01 fixture: Frankfurter reports USD with a different (older) reference
+// date than GNF/GHS/NGN. Derived from the frozen clock so it never drifts.
+const twoDaysAgo = () => new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const mixedRows = () => rows().map(row => row.quote === 'USD' ? { ...row, date: twoDaysAgo() } : row);
+const serveMixed = () => { globalThis.fetch = async () => { calls++; return new Response(JSON.stringify(mixedRows()), { status: 200 }); }; };
+
 const localelessNavigator = () => Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { languages: [], language: undefined } });
 const serveRates = () => { globalThis.fetch = async () => { calls++; return new Response(JSON.stringify(rows()), { status: 200 }); }; };
 const flush = async () => { await act(async () => { await new Promise(resolve => setImmediate(resolve)); }); };
@@ -195,6 +201,60 @@ test('switching through the footer select drives the shared provider once; retur
   assert.equal(host.querySelectorAll('#currency-disclosure').length, 0);
   assert.equal(calls, 1, 'returning to NLE still reuses the one request');
   assert.equal(host.querySelector('select[aria-label="Display currency"]').getAttribute('aria-describedby'), null);
+});
+
+test('mixed Frankfurter reference dates are disclosed per pair and still feed estimates from cache', async () => {
+  localelessNavigator();
+  serveMixed();
+  await mountFooter();
+  await selectFoot('USD');
+  assert.equal(calls, 1, 'exactly one rate request for the mixed-date response');
+  assert.equal(host.querySelectorAll('#currency-disclosure').length, 1);
+  const notice = host.querySelector('#currency-disclosure');
+  assert.deepEqual([...notice.querySelectorAll('time')].map(t => t.dateTime), [twoDaysAgo(), referenceDate()], 'every distinct pair date is disclosed, oldest first');
+  const groups = [...notice.querySelectorAll('.currency-reference-group')];
+  assert.match(groups[0].textContent, /USD as of/);
+  assert.match(groups[1].textContent, /GNF, GHS, NGN as of/);
+  assert.doesNotMatch(notice.textContent, /reference rates as of/, 'no single shared-date claim when pair dates differ');
+  assert.match(notice.textContent, /Informational estimates from Frankfurter/);
+  assert.match(notice.textContent, /An exchange-rate estimate is not a payment-provider quote\./);
+  const cachedEntry = JSON.parse(localStorage.getItem(currency.RATES_STORAGE_KEY));
+  assert.equal(cachedEntry.payload.date, twoDaysAgo(), 'the oldest pair date anchors the cached payload');
+  // Full per-pair map round-trips through the cache unchanged.
+  assert.deepEqual(cachedEntry.payload.quoteDates, { GNF: referenceDate(), GHS: referenceDate(), NGN: referenceDate(), USD: twoDaysAgo() });
+  // QA-FX-01 R2 (Codex Finding 2): genuinely remount. Unmounting the old root
+  // and mounting a brand-new CurrencyProvider instance from a fresh root
+  // proves the second mount hydrates the persisted FX cache; a render onto
+  // the same root would only reconcile the retained provider state.
+  await act(async () => root.unmount());
+  const cachedJson = localStorage.getItem(currency.RATES_STORAGE_KEY);
+  assert.ok(cachedJson, 'the mixed payload persists in localStorage between the mounts');
+  assert.equal(host.querySelectorAll('.currency-estimate').length, 0, 'the previous provider tree is really gone');
+  beginMount();
+  await act(async () => root.render(React.createElement(MemoryRouter, null,
+    React.createElement(CurrencyProvider, null,
+      React.createElement('main', null,
+        React.createElement(OrderSummary, { subtotal: 3600, deliveryFee: 4000, estimates: true })),
+      React.createElement(SiteFooter, null)))));
+  await settle();
+  assert.equal(calls, 1, 'the fresh provider hydrates the persisted FX cache without refetching');
+  assert.equal(localStorage.getItem(currency.RATES_STORAGE_KEY), cachedJson, 'hydration reads the persisted cache instead of rewriting it');
+  // The fresh provider re-derives both the per-pair disclosure and USD estimates
+  // from the cached mixed payload — evidence of real cache hydration, not
+  // retained state (which a same-root re-render could not disprove).
+  const freshNotice = host.querySelector('#currency-disclosure');
+  assert.ok(freshNotice);
+  assert.deepEqual([...freshNotice.querySelectorAll('time')].map(t => t.dateTime), [twoDaysAgo(), referenceDate()]);
+  let estimates = [...host.querySelectorAll('.currency-estimate')];
+  assert.deepEqual(estimates.map(e => e.textContent), ['≈ USD 2.26', '≈ USD 2.51', '≈ USD 4.76']);
+  assert.match(host.querySelector('.estimate-note').textContent, /Foreign amounts are estimates\./);
+  // Switching currencies on the fresh provider keeps feeding estimates from the
+  // same cached mixed payload with no additional request.
+  await selectFoot('GHS');
+  assert.equal(calls, 1, 'a valid cached mixed payload serves further selections without refetching');
+  estimates = [...host.querySelectorAll('.currency-estimate')];
+  assert.deepEqual(estimates.map(e => e.textContent), ['≈ GHS 26.32', '≈ GHS 29.25', '≈ GHS 55.57']);
+  assert.deepEqual([...host.querySelector('#currency-disclosure').querySelectorAll('time')].map(t => t.dateTime), [twoDaysAgo(), referenceDate()]);
 });
 
 test('the controlled clock alone decides validity: a simulated date far beyond the seven-day window still validates the fresh fixture', async () => {
