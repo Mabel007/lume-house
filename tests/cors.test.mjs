@@ -6,6 +6,7 @@ import { commerceHandler } from '../supabase/functions/_shared/handler.ts';
 const staging = 'https://gscihjjwhmvddrmcfpxp.supabase.co';
 const production = 'https://wyvsbzcltrhnjeuijsva.supabase.co';
 const original = 'https://original.example.invalid';
+const productionStorefront = 'https://lume.najbuilds.com';
 const extra = 'https://lume-house-git-feat-lume-web-b2-1-a-direct-order-najbuilds.vercel.app';
 const previousDeno = globalThis.Deno;
 after(() => { globalThis.Deno = previousDeno; });
@@ -27,8 +28,16 @@ test('missing, empty or malformed supplemental entries never widen the allowlist
   assert.deepEqual(allowedOrigins(original, `*,${extra},https://bad.invalid/path`, staging), [original, extra]);
 });
 
+test('production adds only the exact owned storefront origin without replacing legacy origins', () => {
+  assert.deepEqual(allowedOrigins(original, extra, production), [original, productionStorefront]);
+  assert.deepEqual(allowedOrigins(`${original},${productionStorefront}`, '*', production), [original, productionStorefront]);
+  for (const url of [undefined, '', 'http://127.0.0.1:54321', production + '/', production + '.invalid']) {
+    assert.deepEqual(allowedOrigins(original, extra, url), [original]);
+  }
+});
+
 test('supplemental configuration is ignored outside the explicit staging project', () => {
-  for (const url of [production, undefined, '', 'http://127.0.0.1:54321', staging + '/', staging + '.invalid']) {
+  for (const url of [undefined, '', 'http://127.0.0.1:54321', staging + '/', staging + '.invalid']) {
     assert.deepEqual(allowedOrigins(original, extra, url), [original]);
   }
 });
@@ -86,6 +95,10 @@ test('production ignores supplemental origins and allowed origins do not bypass 
   for (const { name, handler } of await handlers(production)) {
     assert.equal((await handler(preflight(original))).status, 204, name);
     assert.equal((await handler(preflight(extra))).status, 403, name);
+    const storefrontResponse = await handler(preflight(productionStorefront));
+    assert.equal(storefrontResponse.status, 204, name);
+    assert.equal(storefrontResponse.headers.get('access-control-allow-origin'), productionStorefront, name);
+    assert.equal((await handler(preflight(productionStorefront + '.invalid'))).status, 403, name);
   }
   for (const { name, handler } of await handlers()) {
     const response = await handler(new Request('https://edge.example.invalid', { method: 'POST', headers: { Origin: extra, 'Content-Type': 'application/json' }, body: '{}' }));
