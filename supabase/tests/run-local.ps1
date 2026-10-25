@@ -1,4 +1,5 @@
 # Local-only disposable PostgreSQL. Never uses project credentials or hosted URLs.
+param([switch]$DirectOrderOnly)
 $ErrorActionPreference = 'Stop'
 $testRoot = $PSScriptRoot
 $supabaseRoot = Split-Path $testRoot -Parent
@@ -9,6 +10,18 @@ function Run-Sql([string]$label, [string]$sql) {
   Write-Output "CHECK: $label"
   $sql | docker exec -i $containerName psql -U postgres -v ON_ERROR_STOP=1 -At
   if ($LASTEXITCODE -ne 0) { throw "SQL check failed: $label" }
+}
+function Run-DirectChecks {
+  $directOrder = Read-Sql (Join-Path $supabaseRoot 'migrations/20261023002800_direct_order_contract.sql')
+  $directBody = $directOrder -replace '(?m)^begin;\s*$', '' -replace '(?m)^commit;\s*$', ''
+  Run-Sql 'direct source migration preserves populated orders and old retries' ((Read-Sql (Join-Path $testRoot 'direct-source-before.sql')) + $directBody + (Read-Sql (Join-Path $testRoot 'direct-source-after.sql')))
+  Run-Sql 'direct-order source and trusted single-item contract' $directOrder
+  Run-Sql 'direct placement, no Bag writes, replay and privilege boundary' (Read-Sql (Join-Path $testRoot 'direct-order.sql'))
+  foreach($suite in @('checkout','variant-checkout','inventory')) {
+    Run-Sql 'existing checkout regression after direct-order migration' (Read-Sql (Join-Path $testRoot ($suite+'.sql')))
+  }
+  node (Join-Path $testRoot 'direct-order-concurrency.mjs') $containerName
+  if ($LASTEXITCODE -ne 0) { throw 'Direct-order two-session concurrency checks failed' }
 }
 try {
   docker run --detach --rm --network none --name $containerName -e POSTGRES_HOST_AUTH_METHOD=trust postgres:14.1-alpine
@@ -69,6 +82,7 @@ $guard$;
   Run-Sql 'inventory migration preserves populated legacy history' ((Read-Sql (Join-Path $testRoot 'variant-checkout-before.sql')) + $inventoryBody + (Read-Sql (Join-Path $testRoot 'variant-checkout-after.sql')))
   Run-Sql 'inventory foundation without fabricated counts' $inventory
   Run-Sql 'finite stock allocation, ledger and security' (Read-Sql (Join-Path $testRoot 'inventory.sql'))
+  if ($DirectOrderOnly) { Run-DirectChecks; return }
   Run-Sql 'ownership, constraints, historical snapshots' (Read-Sql (Join-Path $testRoot 'commerce.sql'))
   Run-Sql 'trusted atomic checkout/idempotency/email leases' (Read-Sql (Join-Path $testRoot 'checkout.sql'))
   Run-Sql 'trusted business authorization migration' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261006001000_business_admin.sql'))
@@ -119,6 +133,7 @@ $guard$;
   if ($LASTEXITCODE -ne 0) { throw 'Filter/analytics read concurrency failed' }
   Run-Sql 'permanent admin HTTP conflicts' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261012002700_admin_conflict_http.sql'))
   Run-Sql 'final admin conflict and preservation regressions' (Read-Sql (Join-Path $testRoot 'admin-conflicts.sql'))
+  Run-DirectChecks
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin

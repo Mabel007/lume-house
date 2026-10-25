@@ -138,15 +138,15 @@ const breadcrumb = () => host.querySelector('nav[aria-label="Breadcrumb"]');
 const links = () => breadcrumb()?.querySelectorAll('a') ?? [];
 const current = () => breadcrumb()?.querySelector('span[aria-current="page"]');
 
-test('guest Account shows the shop breadcrumb trail and one h1', async () => {
+test('guest Account shows the Home breadcrumb trail and one h1', async () => {
   await mount(React.createElement(AccountPage));
   assert.equal(h1Count(), 1);
   assert.ok(breadcrumb());
   assert.equal(links().length, 1);
   assert.equal(links()[0]?.getAttribute('href'), '/');
-  assert.equal(links()[0]?.textContent, 'Shop');
+  assert.equal(links()[0]?.textContent, 'Home');
   assert.ok(current());
-  assert.equal(current()?.textContent, 'Welcome to Lumé House.');
+  assert.equal(current()?.textContent, 'My Account');
   assert.equal(current()?.tagName, 'SPAN');
 });
 
@@ -161,18 +161,24 @@ test('signed-in Account shows the breadcrumb trail and identity summary', async 
   await mount(React.createElement(AccountPage), { authSession: session });
   assert.ok(breadcrumb());
   assert.equal(h1Count(), 1);
+  assert.equal(links().length, 1);
+  assert.equal(links()[0]?.getAttribute('href'), '/');
+  assert.equal(links()[0]?.textContent, 'Home');
+  assert.equal(current()?.textContent, 'My Account');
   assert.match(host.textContent, /Your account/);
   assert.match(host.textContent, /Signed in with Google/);
   assert.match(host.textContent, /fixture@example\.invalid/);
 });
 
-test('guest My Orders shows the shop and account breadcrumb trail', async () => {
+test('guest My Orders shows the Home and My Account breadcrumb trail', async () => {
   await mount(React.createElement(MyOrdersPage), { path: '/account/orders' });
   assert.ok(breadcrumb());
   assert.equal(h1Count(), 1);
   assert.equal(links().length, 2);
   assert.equal(links()[0]?.getAttribute('href'), '/');
+  assert.equal(links()[0]?.textContent, 'Home');
   assert.equal(links()[1]?.getAttribute('href'), '/account');
+  assert.equal(links()[1]?.textContent, 'My Account');
   assert.equal(current()?.textContent, 'Your orders.');
 });
 
@@ -180,6 +186,8 @@ test('restoring My Orders shows the breadcrumb trail', async () => {
   await mount(React.createElement(MyOrdersPage), { path: '/account/orders', loading: true });
   assert.ok(breadcrumb());
   assert.equal(links().length, 2);
+  assert.equal(links()[0]?.textContent, 'Home');
+  assert.equal(links()[1]?.textContent, 'My Account');
   assert.match(host.textContent, /Restoring your session/);
 });
 
@@ -189,8 +197,11 @@ test('guest Order Details shows the full order breadcrumb trail', async () => {
   assert.equal(h1Count(), 1);
   assert.equal(links().length, 3);
   assert.equal(links()[0]?.getAttribute('href'), '/');
+  assert.equal(links()[0]?.textContent, 'Home');
   assert.equal(links()[1]?.getAttribute('href'), '/account');
+  assert.equal(links()[1]?.textContent, 'My Account');
   assert.equal(links()[2]?.getAttribute('href'), '/account/orders');
+  assert.equal(links()[2]?.textContent, 'My Orders');
   assert.equal(current()?.textContent, 'Your order.');
   assert.match(host.textContent, /Sign in to view your orders/);
 });

@@ -81,12 +81,23 @@ test('entrypoint retains ordered providers around Layout and every routed consum
 });
 
 test('Shop shares live selection across multiple prices and returns immediately to NLE', async () => {
-  serve(); await mount(); assert.equal(calls,0); assert.deepEqual(estimates(),[]);
-  for (const code of ['GNF','GHS','NGN','USD']) {
-    await select(code); assert.equal(estimates().length,2); assert.ok(estimates().every(value=>value.includes(code)));
-    assert.match(host.textContent,/NLE 18/); assert.match(host.textContent,/NLE 25/);
+  // B2.7: a fresh visitor's initial currency now derives from browser locale
+  // regions. An explicitly locale-less navigator preserves the B2.6 fresh
+  // visitor case this test verifies: NLE with no rate request until a manual
+  // selection happens.
+  const nodeNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { languages: [], language: undefined } });
+  try {
+    serve(); await mount(); assert.equal(calls,0); assert.deepEqual(estimates(),[]);
+    for (const code of ['GNF','GHS','NGN','USD']) {
+      await select(code); assert.equal(estimates().length,2); assert.ok(estimates().every(value=>value.includes(code)));
+      assert.match(host.textContent,/NLE 18/); assert.match(host.textContent,/NLE 25/);
+    }
+    assert.equal(calls,1); await select('NLE'); assert.deepEqual(estimates(),[]);
+  } finally {
+    if (nodeNavigator) Object.defineProperty(globalThis, 'navigator', nodeNavigator);
+    else delete globalThis.navigator;
   }
-  assert.equal(calls,1); await select('NLE'); assert.deepEqual(estimates(),[]);
 });
 
 for (const path of ['/products/fixture-mug','/cart','/checkout']) test(`${path} displays secondary estimates without changing NLE prices`,async()=>{

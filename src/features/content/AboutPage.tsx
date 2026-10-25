@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
+import { Breadcrumbs } from "../../components/PageHeader";
 import { customerContent } from "../../config/customerContent";
 
 export function AboutPage() {
   return <article className="wrap page-section about-page">
+    <Breadcrumbs title="About" ancestors={[{ label: "Home", to: "/" }]} />
     <header className="about-opening">
       <div><p className="eyebrow">LUMÉ HOUSE / OUR STORY</p><h1>A home should feel like yours.</h1><p className="about-intro">The pieces you reach for. The textures you settle into. The little details that make a space feel personal.</p><nav className="about-section-links" aria-label="About sections"><Link to="/about#our-story">Our story</Link><Link to="/about#our-values">Our values</Link></nav></div>
       <figure><img src="/images/a-place-for-the-everyday.webp" width={1100} height={1100} alt="Vases, greenery and candles on a wooden tray in a warm living room" fetchPriority="high"/><figcaption>Beautiful things live here.</figcaption></figure>

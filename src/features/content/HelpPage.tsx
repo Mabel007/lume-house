@@ -6,7 +6,7 @@ export function HelpPage() {
   return <ContentPage
     title="Help & Contact"
     intro="A little guidance for your account, your selected pieces and your order."
-    trail={[{ label: 'Shop', to: '/' }]}
+    trail={[{ label: 'Home', to: '/' }]}
   >
     <div className="help-links">
       <Link to="/account/orders"><h2>My Orders</h2><p>View your order history, details and recorded order and payment status.</p></Link>

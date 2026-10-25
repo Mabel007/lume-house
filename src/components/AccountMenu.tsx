@@ -31,11 +31,22 @@ export function AccountMenu({
   onSignOut,
   signingOut,
   error,
+  active = false,
 }: {
   initials: string;
   onSignOut: () => void;
   signingOut: boolean;
   error: string | null;
+  /**
+   * Current-section indicator (owner-approved REV-05 decision): when the
+   * signed-in visitor is within /account routes the trigger gains the same
+   * persistent underline class other navigation items use, plus
+   * aria-current="location" (the trigger stands for the enclosing account
+   * section, not a single page — see Layout). The trigger stays a menu
+   * control first: aria-haspopup/expanded/controls and menu keyboard
+   * behavior are untouched.
+   */
+  active?: boolean;
 }) {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
@@ -101,11 +112,12 @@ export function AccountMenu({
       <button
         type="button"
         ref={trigger}
-        className="header-account"
+        className={`header-account${active ? " active" : ""}`}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         aria-label="Account, signed in"
+        aria-current={active ? "location" : undefined}
         onClick={() => setOpen(value => !value)}
         onKeyDown={onTriggerKeyDown}
       >

@@ -63,21 +63,21 @@ export function CartPage() {
   }
   const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
   const { state } = useProducts();
-  const trail = [{ label: 'Shop', to: '/' }];
-  if (status === "loading" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Cart." trail={trail} /><UiStatus kind="loading">Your saved Cart is not ready yet.</UiStatus></section>;
+  const trail = [{ label: 'Home', to: '/' }];
+  if (status === "loading" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Cart." trail={trail} breadcrumbLabel="Cart" /><UiStatus kind="loading">Your saved Cart is not ready yet.</UiStatus></section>;
   if (status === "error" && state.status !== "ready")
     return (
       <section className="wrap page-section">
-        <PageHeader title="Your Cart." trail={trail}/>
+        <PageHeader title="Your Cart." trail={trail} breadcrumbLabel="Cart"/>
         <ProductStatus />
       </section>
     );
-  if (status === "error") return <section className="wrap page-section"><PageHeader title="Your Cart." trail={trail} /><UiStatus kind="error">Your saved Cart is not ready yet.</UiStatus></section>;
+  if (status === "error") return <section className="wrap page-section"><PageHeader title="Your Cart." trail={trail} breadcrumbLabel="Cart" /><UiStatus kind="error">Your saved Cart is not ready yet.</UiStatus></section>;
   if (!items.length) return <div ref={emptyRef}><EmptyCart /></div>;
   if (state.status !== "ready")
     return (
       <section className="wrap page-section">
-        <PageHeader title="Your Cart." trail={trail} />
+        <PageHeader title="Your Cart." trail={trail} breadcrumbLabel="Cart" />
         <ProductStatus />
       </section>
     );
@@ -90,7 +90,7 @@ export function CartPage() {
   return (
     <section className="wrap page-section">
       <p className="eyebrow">YOUR EVERYDAY FINDS</p>
-      <PageHeader title="Your Cart." description="Review your pieces before checkout." trail={trail}/>
+      <PageHeader title="Your Cart." description="Review your pieces before checkout." trail={trail} breadcrumbLabel="Cart"/>
       <p className="small-note mb-8">
         {auth.session ? items.some(item=>!item.variantId) ? "Available selections are saved to your account. Unavailable guest items are retained in this browser until removed." : "Your Cart is saved to your account." : "Sign in to save your Cart across visits. Guest items are kept only in this browser tab."}
       </p>

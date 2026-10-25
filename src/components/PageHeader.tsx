@@ -7,7 +7,11 @@ export function Breadcrumbs({ title, ancestors }: { title: string; ancestors: re
   if (!ancestors.length) return null;
   return <nav aria-label="Breadcrumb">
     <ol className="breadcrumb-list">
-      {ancestors.map(item => <li key={item.to}>
+      {/* Sibling keys combine destination and label: the Product Details
+          trail legitimately holds two ancestors today (Home and Shop both
+          point to "/"), so destination alone is not a stable unique sibling
+          key. */}
+      {ancestors.map(item => <li key={`${item.to}:${item.label}`}>
         <Link to={item.to}>{item.label}</Link>
         <span className="breadcrumb-separator" aria-hidden="true"> / </span>
       </li>)}
@@ -16,17 +20,19 @@ export function Breadcrumbs({ title, ancestors }: { title: string; ancestors: re
   </nav>;
 }
 
-export function PageHeader({ title, description, breadcrumb, trail, actions }: {
+export function PageHeader({ title, description, breadcrumb, trail, breadcrumbLabel, actions }: {
   title: string;
   description?: string;
   breadcrumb?: BreadcrumbItem;
   trail?: readonly BreadcrumbItem[];
+  /** Breadcrumb label for the current page when it differs from the visible h1. */
+  breadcrumbLabel?: string;
   actions?: ReactNode;
 }) {
   const ancestors = trail ?? (breadcrumb ? [breadcrumb] : []);
   return <header className="ui-page-header">
     <div>
-      <Breadcrumbs title={title} ancestors={ancestors} />
+      <Breadcrumbs title={breadcrumbLabel ?? title} ancestors={ancestors} />
       <h1>{title}</h1>
       {description && <p>{description}</p>}
     </div>

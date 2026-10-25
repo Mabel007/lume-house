@@ -9,11 +9,21 @@ import {readGuestCart,resolveGuestCart,serializeGuestCart,stampGuestIntent} from
 import {loadVariantCart,changeVariantCart,VariantCartError} from './variantCartRepository';
 import {bagFailureNeedsRefresh,bagRecoveryNote} from './bagFeedback';
 import type {Product} from '../products/products';
+import {useDirectState} from '../checkout/useDirectState';
+import {isDirectCheckoutPath,resumeNormalBag} from '../checkout/directIntent';
+import {hasCustomerAuthReturn} from '../auth/customerAuthIntent';
+import {useLocation} from 'react-router-dom';
 const storageKey='lume-guest-cart';
 function readGuest(){try{return readGuestCart(sessionStorage.getItem(storageKey));}catch{return [];}}
 function pendingGuest(items:CartItem[],products:Product[]){return items.filter(item=>!item.variantId||getCartLines([item],products).length===0);}
 function withPending(items:CartItem[],guest:CartItem[],products:Product[]){return [...items,...pendingGuest(guest,products).filter(item=>!items.some(saved=>cartLineKey(saved)===cartLineKey(item)))];}
 export function CartProvider({children}:{children:ReactNode}) {
+  const {pathname}=useLocation();const directState=useDirectState();
+  const normalizedPath=pathname.replace(/\/+$/, '').toLowerCase();
+  const normalBag=normalizedPath==='/cart';
+  const returningDirect=normalizedPath==='/auth/callback'&&hasCustomerAuthReturn();
+  const deferred=isDirectCheckoutPath(pathname) || returningDirect || directState.hold && !normalBag;
+  useEffect(()=>{if(normalBag)try{resumeNormalBag();}catch{/* Explicit Bag entry still resumes existing in-memory behavior. */}},[normalBag]);
   const auth=useAuth();const {state:catalog}=useProducts();const userId=auth.session?.user.id;const accessToken=auth.session?.access_token;
   const identity=useRef(userId);const epoch=useRef(0);
   const checkoutSequence=useRef(0);const checkout=useRef<{ticket:number;epoch:number}|null>(null);
@@ -64,6 +74,9 @@ export function CartProvider({children}:{children:ReactNode}) {
       let ownsRequest=false;
       try{
         setError(null);setStatus('loading');
+        // Includes auth callback, reload, token/catalogue refresh and success.
+        // No mutating restore/promotion or guest merge until explicit Bag entry.
+        if(deferred){setStatus('deferred');return;}
         if(auth.loading)return;
         if(catalog.status!=='ready'){
           if(!userId){setStatus(catalog.status==='error'?'ready':'loading');locked.current=catalog.status!=='error';}
@@ -118,8 +131,9 @@ export function CartProvider({children}:{children:ReactNode}) {
       }
     }
     void restore();return()=>{active=false;};
-  },[userId,accessToken,auth.loading,catalog,revision]);
+  },[userId,accessToken,auth.loading,catalog,revision,deferred]);
   function dispatch(action:CartAction):Promise<CartOutcome> {
+    if(deferred)return Promise.resolve({kind:'rejected',message:'Open your saved Cart before changing its items.',failure:'rejected'});
     if(auth.loading||locked.current)return Promise.resolve({kind:'superseded'});
     if(!userId){
       const next=cartReducer(guest.current,action);

@@ -3,6 +3,7 @@ import { shop } from "../config/shop";
 import { customerContent } from "../config/customerContent";
 import { hngEvaluation } from "../config/hngEvaluation";
 import { LockIcon } from "./Icon";
+import { CurrencySelector, CurrencyDisclosure } from "../features/currency/CurrencySelector";
 
 const groups = [
   { title: "Shop", links: [["Shop All", "/"], ["Cart", "/cart"]] },
@@ -27,6 +28,10 @@ export function SiteFooter({ showStaffLogin = hngEvaluation.showStaffLogin }: { 
           <ul>{group.links.map(([label, to]) => <li key={to}><Link to={to}>{label}</Link></li>)}</ul>
         </section>)}
       </nav>
+    </div>
+    <div className="footer-currency">
+      <CurrencySelector />
+      <CurrencyDisclosure />
     </div>
     <div className="footer-bottom">
       <p>© {new Date().getFullYear()} Lumé House. All rights reserved.</p>

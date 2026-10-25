@@ -21,6 +21,7 @@ function checkBreadcrumbs(html, ancestors, current) {
     const document = dom.window.document;
     const nav = document.querySelector('nav[aria-label="Breadcrumb"]');
     assert.ok(nav, "breadcrumb landmark exists");
+    assert.equal(document.querySelectorAll('nav[aria-label="Breadcrumb"]').length, 1, "exactly one breadcrumb landmark");
     const list = nav.firstElementChild;
     assert.equal(list.tagName, "OL");
     assert.equal(list.children.length, ancestors.length + 1);
@@ -39,7 +40,7 @@ function checkBreadcrumbs(html, ancestors, current) {
   } finally { dom.window.close(); }
 }
 
-test("Cart breadcrumbs preserve Shop and a single heading in every Cart and catalog state", () => {
+test("Cart breadcrumbs use Home ancestry with a Cart current label and a single heading in every Cart and catalog state", () => {
   const ready = { status: 'ready', products: [fixture] };
   for (const [status, state, cart] of [
     ['loading', ready, items], ['checking-out', ready, items],
@@ -51,37 +52,107 @@ test("Cart breadcrumbs preserve Shop and a single heading in every Cart and cata
       React.createElement(ProductContext.Provider, {value:{state, refresh(){}}},
         React.createElement(CartContext.Provider, {value:{items:cart, status, dispatch:async()=>({kind:'confirmed',items:[]})}},
           React.createElement(NotificationProvider, null, React.createElement(CartPage))))));
-    checkBreadcrumbs(html, [['Shop', '/']], cart.length ? 'Your Cart.' : 'Your Cart');
+    checkBreadcrumbs(html, [['Home', '/']], 'Cart');
     assert.doesNotMatch(html, /Continue shopping/);
     if (!cart.length) assert.match(html, /<h1 tabindex="-1" data-cart-empty-title="true">Your Cart is taking a slow day\.<\/h1>/);
   }
 });
 
-test("Product Details keeps Shop ancestry and one heading for long names and unavailable states", () => {
+test("Product Details keeps Home then Shop ancestry and keeps one heading for long names and unavailable states", () => {
   const name = 'Considered hand-finished everyday piece ' + 'UninterruptedProductName'.repeat(12);
-  checkBreadcrumbs(renderDetails({...fixture, name}), [['Shop', '/']], name);
+  checkBreadcrumbs(renderDetails({...fixture, name}), [['Home', '/'], ['Shop', '/']], name);
   for (const state of [{status:'loading'}, {status:'error'}, {status:'ready',products:[]}]) {
-    const html = renderToStaticMarkup(React.createElement(MemoryRouter, {initialEntries:['/products/missing']},
-      React.createElement(ProductContext.Provider, {value:{state,refresh(){}}},
-        React.createElement(Routes, null, React.createElement(Route, {path:'/products/:productId',element:React.createElement(ProductDetailsPage)})))));
-    checkBreadcrumbs(html, [['Shop','/']], state.status === 'ready' ? 'This piece is unavailable.' : 'Product details.');
-    assert.doesNotMatch(html, /Back to the collection/);
+    const route = React.createElement(Route, {path:'/products/:productId',element:React.createElement(ProductDetailsPage)});
+    const trail = renderToStaticMarkup(React.createElement(MemoryRouter, {initialEntries:['/products/missing']},
+      React.createElement(ProductContext.Provider, {value:{state,refresh(){}}}, React.createElement(Routes, null, route))));
+    checkBreadcrumbs(trail, [['Home','/'], ['Shop','/']], state.status === 'ready' ? 'This piece is unavailable.' : 'Product details.');
+    assert.doesNotMatch(trail, /Back to the collection/);
   }
 });
 
-test("Help and policy breadcrumbs preserve nested ancestors without nesting legal or About pages under Help", () => {
+/** Client-renders an element tree with console.error captured. The static
+ * server renderer never validates list keys — verified against react 19.3.0
+ * dev and production builds — whereas react-dom/client is where React
+ * reports "Encountered two children with the same key". This is therefore
+ * the effective guard that breadcrumb sibling keys stay unique. jsdom
+ * globals are installed for the render and removed afterwards. */
+async function clientRenderCapturingKeyWarnings(children) {
+  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/' });
+  const names = ['window','document','Element','HTMLElement','HTMLInputElement','HTMLSelectElement','MutationObserver','location'];
+  for (const name of names) Object.defineProperty(globalThis, name, { configurable: true, value: dom.window[name] });
+  const warnings = [];
+  const original = console.error;
+  console.error = (...args) => { warnings.push(args.map(String).join(' ')); };
+  let root;
+  try {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const { createRoot } = await import('react-dom/client');
+    root = createRoot(dom.window.document.getElementById('root'));
+    await React.act(() => { root.render(children); });
+    return warnings;
+  } finally {
+    if (root) {
+      try { await React.act(async () => { root.unmount(); }); } catch { /* teardown is best-effort */ }
+    }
+    console.error = original;
+    delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+    for (const name of names) delete globalThis[name];
+    dom.window.close();
+  }
+}
+
+test("Home and Shop sibling crumbs render through react-dom/client without duplicate-key warnings", async () => {
+  // The production trails share a destination, so PageHeader alone owns the
+  // duplicate-key invariant: the product-details and legacy trails re-use the
+  // exact PageHeader calls the pages make, and the static server renderer
+  // never validates list keys (see the helper comment above).
+  const productTrail = await clientRenderCapturingKeyWarnings(React.createElement(MemoryRouter, null,
+    React.createElement(PageHeader, { title: 'A product.', trail: [{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }] })));
+  assert.deepEqual(productTrail, [], 'React must not report duplicate keys for the sibling crumbs sharing the Home/Shop destination');
+  const singleAncestor = await clientRenderCapturingKeyWarnings(React.createElement(MemoryRouter, null,
+    React.createElement(PageHeader, { title: 'Checkout', breadcrumb: { label: 'Cart', to: '/cart' } })));
+  assert.deepEqual(singleAncestor, [], 'React must not report duplicate keys for the checkout ancestry');
+});
+
+test("Help and policy breadcrumbs preserve nested ancestors, legal pages stay outside Help, and About gains a Home trail", () => {
   for (const [path, title] of [['/help','Help & Contact'], ['/help/delivery-pickup','Delivery & Pickup'], ['/help/returns-refunds','Returns & Refunds'], ['/privacy','Privacy Policy'], ['/terms','Terms & Conditions']]) {
-    const ancestors = [['Shop','/']];
+    const ancestors = [['Home','/']];
     if (path.startsWith('/help/')) ancestors.push(['Help & Contact','/help']);
     checkBreadcrumbs(renderContent(path), ancestors, title);
   }
-  assert.doesNotMatch(renderContent('/about'), /aria-label="Breadcrumb"/);
+  checkBreadcrumbs(renderContent('/about'), [['Home','/']], 'About');
+  const aboutTrail = renderContent('/about').match(/<nav aria-label="Breadcrumb">[\s\S]*?<\/nav>/)?.[0] ?? '';
+  assert.doesNotMatch(aboutTrail, /href="\/help/);
 });
 
-test("legacy PageHeader breadcrumbs retain their parent link and top-level headers omit breadcrumb navigation", () => {
+test("legacy PageHeader breadcrumbs retain their parent link, breadcrumbLabel decouples the current label from the h1, and top-level headers omit breadcrumb navigation", () => {
   const header = props => renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(PageHeader, props)));
   checkBreadcrumbs(header({title:'Checkout',breadcrumb:{label:'Cart',to:'/cart'}}), [['Cart','/cart']], 'Checkout');
+  const labelled = header({ title: 'Your Cart.', trail: [{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }], breadcrumbLabel: 'Cart' });
+  checkBreadcrumbs(labelled, [['Home','/'], ['Shop','/']], 'Cart');
+  assert.match(labelled, /<h1>Your Cart\.<\/h1>/);
   assert.doesNotMatch(header({title:'Shop'}), /aria-label="Breadcrumb"/);
+});
+
+test("standardized trails keep every ancestor on a real supported destination, checkout breadcrumb-free with its sign-in back-link, and the catalog landing trail-free", () => {
+  assert.doesNotMatch(render(ShopPage, { status: "ready", products: [fixture] }), /aria-label="Breadcrumb"/);
+  const checkout = render(CheckoutPage, { status: "ready", products: [fixture] });
+  assert.doesNotMatch(checkout, /aria-label="Breadcrumb"/);
+  assert.match(checkout, /href="\/account"[^>]*>Sign in to place your order/);
+  const allowedAncestors = {
+    'Home': '/', 'Shop': '/', 'Help & Contact': '/help',
+    'Delivery & Pickup': '/help/delivery-pickup', 'Returns & Refunds': '/help/returns-refunds',
+  };
+  for (const path of Object.keys(contentPages)) {
+    const dom = new JSDOM(renderContent(path));
+    try {
+      const nav = dom.window.document.querySelector('nav[aria-label="Breadcrumb"]');
+      assert.ok(nav, `${path}: breadcrumb landmark`);
+      for (const anchor of nav.querySelectorAll('a'))
+        assert.equal(allowedAncestors[anchor.textContent] ?? null, anchor.getAttribute('href'),
+          `${path}: ancestor "${anchor.textContent}" must link a real supported destination`);
+    } finally { dom.window.close(); }
+  }
 });
 before(async () => {
   server = await createServer({
@@ -136,6 +207,11 @@ test("all six public content pages render without auth or catalog dependencies a
   for (const path of Object.keys(contentPages)) {
     const html = renderContent(path);
     assert.equal((html.match(/<h1[ >]/g) ?? []).length, 1, path);
+    assert.equal(
+      (html.match(/<nav aria-label="Breadcrumb">/g) ?? []).length,
+      1,
+      `${path}: exactly one breadcrumb trail`,
+    );
     assert.match(html, /<article/);
     assert.ok(entry.includes(`path="${path}"`), `missing route ${path}`);
     assert.doesNotMatch(html, /<form|Change Password|Forgot Password/);
@@ -152,6 +228,8 @@ test("About contains approved brand foundation, focusable fragment headings and 
     assert.ok(html.includes(`href="/about#${id}"`));
   }
   assert.match(html, /href="\/"[^>]*>Explore the collection/);
+  assert.match(html, /<nav aria-label="Breadcrumb"><ol class="breadcrumb-list"><li><a[^>]*href="\/"[^>]*>Home<\/a>/);
+  assert.match(html, /aria-current="page">About<\/span>/);
   assert.doesNotMatch(html, /sustainab|artisan|certified|manufactur|founded in/i);
 });
 
@@ -254,7 +332,7 @@ test("ready catalog feeds cards, cart prices and guest sign-in checkout", () => 
   assert.match(cart, /Choose at checkout/);
   const checkout = render(CheckoutPage, state);
   assert.match(checkout, /href="\/account"[^>]*>Sign in to place your order/);
-  assert.match(checkout, /Use my contact phone number/);
+  assert.match(checkout, /Use my contact number/);
   assert.match(
     render(CartPage, {
       status: "ready",
@@ -297,15 +375,16 @@ test("checkout localizes fields and honestly distinguishes delivery and payment"
   assert.match(html, /aria-describedby="payment-help payment-error"/);
   assert.match(html, /aria-describedby="contact-phone-help"/);
   assert.match(html, /id="contact-phone-help"/);
+  assert.match(html, /id="contact-phone-help"[^>]*>Enter an 8-digit Sierra Leone phone number\./);
   assert.match(
     html,
-    /Enter an 8-digit Sierra Leone phone number, with or without 0 or \+232\. Example: 0XX XXX XXX\./,
+    /id="payment-help"[^>]*>Enter the payer.s 8-digit Sierra Leone mobile-money number\./,
   );
-  assert.match(
-    html,
-    /Any Sierra Leone mobile network is accepted\. Use 8 digits/,
-  );
-  assert.match(html, /Example: 0XX XXX XXX\./);
+  assert.doesNotMatch(html, /Any Sierra Leone mobile network is accepted/);
+  assert.match(html, /Number format help/);
+  assert.match(html, /Payment number details/);
+  assert.doesNotMatch(html, /help-disclosure-panel/);
+  assert.doesNotMatch(html, /aria-controls="(?:phone-format|payment-details)-panel"/, 'collapsed disclosures must not statically reference their absent panels');
   assert.equal((html.match(/inputmode="tel"/gi) ?? []).length, 2);
   assert.doesNotMatch(html, /for example \+232|76521208/);
   assert.doesNotMatch(
@@ -361,11 +440,15 @@ test("primary navigation has five destinations, account/help descendant active s
   assert.match(nav, /aria-label="Cart \(2\)"/);
   assert.doesNotMatch(nav, /My Orders|Sign in|Bag/);
   for (const path of ["/help", "/help/delivery-pickup", "/help/returns-refunds"]) {
-    const active = renderLayout(path).match(/<a[^>]*aria-current="page"[^>]*>/g);
+    const active = renderLayout(path).match(/<a[^>]*aria-current="(page|location)"[^>]*>/g);
     assert.equal(active.length, 1);
     assert.ok(active[0].includes('href="/help"'));
+    // The Help link is the current page only on its own exact route; nested
+    // pages get the enclosing-section value instead.
+    if (path === "/help") assert.match(active[0], /aria-current="page"/);
+    else assert.match(active[0], /aria-current="location"/);
   }
-  assert.match(renderLayout("/account/orders"), /aria-current="page"[^>]*href="\/account"/);
+  assert.match(renderLayout("/account/orders"), /aria-current="location"[^>]*href="\/account"/);
 });
 
 test("header keeps guest/loading Account text and shows only private initials when signed in", () => {
@@ -386,6 +469,10 @@ test("header keeps guest/loading Account text and shows only private initials wh
   assert.match(trigger, /aria-expanded="false"/);
   assert.match(trigger, /<span class="account-badge" aria-hidden="true">NB<\/span>/);
   assert.doesNotMatch(trigger, /customer@example\.invalid|Naj Builds/);
+  // On the storefront root the trigger is not the current section: no active
+  // class and no aria-current anywhere on it (REV-05 keeps the indicator
+  // scoped to /account routes, asserted in the top-nav DOM suite).
+  assert.doesNotMatch(trigger, /class="header-account active"|aria-current=/);
   const nav = signed.match(/<nav aria-label="Main navigation"[^>]*>(.*?)<\/nav>/s)?.[1] ?? "";
   // The initials badge replaces the Account *label* with a menu trigger, so the nav
   // holds one trigger and the four remaining destinations as links.
