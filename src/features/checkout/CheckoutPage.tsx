@@ -1,4 +1,5 @@
 import { CurrencyEstimate } from '../currency/CurrencySelector';
+import { CountryCombobox } from '../../components/CountryCombobox';
 import { FormField } from '../../components/FormField';
 import { HelpDisclosure } from '../../components/HelpDisclosure';
 import { variantLabel } from "../products/variants";
@@ -11,7 +12,7 @@ import { ProductStatus } from "../products/ProductStatus";
 import { formatMoney, shop } from "../../config/shop";
 import {
   deliveryConfig,
-  getDeliveryFee,
+  getDeliveryFeeForCountry,
   type Fulfilment,
 } from "../../config/fulfilment";
 import {
@@ -22,7 +23,7 @@ import {
   validatePaymentPhone,
   type PaymentProvider,
 } from "./payment";
-import { checkoutMessages, cityProblem, isValidEmail } from "./validation";
+import { checkoutMessages, cityProblem, countryProblem, isValidEmail } from "./validation";
 import { OrderSummary } from "./OrderSummary";
 import { EmptyCart } from "../../components/EmptyCart";
 import { useAuth } from "../auth/AuthContext";
@@ -66,6 +67,7 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
   const [recoveryBlocked,setRecoveryBlocked]=useState(false);
   const requestId=useRef<string|null>(null);
   const [fulfilment, setFulfilment] = useState<Fulfilment>("delivery");
+  const [countryCode, setCountryCode] = useState(deliveryConfig.serviceCountryCode);
   const [city, setCity] = useState("");
   const [area, setArea] = useState("");
   const [address, setAddress] = useState("");
@@ -155,6 +157,12 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
   else if (!isValidEmail(email))
     problems.push({ id: "email", message: checkoutMessages.emailFormat });
   if (fulfilment === "delivery") {
+    const countryMessage = countryProblem(
+      countryCode,
+      deliveryConfig.serviceCountryCode,
+    );
+    if (countryMessage)
+      problems.push({ id: "delivery-country", message: countryMessage });
     if (!address.trim())
       problems.push({ id: "address", message: checkoutMessages.address });
     if (!area.trim())
@@ -175,6 +183,11 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
     city.trim() !== "" &&
     cityProblem(city, deliveryConfig.serviceCity) ===
       checkoutMessages.unsupportedCity;
+  const unsupportedCountry =
+    fulfilment === "delivery" &&
+    countryCode !== "" &&
+    countryProblem(countryCode, deliveryConfig.serviceCountryCode) ===
+      checkoutMessages.unsupportedCountry;
   const problemFor = (id: string) =>
     problems.find((problem) => problem.id === id)?.message;
   const markTouched = (id: string) =>
@@ -184,6 +197,10 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
   const emailError = showsError("email") ? problemFor("email") : undefined;
   const addressError = showsError("address") ? problemFor("address") : undefined;
   const areaError = showsError("area") ? problemFor("area") : undefined;
+  const countryError =
+    showsError("delivery-country") || unsupportedCountry
+      ? problemFor("delivery-country")
+      : undefined;
   const cityError =
     showsError("city") || unsupportedCity ? problemFor("city") : undefined;
   const zoneError = showsError("delivery-zone") ? problemFor("delivery-zone") : undefined;
@@ -289,7 +306,12 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
         </Link>
       </section>
     );
-  const deliveryFee = getDeliveryFee(fulfilment, city, zoneId);
+  const deliveryFee = getDeliveryFeeForCountry(
+    fulfilment,
+    countryCode,
+    city,
+    zoneId,
+  );
   const zone = deliveryConfig.zones.find((zone) => zone.id === zoneId);
   return (
     <section className="wrap page-section">
@@ -383,10 +405,23 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
             {fulfilment === "delivery" ? (
               <div className="fulfilment-panel" key="delivery">
                 <p className="small-note" id="delivery-note">
-                  Delivery in Freetown. Choose the zone that best matches your
-                  address. These delivery fees are provisional.
+                  Delivery in {deliveryConfig.serviceCity}, {deliveryConfig.serviceCountry}.
+                  Choose the zone that best matches your address. These delivery
+                  fees are provisional.
                 </p>
                 <div className="form-grid">
+                  <div className="sm:col-span-2">
+                    <CountryCombobox
+                      id="delivery-country"
+                      name="delivery-country"
+                      label="Delivery country"
+                      value={countryCode}
+                      onChange={setCountryCode}
+                      onBlur={() => markTouched("delivery-country")}
+                      hint={`We currently deliver within ${deliveryConfig.serviceCity}, ${deliveryConfig.serviceCountry} only.`}
+                      error={countryError}
+                    />
+                  </div>
                   <Field
                     label="Street address / landmark"
                   name="address"
@@ -591,6 +626,7 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
             <OrderSummary
               subtotal={lines.reduce((sum, line) => sum + line.lineTotal, 0)}
               deliveryFee={deliveryFee}
+              deliveryUnavailable={unsupportedCountry}
               estimates
             />
           </div>
@@ -601,9 +637,13 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
               className="button w-full"
               disabled={submitting || cartStatus==='saving' || cartStatus==='loading' || cartStatus==='error' || recovering || deliveryFee===null}
               aria-describedby={
-                unsupportedCity
-                  ? "checkout-payment delivery-unavailable-note"
-                  : "checkout-payment"
+                [
+                  unsupportedCountry ? "delivery-country-error" : undefined,
+                  unsupportedCity ? "delivery-unavailable-note" : undefined,
+                  "checkout-payment",
+                ]
+                  .filter(Boolean)
+                  .join(" ")
               }
             >
               {submitting?'Placing order…':'Place order'}

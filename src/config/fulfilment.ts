@@ -9,10 +9,14 @@ export type DeliveryZone = {
 // Provisional product configuration, not researched courier rates or GPS boundaries.
 export const deliveryConfig: {
   serviceCity: string;
+  serviceCountry: string;
+  serviceCountryCode: string;
   pickupLocation: string;
   zones: DeliveryZone[];
 } = {
   serviceCity: "Freetown",
+  serviceCountry: "Sierra Leone",
+  serviceCountryCode: "SL",
   pickupLocation: "Lumley, Freetown",
   zones: [
     {
@@ -53,4 +57,23 @@ export function getDeliveryFee(
   return typeof fee === "number" && Number.isSafeInteger(fee) && fee >= 0
     ? fee
     : null;
+}
+
+// Delivery remains available only in the configured service country. Pickup is
+// domestic by definition here, so its free fee is independent of the country
+// selector. Trusted SQL city/zone checks remain authoritative for real orders.
+export function getDeliveryFeeForCountry(
+  fulfilment: Fulfilment,
+  countryCode: string,
+  city: string,
+  zoneId: string,
+  config = deliveryConfig,
+): number | null {
+  if (fulfilment === "pickup") return 0;
+  if (
+    countryCode.trim().toUpperCase() !==
+    config.serviceCountryCode.trim().toUpperCase()
+  )
+    return null;
+  return getDeliveryFee(fulfilment, city, zoneId, config);
 }

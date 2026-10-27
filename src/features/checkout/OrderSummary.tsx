@@ -4,10 +4,12 @@ import { formatMoney } from "../../config/shop";
 export function OrderSummary({
   subtotal,
   deliveryFee = null,
+  deliveryUnavailable = false,
   estimates = false,
 }: {
   subtotal: number;
   deliveryFee?: number | null;
+  deliveryUnavailable?: boolean;
   estimates?: boolean;
 }) {
   // Shared totals guidance: one concise note per totals view for foreign
@@ -25,7 +27,9 @@ export function OrderSummary({
           <dt>Delivery</dt>
           <dd>
             {deliveryFee === null
-              ? "Choose at checkout"
+              ? deliveryUnavailable
+                ? "Unavailable"
+                : "Choose at checkout"
               : formatMoney(deliveryFee)}
             {estimates && deliveryFee !== null && <CurrencyEstimate minorUnits={deliveryFee} />}
           </dd>
@@ -34,7 +38,9 @@ export function OrderSummary({
           <dt>Total</dt>
           <dd>
             {deliveryFee === null
-              ? "Delivery details needed"
+              ? deliveryUnavailable
+                ? "Delivery unavailable"
+                : "Delivery details needed"
               : formatMoney(subtotal + deliveryFee)}
             {estimates && deliveryFee !== null && <CurrencyEstimate minorUnits={subtotal + deliveryFee} />}
           </dd>

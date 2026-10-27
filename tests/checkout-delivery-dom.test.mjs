@@ -48,7 +48,7 @@ function fakeClient(invoke){return {
   functions:{invoke:invoke??(async()=>({data:null,error:null}))},
 };}
 
-async function mount({authSession=null,cartStatus='ready',items=[{productId:fixture.id,quantity:2}],products=[fixture],client,refreshProducts=noop,retryCart=noop,currencyPreference='NLE'}={}){
+async function mount({authSession=null,cartStatus='ready',items=[{productId:fixture.id,quantity:2}],products=[fixture],client,refreshProducts=noop,retryCart=noop,beginCheckout=()=>1,finishCheckout=noop,currencyPreference='NLE'}={}){
   globalThis.__checkoutDeliveryClient=client??fakeClient();
   if(root){await act(async()=>root.unmount());root=undefined;host.replaceChildren();}
   // Deterministic display currency for every scenario except the focused
@@ -60,7 +60,7 @@ async function mount({authSession=null,cartStatus='ready',items=[{productId:fixt
     React.createElement(MemoryRouter,null,
       React.createElement(AuthContext.Provider,{value:{loading:false,session:authSession,error:null,signIn:async()=>{},signOut:async()=>{}}},
         React.createElement(ProductContext.Provider,{value:{state:{status:'ready',products},refresh:refreshProducts}},
-          React.createElement(CartContext.Provider,{value:{items,dispatch:noop,status:cartStatus,retry:retryCart,beginCheckout:()=>1,finishCheckout:noop}},
+          React.createElement(CartContext.Provider,{value:{items,dispatch:noop,status:cartStatus,retry:retryCart,beginCheckout,finishCheckout}},
             React.createElement(CheckoutPage)))))));
 }
 
@@ -83,11 +83,29 @@ async function fillRequired(){
   await setValue(cityField(),'Freetown');
   await selectZone('zone-3');
 }
+const countryInput=()=>host.querySelector('#delivery-country');
+const countryList=()=>host.querySelector('#delivery-country-listbox');
+const countryOptions=()=>Array.from(host.querySelectorAll('#delivery-country-listbox [role="option"]'));
+const optionNames=()=>countryOptions().map(node=>node.textContent);
+const activeOption=()=>{const id=countryInput()?.getAttribute('aria-activedescendant');return id?dom.window.document.getElementById(id):null;};
+async function focusCountry(){const input=countryInput();assert.ok(input);await act(async()=>input.focus());}
+async function focusOutside(){const node=host.querySelector('[name="full-name"]');assert.ok(node);await act(async()=>node.focus());}
+async function pointer(node,type,init={}){assert.ok(node);await act(async()=>{const event=new dom.window.Event(type,{bubbles:true,cancelable:true});for(const [key,value] of Object.entries(init))Object.defineProperty(event,key,{value});node.dispatchEvent(event);});}
+async function pressKey(node,key){assert.ok(node);await act(async()=>node.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key,bubbles:true,cancelable:true})));}
+async function chooseCountry(name){
+  const input=countryInput();assert.ok(input);
+  await setValue(input,name);
+  const option=countryOptions().find(node=>node.textContent===name);
+  assert.ok(option,`${name} option is visible`);
+  await pointer(option,'pointerdown');
+  await pointer(option,'pointerup');
+  await act(async()=>option.click());
+}
 
 test('delivery eligibility explains the Freetown limitation, lists active zones and shows NLE fee and totals', async()=>{
   await mount({authSession:session});
   assert.match(host.textContent,/We currently deliver within Freetown only\./);
-  assert.match(host.textContent,/Delivery in Freetown\. Choose the zone that best matches your address\./);
+  assert.match(host.textContent,/Delivery in Freetown, Sierra Leone\. Choose the zone that best matches your address\./);
   assert.equal(cityField().getAttribute('aria-describedby'),'delivery-city-help');
   assert.equal(cityField().getAttribute('list'),'delivery-city-options');
   assert.ok(host.querySelector('datalist#delivery-city-options option[value="Freetown"]'));
@@ -123,16 +141,316 @@ test('delivery eligibility explains the Freetown limitation, lists active zones 
   assert.match(button().textContent,/Place order/);
 });
 
+test('country selector defaults to Sierra Leone and exposes the complete standardized country list', async()=>{
+  await mount({authSession:session});
+  const input=countryInput();
+  assert.ok(input,'the delivery country combobox is shown for delivery');
+  assert.equal(input.value,'Sierra Leone');
+  assert.equal(input.getAttribute('role'),'combobox');
+  assert.equal(input.getAttribute('aria-expanded'),'false');
+  assert.equal(input.getAttribute('aria-autocomplete'),'list');
+  assert.equal(input.getAttribute('aria-haspopup'),'listbox');
+  assert.equal(input.getAttribute('aria-controls'),'delivery-country-listbox');
+  assert.equal(input.getAttribute('aria-required'),'true');
+  assert.equal(input.getAttribute('autocomplete'),'country-name');
+  assert.equal(host.querySelector('label[for="delivery-country"]').textContent,'Delivery country *');
+  assert.equal(input.getAttribute('aria-describedby'),'delivery-country-help');
+  assert.equal(host.querySelector('#delivery-country-help').textContent,'We currently deliver within Freetown, Sierra Leone only.');
+  const list=countryList();
+  assert.ok(list);
+  assert.equal(list.getAttribute('role'),'listbox');
+  assert.equal(list.getAttribute('aria-label'),'Delivery country options');
+  assert.equal(list.hidden,true);
+  const live=host.querySelector('#delivery-country-status');
+  assert.equal(live.getAttribute('role'),'status');
+  assert.equal(live.getAttribute('aria-live'),'polite');
+  await focusCountry();
+  assert.equal(input.getAttribute('aria-expanded'),'true');
+  assert.equal(list.hidden,false);
+  assert.equal(countryOptions().length,249,'the complete ISO 3166-1 list is available');
+  for(const name of ['Ghana','Nigeria','Guinea','Liberia'])
+    assert.ok(optionNames().includes(name),`${name} is listed`);
+  assert.equal(activeOption()?.textContent,'Sierra Leone','the committed country starts active');
+  assert.match(live.textContent,/249 countries available\./);
+});
+
+test('typing filters country names and never commits arbitrary text', async()=>{
+  await mount({authSession:session});
+  const input=countryInput();
+  await focusCountry();
+  await setValue(input,'ghana');
+  assert.equal(input.value,'ghana');
+  assert.equal(input.getAttribute('aria-expanded'),'true');
+  assert.deepEqual(optionNames(),['Ghana']);
+  assert.equal(activeOption()?.textContent,'Ghana');
+  assert.equal(host.querySelector('#delivery-country-status').textContent,'1 country available.');
+  assert.equal(invalidAttr('delivery-country'),null,'uncommitted text is not yet an invalid selection');
+  assert.equal(errorText('delivery-country-error')||null,null);
+  assert.equal(button().disabled,true,'an uncommitted country leaves delivery unpriced');
+  await setValue(input,'cote');
+  assert.deepEqual(optionNames(),["Côte d'Ivoire"],'diacritics are ignored while searching');
+  await setValue(input,'ni');
+  assert.deepEqual(optionNames().slice(0,4),['Nicaragua','Niger','Nigeria','Niue'],'prefix matches are offered before other name matches');
+  await setValue(input,'zzzz');
+  assert.deepEqual(optionNames(),[]);
+  assert.ok(host.querySelector('.country-empty'),'an empty result is explained visibly');
+  assert.match(host.querySelector('#delivery-country-status').textContent,/No countries match your search\./);
+  await focusOutside();
+  assert.equal(input.value,'Sierra Leone','focus departure restores the last valid selection');
+  assert.equal(input.getAttribute('aria-expanded'),'false');
+  assert.equal(countryList().hidden,true);
+  assert.equal(errorText('delivery-country-error')||null,null);
+});
+
+test('country aliases search canonical labels and commit the canonical country', async()=>{
+  await mount({authSession:session});
+  const input=countryInput();
+  await focusCountry();
+  const aliases=[
+    ['UK','United Kingdom of Great Britain and Northern Ireland'],
+    ['USA','United States of America'],
+    ['Turkey','Türkiye'],
+    ['South Korea','Korea, Republic of'],
+    ['North Korea',"Korea, Democratic People's Republic of"],
+    ['Vietnam','Viet Nam'],
+    ['Ivory Coast',"Côte d'Ivoire"],
+  ];
+  for(const [query,name] of aliases){
+    await setValue(input,query);
+    assert.equal(optionNames()[0],name,`${query} finds ${name}`);
+  }
+  await setValue(input,'UK');
+  assert.deepEqual(optionNames().slice(0,2),['United Kingdom of Great Britain and Northern Ireland','Ukraine'],'the UK alias outranks Ukraine');
+  await pressKey(input,'Enter');
+  assert.equal(input.value,'United Kingdom of Great Britain and Northern Ireland');
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.unsupportedCountry,'the canonical country reaches delivery validation');
+  await setValue(input,'Sierra Leone');
+  await pressKey(input,'Enter');
+  assert.equal(input.value,'Sierra Leone');
+  assert.equal(errorText('delivery-country-error')||null,null);
+});
+
+test('mouse and touch selection commit listed countries and explain unsupported delivery immediately', async()=>{
+  await mount({authSession:session});
+  const input=countryInput();
+  await chooseCountry('Ghana');
+  assert.equal(input.value,'Ghana');
+  assert.equal(input.getAttribute('aria-expanded'),'false');
+  assert.equal(invalidAttr('delivery-country'),'true');
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.unsupportedCountry);
+  assert.match(describedBy('delivery-country'),/delivery-country-help/);
+  assert.match(describedBy('delivery-country'),/delivery-country-error/);
+  assert.deepEqual(totals(),['NLE 36','Unavailable','Delivery unavailable']);
+  assert.equal(button().disabled,true);
+  assert.match(button().getAttribute('aria-describedby'),/delivery-country-error/);
+  assert.match(button().getAttribute('aria-describedby'),/checkout-payment/);
+  await chooseCountry('Liberia');
+  assert.equal(input.value,'Liberia','pointer/touch-generated clicks select only listed countries');
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.unsupportedCountry);
+});
+
+test('keyboard navigation selects listed countries and Escape restores the committed selection', async()=>{
+  await mount({authSession:session});
+  const input=countryInput();
+  await act(async()=>input.focus());
+  await setValue(input,'guinea');
+  assert.deepEqual(optionNames(),['Guinea','Guinea-Bissau','Equatorial Guinea','Papua New Guinea']);
+  assert.equal(activeOption()?.textContent,'Guinea');
+  await pressKey(input,'ArrowDown');
+  assert.equal(activeOption()?.textContent,'Guinea-Bissau');
+  assert.equal(input.getAttribute('aria-activedescendant'),'delivery-country-listbox-option-1');
+  await pressKey(input,'ArrowUp');
+  assert.equal(activeOption()?.textContent,'Guinea');
+  await pressKey(input,'Enter');
+  assert.equal(input.value,'Guinea');
+  assert.equal(input.getAttribute('aria-expanded'),'false');
+  assert.equal(countryList().hidden,true);
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.unsupportedCountry);
+  await setValue(input,'Ghana');
+  assert.deepEqual(optionNames(),['Ghana']);
+  await pressKey(input,'Escape');
+  assert.equal(input.value,'Guinea','Escape restores the last valid country rather than typed text');
+  assert.equal(input.getAttribute('aria-expanded'),'false');
+  assert.equal(countryList().hidden,true);
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.unsupportedCountry);
+});
+
+test('a cancelled option pointer gesture cannot keep the list open after focus leaves', async()=>{
+  await mount({authSession:session});
+  const input=countryInput();
+  await focusCountry();
+  await setValue(input,'Ghana');
+  const option=countryOptions().find(node=>node.textContent==='Ghana');
+  assert.ok(option);
+  await pointer(option,'pointerdown');
+  await pointer(option,'pointercancel');
+  assert.equal(input.getAttribute('aria-expanded'),'true','cancellation alone does not close a focused list');
+  await act(async()=>option.click());
+  assert.equal(input.value,'Ghana','a click after cancellation does not commit the option');
+  assert.equal(errorText('delivery-country-error')||null,null);
+  await focusOutside();
+  assert.equal(input.getAttribute('aria-expanded'),'false','focus departure dismisses the list');
+  assert.equal(countryList().hidden,true);
+  assert.equal(input.value,'Sierra Leone','the committed selection is restored');
+  assert.equal(errorText('delivery-country-error')||null,null);
+  await focusCountry();
+  assert.equal(input.getAttribute('aria-expanded'),'true','the list reopens after cancellation');
+  await chooseCountry('Ghana');
+  assert.equal(input.value,'Ghana');
+  assert.equal(input.getAttribute('aria-expanded'),'false');
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.unsupportedCountry);
+});
+
+test('a cancelled option gesture that follows focus departure leaves the popup closed and the country unchanged', async()=>{
+  await mount({authSession:session});
+  const input=countryInput();
+  await focusCountry();
+  await setValue(input,'Ghana');
+  const option=countryOptions().find(node=>node.textContent==='Ghana');
+  assert.ok(option);
+  await pointer(option,'pointerdown');
+  await act(async()=>{
+    host.querySelector('[name="full-name"]').focus();
+    option.dispatchEvent(new dom.window.Event('pointercancel',{bubbles:true,cancelable:true}));
+  });
+  assert.equal(input.getAttribute('aria-expanded'),'false','cancellation completes the dismissal');
+  assert.equal(countryList().hidden,true);
+  assert.equal(input.value,'Sierra Leone','the cancellation does not commit Ghana');
+  assert.equal(errorText('delivery-country-error')||null,null);
+});
+
+test('a released option commits even when blur arrives before the click', async()=>{
+  await mount({authSession:session});
+  const input=countryInput();
+  await focusCountry();
+  await setValue(input,'Ghana');
+  let option=countryOptions().find(node=>node.textContent==='Ghana');
+  assert.ok(option);
+  await pointer(option,'pointerdown');
+  await pointer(option,'pointerup');
+  await act(async()=>{
+    host.querySelector('[name="full-name"]').focus();
+    option.click();
+  });
+  assert.equal(input.value,'Ghana','the released option is not discarded by blur');
+  assert.equal(input.getAttribute('aria-expanded'),'false');
+  assert.equal(countryList().hidden,true);
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.unsupportedCountry);
+  await focusCountry();
+  await setValue(input,'Liberia');
+  option=countryOptions().find(node=>node.textContent==='Liberia');
+  assert.ok(option);
+  await pointer(option,'pointerdown');
+  await pointer(option,'pointerup');
+  await focusOutside();
+  assert.equal(input.value,'Liberia','blur settles the released option before a later click');
+  assert.equal(input.getAttribute('aria-expanded'),'false');
+  await act(async()=>option.click());
+  assert.equal(input.value,'Liberia');
+  assert.equal(input.getAttribute('aria-expanded'),'false');
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.unsupportedCountry);
+});
+
+test('ordinary mouse and touch-emulated gestures commit only the released country', async()=>{
+  await mount({authSession:session});
+  const input=countryInput();
+  await focusCountry();
+  await setValue(input,'Ghana');
+  let option=countryOptions().find(node=>node.textContent==='Ghana');
+  assert.ok(option);
+  await pointer(option,'pointerdown',{pointerType:'mouse',pointerId:1});
+  await pointer(option,'pointerup',{pointerType:'mouse',pointerId:1});
+  await act(async()=>option.click());
+  assert.equal(input.value,'Ghana');
+  assert.equal(input.getAttribute('aria-expanded'),'false');
+  assert.equal(countryList().hidden,true);
+  await focusCountry();
+  await setValue(input,'Liberia');
+  option=countryOptions().find(node=>node.textContent==='Liberia');
+  assert.ok(option);
+  await pointer(option,'pointerdown',{pointerType:'touch',pointerId:2});
+  await pointer(option,'pointerup',{pointerType:'touch',pointerId:2});
+  await act(async()=>option.click());
+  assert.equal(input.value,'Liberia','the touch-emulated release commits its option');
+  assert.equal(input.getAttribute('aria-expanded'),'false');
+  assert.equal(countryList().hidden,true);
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.unsupportedCountry);
+});
+
+test('scrolling the list cancels a pending option gesture without committing', async()=>{
+  await mount({authSession:session});
+  const input=countryInput();
+  await focusCountry();
+  await setValue(input,'Ghana');
+  const option=countryOptions().find(node=>node.textContent==='Ghana');
+  assert.ok(option);
+  await pointer(option,'pointerdown',{pointerType:'touch',pointerId:3});
+  await act(async()=>countryList().dispatchEvent(new dom.window.Event('scroll',{bubbles:false})));
+  await pointer(option,'pointerup',{pointerType:'touch',pointerId:3});
+  await act(async()=>option.click());
+  assert.equal(input.value,'Ghana','scrolling does not silently commit the touched option');
+  assert.equal(input.getAttribute('aria-expanded'),'true','the list remains open after scrolling');
+  assert.equal(countryList().hidden,false);
+  assert.equal(errorText('delivery-country-error')||null,null);
+  await focusOutside();
+  assert.equal(input.value,'Sierra Leone');
+  assert.equal(input.getAttribute('aria-expanded'),'false');
+});
+
+test('unsupported delivery country blocks placement before any order call, keeps the form and Cart, and restores on correction', async()=>{
+  const calls=[];
+  let begun=0,finished=0;
+  const client=fakeClient(async(name,options)=>{calls.push({name,options});return {data:null,error:{context:new Response(JSON.stringify({error:'INVALID_DELIVERY_ZONE'}),{status:400,headers:{'Content-Type':'application/json'}})}};});
+  await mount({authSession:session,client,beginCheckout:()=>{begun+=1;return 1;},finishCheckout:()=>{finished+=1;}});
+  await fillRequired();
+  await fillValidPhones();
+  await chooseCountry('Ghana');
+  assert.equal(button().disabled,true);
+  await submit();
+  assert.equal(calls.length,0,'no order-service call begins');
+  assert.equal(begun,0,'the saved Cart is not converted');
+  assert.equal(finished,0);
+  assert.equal(dom.window.document.activeElement.id,'delivery-country','the first country problem receives focus');
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.unsupportedCountry);
+  assert.equal(invalidAttr('delivery-country'),'true');
+  assert.match(describedBy('delivery-country'),/delivery-country-help/);
+  assert.match(describedBy('delivery-country'),/delivery-country-error/);
+  assert.equal(host.querySelector('[name="full-name"]').value,'Fixture Customer','the checkout form is preserved');
+  assert.equal(host.querySelector('[name="address"]').value,'12 Test Street');
+  assert.equal(cityField().value,'Freetown');
+  assert.equal(host.querySelector('#delivery-zone').value,'zone-3');
+  assert.match(host.textContent,/Qty 2/,'the Cart contents remain visible');
+  assert.match(button().getAttribute('aria-describedby'),/delivery-country-error/,'the blocked action points to the country explanation');
+  await pressKey(countryInput(),'Escape');
+  assert.equal(countryInput().value,'Ghana','Escape dismisses the list without discarding a committed country');
+  await setValue(countryInput(),'Sierra Leone');
+  await pressKey(countryInput(),'Enter');
+  assert.equal(countryInput().value,'Sierra Leone');
+  assert.equal(errorText('delivery-country-error')||null,null);
+  assert.deepEqual(totals(),['NLE 36','NLE 60','NLE 96']);
+  assert.equal(button().disabled,false);
+  await submit();
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].name,'place-order');
+  assert.equal(calls[0].options.body.checkout.city,'Freetown');
+  assert.equal(calls[0].options.body.checkout.zone_id,'zone-3');
+  assert.equal('country' in calls[0].options.body.checkout,false,'the checkout payload does not gain a country field');
+  assert.equal(begun,1,'the Cart ticket is only begun after country eligibility passes');
+});
+
 test('pickup removes delivery requirements with a zero fee and switching back restores them', async()=>{
   await mount({authSession:session});
+  assert.equal(countryInput().value,'Sierra Leone');
   await chooseRadio('fulfilment','pickup');
   assert.match(host.textContent,/Pickup in Lumley, Freetown\. No delivery fee\./);
   assert.deepEqual(totals(),['NLE 36','NLE 0','NLE 36']);
   assert.equal(host.querySelector('[name="city"]'),null);
   assert.equal(host.querySelector('#delivery-zone'),null);
+  assert.equal(host.querySelector('#delivery-country'),null,'pickup does not require a delivery country');
   assert.equal(button().disabled,false);
   await chooseRadio('fulfilment','delivery');
   assert.match(host.textContent,/We currently deliver within Freetown only\./);
+  assert.equal(countryInput().value,'Sierra Leone','the previous country selection is preserved');
   assert.deepEqual(totals(),['NLE 36','Choose at checkout','Delivery details needed']);
   assert.equal(button().disabled,true);
 });
@@ -479,17 +797,22 @@ test('unsupported city and missing zone get accurate field-associated messages',
 test('pickup does not require delivery-only fields and still places the order', async()=>{
   const {calls,client}=recordingClient();
   await mount({authSession:session,client});
+  await chooseCountry('Ghana');
+  assert.equal(button().disabled,true,'unsupported delivery blocks while delivery is selected');
   await setValue(host.querySelector('[name="full-name"]'),'Fixture Customer');
   await setValue(host.querySelector('[name="email"]'),'fixture@example.invalid');
   await fillValidPhones();
   await chooseRadio('fulfilment','pickup');
   assert.equal(host.querySelector('[name="city"]'),null);
   assert.equal(host.querySelector('#delivery-zone'),null);
+  assert.equal(host.querySelector('#delivery-country'),null);
+  assert.equal(button().disabled,false,'pickup remains available after an unsupported delivery country');
   await submit();
   assert.equal(calls.length,1);
   assert.equal(calls[0].name,'place-order');
   assert.equal(calls[0].options.body.checkout.fulfilment,'pickup');
   assert.equal(calls[0].options.body.checkout.zone_id,'');
+  assert.equal('country' in calls[0].options.body.checkout,false);
 });
 
 test('a pasted formatted phone number places once, and a corrected form resubmits cleanly', async()=>{

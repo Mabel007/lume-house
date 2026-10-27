@@ -11,7 +11,7 @@ export function HelpPage() {
     <div className="help-links">
       <Link to="/account/orders"><h2>My Orders</h2><p>View your order history, details and recorded order and payment status.</p></Link>
       <Link to="/account"><h2>Account</h2><p>Sign in with Google and manage your contact and delivery defaults.</p></Link>
-      <Link to="/help/delivery-pickup"><h2>Delivery & Pickup</h2><p>Supported Freetown delivery areas and free pickup in Lumley.</p></Link>
+      <Link to="/help/delivery-pickup"><h2>Delivery & Pickup</h2><p>Delivery in selected areas of Freetown, Sierra Leone, and free pickup in Lumley.</p></Link>
       <Link to="/help/returns-refunds"><h2>Returns & Refunds</h2><p>How to request an eligible return and report an item problem.</p></Link>
     </div>
     <section><h2>Account help</h2><p>Use the Google account you signed in with to find your saved details and orders. Lumé House does not manage a password for your Google account. Checkout edits apply to that order; they do not update your saved profile defaults.</p></section>
