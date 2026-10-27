@@ -4,7 +4,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { shop } from "../config/shop";
 import { useCart } from "../features/cart/CartContext";
 import { BagIcon } from "./Icon";
-import { aboutFragmentTarget, routeTitle } from "../config/routeExperience";
+import { aboutFragmentTarget, productPathId, routeTitle } from "../config/routeExperience";
 import { SiteFooter } from "./SiteFooter";
 import { isAdminRoute } from "../config/adminNavigation";
 import { useAuth } from "../features/auth/AuthContext";
@@ -45,13 +45,22 @@ export function Layout() {
   const initials = signedIn ? accountInitials(accountDisplayName(auth.session?.user)) : "";
   const { signingOut: accountSigningOut, error: accountSignOutError, signOut: accountSignOut } = useCustomerSignOut();
   const { state: catalog } = useProducts();
-  const productName = catalog.status === "ready" ? catalog.products.find(product => pathname === `/products/${encodeURIComponent(product.id)}`)?.name : undefined;
+  const productId = productPathId(pathname);
+  const productName = catalog.status === "ready" && productId !== null
+    ? catalog.products.find(product => product.id === productId)?.name
+    : undefined;
   const main = useRef<HTMLElement>(null);
   const previousPath = useRef<string | null>(null);
+  // Initial loads leave document focus alone so the skip link remains the
+  // first forward tab stop. Only later SPA pathname changes move focus to
+  // <main>; hash/fragment scrolling is unaffected on any render.
+  const firstRender = useRef(true);
   useEffect(() => {
     document.title = `${routeTitle(pathname, productName)} | ${shop.name}`;
     const pathChanged = previousPath.current !== pathname;
     previousPath.current = pathname;
+    const initialRender = firstRender.current;
+    firstRender.current = false;
     const targetId = aboutFragmentTarget(pathname, hash);
     if (targetId) {
       // The Outlet is committed; defer until native fragment scrolling has settled.
@@ -63,7 +72,7 @@ export function Layout() {
       return () => cancelAnimationFrame(frame);
     }
     if (pathChanged) {
-      main.current?.focus({ preventScroll: true });
+      if (!initialRender) main.current?.focus({ preventScroll: true });
       if (hash) {
         // Preserve native anchors (including the skip link and Help contact).
         document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: "instant" });

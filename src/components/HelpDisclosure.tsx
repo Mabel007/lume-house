@@ -19,19 +19,17 @@ export function HelpDisclosure({
         type="button"
         className="help-disclosure-trigger"
         aria-expanded={open}
-        /* Resolve only while the panel exists in the DOM: a collapsed control
-         * must not point assistive-tech at a missing target (WAI-ARIA APG
-         * disclosure pattern). */
-        aria-controls={open ? `${id}-panel` : undefined}
+        /* The panel is always mounted so the disclosure toggle can carry a
+         * stable aria-controls reference in both states. `hidden` keeps the
+         * collapsed content out of the accessibility tree and tab order. */
+        aria-controls={`${id}-panel`}
         onClick={() => setOpen((previous) => !previous)}
       >
         {label}
       </button>
-      {open && (
-        <div id={`${id}-panel`} className="help-disclosure-panel">
-          {children}
-        </div>
-      )}
+      <div id={`${id}-panel`} className="help-disclosure-panel" hidden={!open}>
+        {children}
+      </div>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { JSDOM } from "jsdom";
 
 let server;
 let ProductContext, CartContext, AuthContext, ShopPage, CartPage, CheckoutPage;
-let contentPages, routeTitle, aboutFragmentTarget;
+let contentPages, routeTitle, aboutFragmentTarget, productPathId;
 let Layout, SiteFooter, AccountExperience, accountInitials, ProductDetails, ProductDetailsPage;
 let NotificationProvider;
 let PageHeader;
@@ -189,7 +189,7 @@ before(async () => {
     "/help/returns-refunds": policies.ReturnsRefundsPage,
     "/privacy": policies.PrivacyPage, "/terms": policies.TermsPage,
   };
-  ({ routeTitle, aboutFragmentTarget } = await server.ssrLoadModule("/src/config/routeExperience.ts"));
+  ({ routeTitle, aboutFragmentTarget, productPathId } = await server.ssrLoadModule("/src/config/routeExperience.ts"));
   ({ Layout } = await server.ssrLoadModule("/src/components/Layout.tsx"));
   ({ SiteFooter } = await server.ssrLoadModule("/src/components/SiteFooter.tsx"));
   ({ AccountExperience } = await server.ssrLoadModule("/src/features/account/AccountExperience.tsx"));
@@ -267,6 +267,34 @@ test("route title mapping preserves existing titles and assigns all six public t
   for (const [path, title] of Object.entries(expected)) assert.equal(routeTitle(path), title);
   assert.equal(routeTitle("/about/"), "About");
   assert.equal(routeTitle("/constructor"), "Page not found");
+});
+
+test("route titles follow valid mixed-case and trailing-slash URLs without weakening 404s", () => {
+  for (const [path, title] of [
+    ["/ABOUT", "About"],
+    ["/About/", "About"],
+    ["/HELP", "Help & Contact"],
+    ["/HELP/Delivery-Pickup/", "Delivery & Pickup"],
+    ["/CART", "Your Cart"],
+    ["/CHECKOUT/BUY-NOW", "Buy Now checkout"],
+    ["/ACCOUNT/ORDERS", "Your account"],
+    ["/AUTH/CALLBACK/", "Your account"],
+    ["/ORDERS/example/SUCCESS", "Your order"],
+  ]) assert.equal(routeTitle(path), title, path);
+  for (const path of ["/ABOUT-TEAM", "/HELP-CENTER", "/PRODUCTSX", "/products", "/constructor"])
+    assert.equal(routeTitle(path), "Page not found", path);
+});
+
+test("product route identity keeps product IDs case-sensitive across route spelling variants", () => {
+  assert.equal(productPathId("/products/Test-Product"), "Test-Product");
+  assert.equal(productPathId("/products/Test-Product/"), "Test-Product");
+  assert.equal(productPathId("/PRODUCTS/Test-Product"), "Test-Product");
+  assert.equal(productPathId("/products/encoded%20piece"), "encoded piece");
+  assert.equal(productPathId("/products"), null);
+  assert.equal(productPathId("/products/Test-Product/gallery"), null);
+  assert.equal(productPathId("/productsx/Test-Product"), null);
+  assert.equal(routeTitle("/PRODUCTS/Test-Product/", "Test Product Name"), "Test Product Name");
+  assert.equal(routeTitle("/PRODUCTS/Test-Product"), "Product details");
 });
 
 test("About fragment recognition is scoped, safely decoded and independent of route entry", () => {
@@ -383,8 +411,11 @@ test("checkout localizes fields and honestly distinguishes delivery and payment"
   assert.doesNotMatch(html, /Any Sierra Leone mobile network is accepted/);
   assert.match(html, /Number format help/);
   assert.match(html, /Payment number details/);
-  assert.doesNotMatch(html, /help-disclosure-panel/);
-  assert.doesNotMatch(html, /aria-controls="(?:phone-format|payment-details)-panel"/, 'collapsed disclosures must not statically reference their absent panels');
+  assert.equal((html.match(/help-disclosure-panel/g) ?? []).length, 2);
+  assert.match(html, /aria-controls="phone-format-panel"/);
+  assert.match(html, /aria-controls="payment-details-panel"/);
+  assert.match(html, /id="phone-format-panel"[^>]*hidden=""/);
+  assert.match(html, /id="payment-details-panel"[^>]*hidden=""/);
   assert.equal((html.match(/inputmode="tel"/gi) ?? []).length, 2);
   assert.doesNotMatch(html, /for example \+232|76521208/);
   assert.doesNotMatch(
@@ -431,6 +462,16 @@ function renderLayout(path, cartState = { items, status: "ready", error: null, r
 }
 function renderDetails(product) {
   return renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(CartContext.Provider,{value:{items:[],dispatch(){},status:"ready"}},React.createElement(NotificationProvider,null,React.createElement(ProductDetails,{product})))));
+}
+function optionRadio(document, value) {
+  const option = document.querySelector(`input[type="radio"][value="${value}"]`);
+  assert.ok(option, `the ${value} option renders`);
+  return option;
+}
+function purchaseButton(document, name) {
+  const button = document.querySelector(`button.${name}`);
+  assert.ok(button, `the ${name} action renders`);
+  return button;
 }
 
 test("primary navigation has five destinations, account/help descendant active states and Cart count", () => {
@@ -631,6 +672,39 @@ test("Product Details meaningful options require an explicit valid selection", (
   assert.match(html,/class="product-details-price">From NLE 20/);
   assert.equal(routeTitle('/products/fixture'),'Product details');assert.equal(routeTitle('/products/fixture','Test piece'),'Test piece');
 });
+test("Product Details distinguishes an unselected available option from an all-unavailable set", () => {
+  const choices=[
+    {id:'blue',productId:'fixture',options:{Color:'Blue'},isDefault:false,price:2000,currency:'NLE',inventoryPolicy:'tracked',available:true},
+    {id:'red',productId:'fixture',options:{Color:'Red'},isDefault:false,price:2200,currency:'NLE',inventoryPolicy:'tracked',available:false},
+  ];
+  const mixed=renderDetails({...fixture,variants:choices});
+  assert.match(mixed,/Choose an available combination\./);
+  assert.doesNotMatch(mixed,/This piece is currently unavailable\./);
+  const mixedDom=new JSDOM(mixed);
+  try {
+    const document=mixedDom.window.document;
+    assert.equal(optionRadio(document,'blue').disabled,false,'an available option stays selectable');
+    assert.equal(optionRadio(document,'red').disabled,true,'an unavailable option is disabled individually');
+    assert.equal(purchaseButton(document,'product-details-buy').disabled,true,'Buy Now waits for a valid selection');
+    assert.equal(purchaseButton(document,'product-details-add').disabled,true,'Add to Cart waits for a valid selection');
+  } finally { mixedDom.window.close(); }
+  const gone=renderDetails({...fixture,variants:choices.map(choice=>({...choice,available:false}))});
+  assert.match(gone,/This piece is currently unavailable\./);
+  assert.doesNotMatch(gone,/Choose an available combination\./);
+  const goneDom=new JSDOM(gone);
+  try {
+    const document=goneDom.window.document;
+    assert.equal(document.querySelectorAll('input[type="radio"]').length,2,'both configured options render');
+    for (const [value,label] of [['blue','Blue'],['red','Red']]) {
+      const option=optionRadio(document,value);
+      assert.equal(option.disabled,true,`the ${value} option is disabled`);
+      const optionLabel=option.closest('label')?.textContent??'';
+      assert.ok(optionLabel.includes(label)&&optionLabel.includes('Unavailable'),`the ${value} option is labelled unavailable`);
+    }
+    assert.equal(purchaseButton(document,'product-details-buy').disabled,true,'Buy Now is disabled when every option is unavailable');
+    assert.equal(purchaseButton(document,'product-details-add').disabled,true,'Add to Cart is disabled when every option is unavailable');
+  } finally { goneDom.window.close(); }
+});
 test('tracked Product Details refuses unverified or unavailable stock without showing fictional quantities',()=>{
  const variant={id:'default:fixture',productId:'fixture',options:{},isDefault:true,price:1800,currency:'NLE',inventoryPolicy:'tracked'};
  const product={...fixture,id:'fixture',variants:[variant]};
@@ -640,6 +714,32 @@ test('tracked Product Details refuses unverified or unavailable stock without sh
  }
  const html=renderDetails({...product,variants:[{...variant,available:true}]});
  assert.match(html,/Available to add to your Cart/);assert.doesNotMatch(html,/<button[^>]*class="button product-details-add"[^>]*disabled/);
+});
+test('unavailable single-option cards explain the state instead of showing a disabled Add to Cart action',()=>{
+ const base={id:'fixture',productId:'fixture',options:{},isDefault:true,price:1800,currency:'NLE',inventoryPolicy:'tracked'};
+ const unavailableProducts=[
+  {...fixture,id:'tracked-unavailable',name:'Tracked unavailable',variants:[{...base,id:'default:tracked-unavailable',productId:'tracked-unavailable',available:false}]},
+  {...fixture,id:'missing-default',name:'Missing default',variants:[]},
+ ];
+ for(const product of unavailableProducts){
+  const html=render(ShopPage,{status:'ready',products:[product]},[]);
+  const card=html.match(/<article class="product-card"[\s\S]*?<\/article>/)?.[0]??'';
+  assert.ok(card,`${product.name}: card renders`);
+  assert.match(card,/<button[^>]*class="add-button"[^>]*disabled=""/,`${product.name}: purchase remains guarded`);
+  assert.match(card,/>Unavailable</,`${product.name}: explicit unavailable label`);
+  assert.doesNotMatch(card,/Add to Cart/,`${product.name}: no disabled purchase wording`);
+  assert.doesNotMatch(card,new RegExp(`Add ${product.name} to Cart`),`${product.name}: accessible name states the unavailable state`);
+  assert.match(card,/This piece is currently unavailable\./,`${product.name}: accessible explanation`);
+  const describedBy=card.match(/aria-describedby="([^"]+)"/)?.[1];
+  assert.ok(describedBy,`${product.name}: explanation is associated with the button`);
+  assert.ok(card.includes(`id="${describedBy}"`),`${product.name}: described element exists`);
+ }
+ const available={...fixture,id:'available-tracked',name:'Available tracked',variants:[{...base,id:'default:available-tracked',productId:'available-tracked',available:true}]};
+ const html=render(ShopPage,{status:'ready',products:[available]},[]);
+ assert.match(html,/aria-label="Add Available tracked to Cart"/);
+ assert.doesNotMatch(html,/>Unavailable</);
+ assert.doesNotMatch(html,/<button[^>]*class="add-button"[^>]*disabled=""/);
+ assert.doesNotMatch(html,/This piece is currently unavailable\./);
 });
 test('Cart and checkout show separate variant options and variant-derived prices for the same parent',()=>{
  const variants=[{id:'blue',productId:fixture.id,options:{Color:'Blue'},isDefault:false,price:2000,currency:'NLE',inventoryPolicy:'untracked'}, {id:'red',productId:fixture.id,options:{Color:'Red'},isDefault:false,price:2500,currency:'NLE',inventoryPolicy:'untracked'}];

@@ -17,6 +17,7 @@ export function ShopPage() {
   const [category, setCategory] = useState("All pieces");
   const [query,setQuery]=useState('');
   const searchInput=useRef<HTMLInputElement>(null);
+  const collectionTitle=useRef<HTMLHeadingElement>(null);
   const noticeSeq = useRef(0);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -134,13 +135,13 @@ export function ShopPage() {
         <div className="section-heading">
           <div>
             <p className="eyebrow">THOUGHTFULLY CHOSEN, SIMPLY ENJOYED</p>
-            <h2 id="collection-title">Pieces to live with.</h2>
+            <h2 id="collection-title" ref={collectionTitle} tabIndex={-1}>Pieces to live with.</h2>
           </div>
           {state.status === "ready" && (
             <p>{products.length} considered pieces</p>
           )}
         </div>
-        <ProductStatus />
+        <ProductStatus onRecover={()=>collectionTitle.current?.focus()} />
         {state.status === "ready" && products.length > 0 && (
           <>
             <div className="product-search">
@@ -169,6 +170,8 @@ export function ShopPage() {
             <div className="product-grid">
               {visible.map((product, index) => {
                 const variant=defaultVariant(product);
+                const available=variantAvailable(variant);
+                const availabilityId=`card-availability-${index}`;
                 const displayPrice=cataloguePrice(product);
                 const quantity =
                   items.find((item) => item.variantId===variant?.id || !item.variantId && item.productId === product.id)
@@ -198,21 +201,27 @@ export function ShopPage() {
                       <CurrencyEstimate minorUnits={displayPrice.price} />
                     </div>
                     <p className="product-description">{product.description}</p>
-                    {requiresOptions(product.variants) ? <Link className="add-button" to={`/products/${encodeURIComponent(product.id)}`}>Choose options <span aria-hidden="true">→</span></Link> : <button
-                      className="add-button"
-                      disabled={!variantAvailable(variant) || quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out" || addingId === product.id}
-                      onClick={() => { void addToBag(product, variant!.id); }}
-                      aria-label={`Add ${product.name} to Cart`}
-                    >
-                      {addingId === product.id
-                        ? "Adding…"
-                        : quantity >= MAX_QUANTITY
-                          ? "Quantity limit reached"
-                          : quantity > 0
-                            ? `Add another · ${quantity} in Cart`
-                            : "Add to Cart"}
-                      <span aria-hidden="true">+</span>
-                    </button>}
+                    {requiresOptions(product.variants) ? <Link className="add-button" to={`/products/${encodeURIComponent(product.id)}`}>Choose options <span aria-hidden="true">→</span></Link> : <>
+                      <button
+                        className="add-button"
+                        disabled={!available || quantity >= MAX_QUANTITY || cartStatus === "loading" || cartStatus === "saving" || cartStatus === "error" || cartStatus === "checking-out" || addingId === product.id}
+                        onClick={() => { void addToBag(product, variant!.id); }}
+                        aria-label={available ? `Add ${product.name} to Cart` : `${product.name} is unavailable`}
+                        aria-describedby={available ? undefined : availabilityId}
+                      >
+                        {!available
+                          ? "Unavailable"
+                          : addingId === product.id
+                            ? "Adding…"
+                            : quantity >= MAX_QUANTITY
+                              ? "Quantity limit reached"
+                              : quantity > 0
+                                ? `Add another · ${quantity} in Cart`
+                                : "Add to Cart"}
+                        {available && <span aria-hidden="true">+</span>}
+                      </button>
+                      {!available && <p className="small-note" id={availabilityId}>This piece is currently unavailable.</p>}
+                    </>}
                   </article>
                 );
               })}

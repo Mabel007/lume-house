@@ -19,7 +19,8 @@ test('Open Graph and Twitter text metadata is present without advertising a prev
   assert.match(html,/<meta property="og:type" content="website"\s*\/>/);
   assert.match(html,/<meta property="og:title" content="Lumé House \| Beautiful things live here\."\s*\/>/);
   assert.match(html,/<meta\s+property="og:description"\s+content="Lumé House\. Beautiful things live here\./);
-  assert.match(html,/<meta property="og:url" content="https:\/\/lume-house-delta\.vercel\.app\/"\s*\/>/);
+  assert.match(html,/<meta property="og:url" content="https:\/\/lume\.najbuilds\.com\/"\s*\/>/);
+  assert.doesNotMatch(html,/lume-house-delta/,'sharing metadata must identify the approved canonical origin');
   assert.match(html,/<meta name="twitter:card" content="summary"\s*\/>/);
   assert.match(html,/<meta name="twitter:title" content="Lumé House \| Beautiful things live here\."\s*\/>/);
   assert.match(html,/<meta\s+name="twitter:description"\s+content="Lumé House\. Beautiful things live here\./);
