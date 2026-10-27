@@ -58,9 +58,11 @@ async function mount({path='/checkout/buy-now',products=[fixture],createIntent=t
  root=createRoot(host);await act(async()=>root.render(tree(path,products,'error',realBag)));
 }
 async function set(name,value){const node=host.querySelector(`[name="${name}"]`);assert.ok(node,name);await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype,'value').set.call(node,value);node.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});}
+async function select(name,value){const node=host.querySelector(`[name="${name}"]`);assert.ok(node,name);await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype,'value').set.call(node,value);node.dispatchEvent(new dom.window.Event('change',{bubbles:true}));});}
 async function click(node){assert.ok(node);await act(async()=>node.click());}
 const button=text=>[...host.querySelectorAll('button')].find(node=>node.textContent===text);
 async function fill(){await set('full-name','Local customer');await set('email','fixture@example.invalid');await set('contact-phone','76521208');await set('payment-phone','30521208');await click(host.querySelector('input[name="fulfilment"][value="pickup"]'));}
+async function fillDelivery(){await set('full-name','Local customer');await set('email','fixture@example.invalid');await set('contact-phone','76521208');await set('payment-phone','30521208');await set('address','12 Test Street');await set('area','Lumley');await set('city','Freetown');await select('delivery-zone','zone-1');}
 async function submit(){await act(async()=>host.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})));}
 test('PDP Buy Now uses selected quantity despite saved Bag error and quantity 99',async()=>{
  await mount({path:'/products/fixture',createIntent:false});
@@ -73,6 +75,33 @@ test('direct shared form orders one item and never clears or mutates saved Bag',
  assert.match(host.textContent,/Order placed locally/);assert.equal(invocations.length,1);assert.equal(invocations[0].name,'place-direct-order');
  assert.equal(invocations[0].options.body.quantity,2);assert.equal(invocations[0].options.body.expected_quote.unit_price,1800);
  assert.equal(finishCalls,0);assert.equal(dispatchCalls,0);assert.equal(intents.parseDirectState(intents.directSnapshot()).hold,true);
+});
+test('unsupported delivery country blocks Buy Now with zero calls and preserves its intent',async()=>{
+ await mount();await fillDelivery();
+ const input=host.querySelector('#delivery-country');
+ assert.equal(input.value,'Sierra Leone');
+ await set('delivery-country','Ghana');
+ const ghana=[...host.querySelectorAll('#delivery-country-listbox [role="option"]')].find(node=>node.textContent==='Ghana');
+ assert.ok(ghana,'Ghana is selectable');await click(ghana);
+ assert.equal(input.value,'Ghana');
+ assert.equal(host.querySelector('button[type="submit"]').disabled,true);
+ await submit();
+ assert.equal(invocations.length,0,'no direct order call begins');
+ assert.equal(dispatchCalls,0,'the saved Cart is not touched');
+ assert.equal(finishCalls,0);
+ assert.ok(intents.parseDirectState(intents.directSnapshot()).intent,'the Buy Now intent is retained');
+ assert.equal(host.querySelector('[name="full-name"]').value,'Local customer','the form draft is preserved');
+ assert.ok(host.querySelector('form#checkout-form'));
+ assert.match(host.textContent,/Buy Now — only this selected piece/);
+ await set('delivery-country','Sierra Leone');
+ const sierra=[...host.querySelectorAll('#delivery-country-listbox [role="option"]')].find(node=>node.textContent==='Sierra Leone');
+ assert.ok(sierra,'Sierra Leone can be reselected');await click(sierra);
+ assert.equal(host.querySelector('button[type="submit"]').disabled,false);
+ await submit();
+ assert.equal(invocations.length,1);
+ assert.equal(invocations[0].name,'place-direct-order');
+ assert.equal('country' in invocations[0].options.body.checkout,false,'the payload contract is unchanged');
+ assert.equal(finishCalls,0);
 });
 test('uncertain response and missing lookup retain the same request across reload and retry',async()=>{
  await mount();await fill();behavior=async()=>({data:null,error:{}});await submit();

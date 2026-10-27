@@ -256,6 +256,9 @@ test("policies preserve request eligibility, payment boundaries and separately c
   const delivery = renderContent("/help/delivery-pickup");
   assert.match(delivery, /Pickup in Lumley, Freetown is free/);
   assert.match(delivery, /readiness are confirmed separately/);
+  assert.match(delivery, /Freetown, Sierra Leone/);
+  assert.match(delivery, /choose Sierra Leone as the delivery country/);
+  assert.match(renderContent("/help"), /Delivery in selected areas of Freetown, Sierra Leone/);
   assert.doesNotMatch(delivery, /same.day|next.day|ready immediately/i);
   const privacy = renderContent("/privacy");
   for (const service of ["Google", "Supabase", "Vercel", "Resend"]) assert.ok(privacy.includes(service));
@@ -392,6 +395,7 @@ test("checkout localizes fields and honestly distinguishes delivery and payment"
     "Street address / landmark",
     "Area / community",
     "City / town",
+    "Delivery country",
     "Delivery instructions",
     "Orange Money",
     "Afrimoney",
@@ -428,6 +432,11 @@ test("checkout localizes fields and honestly distinguishes delivery and payment"
   assert.match(html, /<datalist id="delivery-city-options">/);
   assert.match(html, /aria-describedby="delivery-city-help"/);
   assert.match(html, /id="delivery-city-help">We currently deliver within Freetown only\./);
+  assert.match(html, /role="combobox"/);
+  assert.match(html, /aria-controls="delivery-country-listbox"/);
+  assert.match(html, /aria-expanded="false"/);
+  assert.match(html, /value="Sierra Leone"/);
+  assert.match(html, /id="delivery-country-help"[^>]*>We currently deliver within Freetown, Sierra Leone only\./);
   assert.match(html, /NLE 40/);
   assert.match(html, /NLE 50/);
   assert.match(html, /NLE 60/);
@@ -548,6 +557,7 @@ test("Cart copy includes positive shop actions, checkout references and accurate
   assert.match(shop, /supported Freetown areas/);
   const bag = render(CartPage, state);
   assert.match(bag, /Your Cart/); assert.match(bag, /Cart subtotal/);
+  assert.match(bag, /delivers to selected areas of Freetown, Sierra Leone/);
   assert.match(bag, /alt="Illustration of Fixture mug"/);
   const photoBag = render(CartPage, { ...state, products: [{ ...fixture, image: "/images/mug.webp" }] });
   assert.match(photoBag, /alt="Fixture mug"/); assert.doesNotMatch(photoBag, /Illustration of/);

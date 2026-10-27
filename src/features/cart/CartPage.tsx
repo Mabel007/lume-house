@@ -95,7 +95,7 @@ export function CartPage() {
         {auth.session ? items.some(item=>!item.variantId) ? "Available selections are saved to your account. Unavailable guest items are retained in this browser until removed." : "Your Cart is saved to your account." : "Sign in to save your Cart across visits. Guest items are kept only in this browser tab."}
       </p>
       <p className="checkout-notice mb-8">
-        Lumé House currently supports selected Freetown delivery areas and free pickup in {deliveryConfig.pickupLocation}.
+        Lumé House currently delivers to selected areas of Freetown, Sierra Leone, and offers free pickup in {deliveryConfig.pickupLocation}.
       </p>
       <div className="checkout-grid">
         <div ref={listRef}>

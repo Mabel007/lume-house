@@ -8,11 +8,24 @@ export const checkoutMessages = {
   address: "Enter your street address or landmark.",
   area: "Enter your area or community.",
   city: "Enter your city or town.",
+  country: "Choose your delivery country.",
   zone: "Choose your delivery zone.",
   contactPhone: "Enter your phone number.",
   paymentPhone: "Enter your mobile-money number.",
+  unsupportedCountry: "Delivery is currently available only in selected areas of Freetown, Sierra Leone. Change your country, or choose free pickup in Lumley, Freetown.",
   unsupportedCity: "Delivery to this location isn't available yet. We currently deliver to selected areas of Freetown, Sierra Leone. You can choose a supported delivery area or Lumley pickup.",
 } as const;
+
+export function countryProblem(
+  countryCode: string,
+  serviceCountryCode: string,
+): string | undefined {
+  const trimmed = countryCode.trim();
+  if (!trimmed) return checkoutMessages.country;
+  if (trimmed.toUpperCase() !== serviceCountryCode.trim().toUpperCase())
+    return checkoutMessages.unsupportedCountry;
+  return undefined;
+}
 
 export function cityProblem(
   city: string,

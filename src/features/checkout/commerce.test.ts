@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { formatMoney, shop } from "../../config/shop.ts";
-import { deliveryConfig, getDeliveryFee } from "../../config/fulfilment.ts";
+import {
+  deliveryConfig,
+  getDeliveryFee,
+  getDeliveryFeeForCountry,
+} from "../../config/fulfilment.ts";
+import { countries, findCountry, searchCountries } from "../../config/countries.ts";
 import {
   getPaymentPhone,
   invalidPhoneMessage,
@@ -10,7 +15,7 @@ import {
 } from "./payment.ts";
 import { catalog } from "../products/catalog.ts";
 import { getCartLines } from "../cart/cart.ts";
-import { checkoutMessages, cityProblem, isValidEmail } from "./validation.ts";
+import { checkoutMessages, cityProblem, countryProblem, isValidEmail } from "./validation.ts";
 test("NLE formatting uses consistent NLE and integer minor units", () => {
   assert.equal(formatMoney(45000), "NLE 450");
   assert.equal(formatMoney(125000), "NLE 1,250");
@@ -89,6 +94,90 @@ test("three provisional zones, supported city and pickup calculate safely", () =
     150000 + getDeliveryFee("delivery", "Freetown", "zone-2")!,
     155000,
   );
+});
+test("country selector lists standardized countries and defaults to Sierra Leone", () => {
+  assert.equal(deliveryConfig.serviceCountry, "Sierra Leone");
+  assert.equal(deliveryConfig.serviceCountryCode, "SL");
+  assert.equal(countries.length, 249);
+  assert.equal(new Set(countries.map((country) => country.code)).size, 249);
+  for (const code of ["SL", "GH", "NG", "GN", "LR"])
+    assert.ok(findCountry(code), `${code} is available`);
+  assert.equal(findCountry("SL")?.name, "Sierra Leone");
+  assert.equal(findCountry("GH")?.name, "Ghana");
+  assert.equal(countryProblem("SL", deliveryConfig.serviceCountryCode), undefined);
+  assert.equal(
+    countryProblem("", deliveryConfig.serviceCountryCode),
+    checkoutMessages.country,
+  );
+  assert.equal(
+    countryProblem("GH", deliveryConfig.serviceCountryCode),
+    checkoutMessages.unsupportedCountry,
+  );
+});
+test("country search filters by name without diacritics or case", () => {
+  assert.deepEqual(
+    searchCountries("ghana").map((country) => country.code),
+    ["GH"],
+  );
+  assert.deepEqual(
+    searchCountries("COTE").map((country) => country.code),
+    ["CI"],
+  );
+  assert.deepEqual(
+    searchCountries("  guinea  ").map((country) => country.code),
+    ["GN", "GW", "GQ", "PG"],
+  );
+  assert.deepEqual(
+    searchCountries("ni").slice(0, 4).map((country) => country.code),
+    ["NI", "NE", "NG", "NU"],
+  );
+  assert.deepEqual(
+    searchCountries("guinea bissau").map((country) => country.code),
+    ["GW"],
+  );
+  assert.deepEqual(
+    searchCountries("congo democratic").map((country) => country.code),
+    ["CD"],
+  );
+  assert.equal(searchCountries(" ").length, countries.length);
+  assert.deepEqual(searchCountries("not a country"), []);
+});
+test("common country aliases resolve to canonical entries and rank first", () => {
+  const aliases = [
+    ["UK", "GB"],
+    ["USA", "US"],
+    ["US", "US"],
+    ["Turkey", "TR"],
+    ["South Korea", "KR"],
+    ["North Korea", "KP"],
+    ["Republic of Korea", "KR"],
+    ["Democratic People's Republic of Korea", "KP"],
+    ["Vietnam", "VN"],
+    ["Ivory Coast", "CI"],
+  ] as const;
+  for (const [query, code] of aliases) {
+    const results = searchCountries(query);
+    assert.equal(results[0]?.code, code, `${query} ranks its canonical country first`);
+    assert.equal(results[0], findCountry(code), `${query} uses the canonical entry`);
+    assert.equal(
+      new Set(results.map((country) => country.code)).size,
+      results.length,
+      `${query} returns no duplicate countries`,
+    );
+  }
+  const uk = searchCountries("UK").map((country) => country.code);
+  assert.equal(uk[0], "GB");
+  assert.ok(uk.includes("UA"), "Ukraine remains searchable after the UK alias");
+  assert.equal(searchCountries("u.s.a.")[0]?.code, "US");
+  assert.equal(searchCountries("iVoRy CoAsT")[0]?.code, "CI");
+  assert.equal(countries.length, 249);
+});
+test("delivery fees require Sierra Leone while pickup stays free for any selection", () => {
+  assert.equal(getDeliveryFeeForCountry("delivery", "SL", "Freetown", "zone-1"), 4000);
+  assert.equal(getDeliveryFeeForCountry("delivery", "GH", "Freetown", "zone-1"), null);
+  assert.equal(getDeliveryFeeForCountry("delivery", "", "Freetown", "zone-1"), null);
+  assert.equal(getDeliveryFeeForCountry("pickup", "GH", "", ""), 0);
+  assert.equal(getDeliveryFeeForCountry("pickup", "", "", ""), 0);
 });
 test("normalizes reasonable Sierra Leone typing formats", () => {
   for (const value of [
