@@ -71,7 +71,7 @@ const flush = async () => { await act(async () => { await new Promise(resolve =>
 
 const session = { access_token: 'synthetic-jwt', user: { id: '11111111-1111-4111-8111-111111111111', email: 'fixture@example.invalid' } };
 
-async function mountLayout(initialPath, { authSession = null } = {}) {
+async function mountLayout(initialPath, { authSession = null, products = [] } = {}) {
   globalThis.__navStatesClient = { functions: { invoke: async () => ({ data: null, error: null }) } };
   container = dom.window.document.createElement('div');
   host.appendChild(container);
@@ -83,7 +83,7 @@ async function mountLayout(initialPath, { authSession = null } = {}) {
         React.createElement(AuthContext.Provider, {
           value: { session: authSession, loading: false, error: null, signIn: async () => { }, signOut: async () => { } },
         },
-          React.createElement(ProductContext.Provider, { value: { state: { status: 'ready', products: [] }, refresh() { } } },
+          React.createElement(ProductContext.Provider, { value: { state: { status: 'ready', products }, refresh() { } } },
             React.createElement(CartContext.Provider, {
               value: { items: [], status: 'ready', error: null, dispatch() { }, retry() { }, recovery: null, refreshSavedCart() { } },
             },
@@ -96,6 +96,33 @@ async function mountLayout(initialPath, { authSession = null } = {}) {
 
 const headerNav = () => host.querySelector('nav[aria-label="Main navigation"]');
 const activeLinks = () => [...(headerNav()?.querySelectorAll('a.active') ?? [])];
+
+test('document titles follow valid mixed-case routes, keep product names and preserve genuine 404s', async () => {
+  for (const [path, title] of [
+    ['/ABOUT', 'About | Lumé House'],
+    ['/About/', 'About | Lumé House'],
+    ['/HELP', 'Help & Contact | Lumé House'],
+    ['/HELP/Delivery-Pickup/', 'Delivery & Pickup | Lumé House'],
+    ['/CART', 'Your Cart | Lumé House'],
+    ['/CHECKOUT/BUY-NOW', 'Buy Now checkout | Lumé House'],
+    ['/ACCOUNT/ORDERS', 'Your account | Lumé House'],
+    ['/ORDERS/example/SUCCESS', 'Your order | Lumé House'],
+  ]) {
+    await mountLayout(path);
+    assert.equal(dom.window.document.title, title, path);
+    await teardown();
+  }
+  await mountLayout('/PRODUCTS/Fixture-Product/', {
+    products: [{ id: 'Fixture-Product', name: 'Fixture Product Name' }],
+  });
+  assert.equal(dom.window.document.title, 'Fixture Product Name | Lumé House');
+  await teardown();
+  for (const path of ['/ABOUT-TEAM', '/HELP-CENTER', '/PRODUCTSX', '/products', '/unknown']) {
+    await mountLayout(path);
+    assert.equal(dom.window.document.title, 'Page not found | Lumé House', path);
+    await teardown();
+  }
+});
 
 test('exactly one top navigation item is active with aria-current on every storefront surface', async () => {
   const matrix = [

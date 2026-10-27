@@ -15,13 +15,25 @@ const routeTitles: Readonly<Record<string, string>> = {
   "/terms": "Terms & Conditions",
 };
 
+export function productPathId(pathname: string): string | null {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  const match = /^\/products\/([^/]+)$/i.exec(path);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
 export function routeTitle(pathname: string, productName?: string): string {
   const path = pathname.replace(/\/+$/, "") || "/";
-  if (Object.hasOwn(routeTitles, path)) return routeTitles[path];
-  if (/^\/products\/[^/]+$/.test(path)) return productName || "Product details";
-  if (path.startsWith("/account/")) return "Your account";
-  if (isAdminRoute(path)) return `${adminSection(path)?.title ?? "Page not found"} | Administration`;
-  if (path.startsWith("/orders/")) return "Your order";
+  const normalized = path.toLowerCase();
+  if (Object.hasOwn(routeTitles, normalized)) return routeTitles[normalized];
+  if (productPathId(path)) return productName || "Product details";
+  if (normalized.startsWith("/account/")) return "Your account";
+  if (isAdminRoute(normalized)) return `${adminSection(normalized)?.title ?? "Page not found"} | Administration`;
+  if (normalized.startsWith("/orders/")) return "Your order";
   return "Page not found";
 }
 

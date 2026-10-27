@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import React, { act } from "react";
 import { JSDOM } from "jsdom";
 import { createServer } from "vite";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 
 const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost/", pretendToBeVisual: true });
 const { document } = dom.window;
@@ -1612,6 +1612,70 @@ for(const result of ['success','rejection','moved','moved-away','unmounted']) te
   if(result==='moved') assert.equal(document.activeElement,elsewhere,'completion respects moved focus');
   if(result==='moved-away') assert.equal(document.activeElement,document.body,'a later loss of the chosen focus does not revive the removal request');
   if(result==='unmounted') assert.equal(host.querySelector('[data-cart-remove]'),null);
+});
+
+test("initial load leaves focus alone while a later route change focuses main", async () => {
+  function NavigationProbe() {
+    const navigate = useNavigate();
+    return React.createElement("button", { id: "next-route", onClick: () => navigate("/next-route") }, "next route");
+  }
+  // Both destinations need a matching route: an unmatched path unmounts the
+  // whole Layout, which would make this assertion untestable rather than fail.
+  const tree = React.createElement(MemoryRouter, { initialEntries: ["/"] },
+    React.createElement(AuthContext.Provider, { value: guestAuth },
+      React.createElement(ProductContext.Provider, { value: catalog },
+        React.createElement(CartProvider, null,
+          React.createElement(NotificationProvider, null,
+            React.createElement(Routes, null,
+              React.createElement(Route, { element: React.createElement(Layout) },
+                React.createElement(Route, { path: "/", element: React.createElement(NavigationProbe) }),
+                React.createElement(Route, { path: "/next-route", element: React.createElement("p", null, "Next route") }))))))));
+  await mount(tree);
+  assert.equal(document.activeElement, document.body,
+    "initial load does not bypass the skip link in forward tab order");
+  const next = host.querySelector("#next-route");
+  await act(async () => next.focus());
+  await click(next);
+  const main = host.querySelector("#main");
+  assert.ok(main, "the Layout survives the SPA route change");
+  assert.equal(host.querySelector("#next-route"), null, "the probe route was replaced");
+  assert.equal(document.activeElement, main,
+    "a later SPA route change still moves focus to the main landmark");
+});
+
+test("a successful collection retry restores focus to the collection heading", async () => {
+  bagClient(() => emptyCart());
+  function RecoveryHost() {
+    const [state, setState] = React.useState({ status: "error" });
+    const [, rerender] = React.useState(0);
+    // Mirrors ProductProvider: refresh re-renders the tree while the state is
+    // still "error", then the reload passes through "loading" before "ready".
+    const refresh = React.useCallback(() => {
+      rerender(value => value + 1);
+      setTimeout(() => {
+        setState({ status: "loading" });
+        setTimeout(() => setState({ status: "ready", products: [product] }), 0);
+      }, 0);
+    }, []);
+    return React.createElement(MemoryRouter, { initialEntries: ["/"] },
+      React.createElement(AuthContext.Provider, { value: guestAuth },
+        React.createElement(ProductContext.Provider, { value: { state, refresh } },
+          React.createElement(CartProvider, null,
+            React.createElement(NotificationProvider, null,
+              React.createElement(ShopPage))))));
+  }
+  await mount(React.createElement(RecoveryHost));
+  assert.match(host.textContent, /The collection is unavailable\./);
+  const retry = button("Try again");
+  assert.ok(retry, "the error panel exposes its retry control");
+  await act(async () => retry.focus());
+  await click(retry);
+  await flush();
+  await flush();
+  const heading = host.querySelector("#collection-title");
+  assert.equal(heading.getAttribute("tabindex"), "-1");
+  assert.equal(document.activeElement, heading,
+    "focus returns to the collection heading after a genuine recovery");
 });
 
 function renderCurrency(element) { root.render(React.createElement(CurrencyProvider, null, element)); }

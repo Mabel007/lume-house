@@ -500,6 +500,7 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
                   <input
                     type="radio"
                     name="payment-provider"
+                    value={value}
                     checked={provider === value}
                     onChange={() => setProvider(value)}
                   />
