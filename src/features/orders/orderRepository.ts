@@ -47,9 +47,9 @@ export async function placeOrder(client: SupabaseClient, requestId: string, chec
   if (!session || expectedUserId && session.user.id!==expectedUserId) throw new CheckoutError('AUTH_REQUIRED');
   const { data,error } = await client.functions.invoke('place-order',{body:{request_id:requestId,checkout,expected_cart:expectedCart,...(expectedCart.length && expectedCart.every(item=>typeof item.variant_id==='string')?{cart_version:2}:{})},headers:{Authorization:`Bearer ${session.access_token}`}});
   if (error) {
-    let code = 'ORDER_UNAVAILABLE';
-    try { if (error.context instanceof Response) { const body = await error.context.json(); if(typeof body.error==='string') code=body.error; } } catch { /* Never echo raw provider errors. */ }
-    throw new CheckoutError(code);
+    let code = 'ORDER_UNAVAILABLE';let definitive=false;
+    try { if (error.context instanceof Response) { const body = await error.context.json(); if(typeof body.error==='string') code=body.error; definitive=body.outcome==='rejected'; } } catch { /* Never echo raw provider errors. */ }
+    throw new CheckoutError(code,definitive);
   }
   if (!data?.order || typeof data.order.id !== 'string' || !/^[0-9a-f-]{36}$/i.test(data.order.id)) throw new CheckoutError('ORDER_UNAVAILABLE');
   return { id:data.order.id as string, emailStatus:typeof data.email_status==='string'?data.email_status:'queued' };

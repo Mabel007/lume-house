@@ -434,7 +434,11 @@ test('unsupported delivery country blocks placement before any order call, keeps
   assert.equal(calls[0].name,'place-order');
   assert.equal(calls[0].options.body.checkout.city,'Freetown');
   assert.equal(calls[0].options.body.checkout.zone_id,'zone-3');
-  assert.equal('country' in calls[0].options.body.checkout,false,'the checkout payload does not gain a country field');
+  assert.equal(calls[0].options.body.checkout.country_code,'SL','delivery submits the canonical country');
+  assert.equal('country' in calls[0].options.body.checkout,false,'no competing country alias is submitted');
+  assert.equal('country_code' in calls[0].options.body,false,'the country stays inside the checkout object');
+  assert.equal('protocol' in calls[0].options.body,false,'the Cart request envelope is unchanged');
+  assert.ok(calls[0].options.body.request_id,'the Cart request keeps its owner-scoped idempotency id');
   assert.equal(begun,1,'the Cart ticket is only begun after country eligibility passes');
 });
 
@@ -486,6 +490,33 @@ test('invalid trusted delivery responses surface safe guidance and never claim p
   assert.doesNotMatch(host.textContent,/payment successful|order confirmed/i);
   assert.ok(host.querySelector('form#checkout-form'));
   assert.equal(button().disabled,false);
+});
+
+test('a definite country rejection gives actionable guidance without an automatic retry', async()=>{
+  const calls=[];
+  const client=fakeClient(async(name,options)=>{calls.push({name,options});return {data:null,error:{context:new Response(JSON.stringify({error:'INVALID_DELIVERY_COUNTRY',outcome:'rejected'}),{status:400,headers:{'Content-Type':'application/json'}})}};});
+  await mount({authSession:session,client});
+  await fillRequired();
+  await fillValidPhones();
+  await submit();
+  assert.equal(calls.length,1,'one explicit placement attempt');
+  assert.ok(alertTexts().includes(checkoutMessages.unsupportedCountry),'the country rejection is explained with actionable guidance');
+  assert.doesNotMatch(alertTexts().join(' '),/could not confirm|try again|same request/i,'a definite rejection is not presented as a transient outage');
+  await new Promise(resolve=>setTimeout(resolve,20));
+  assert.equal(calls.length,1,'a definite rejection never retries automatically');
+  assert.ok(host.querySelector('form#checkout-form'),'the form remains available for an explicit correction');
+  assert.equal(button().disabled,false,'the customer can correct the country and submit again');
+  const attemptKey=`lume-checkout-attempt-${session.user.id}`;
+  const retained=JSON.parse(dom.window.localStorage.getItem(attemptKey));
+  assert.equal(retained.requestId,calls[0].options.body.request_id,'the pending request ID is retained after a definite rejection');
+  assert.equal(calls[0].options.body.checkout.country_code,'SL','the Cart country contract is unchanged');
+  assert.equal('country_code' in calls[0].options.body,false,'the country remains inside the checkout object');
+  const checkPrevious=Array.from(host.querySelectorAll('button')).find(node=>node.textContent==='Check previous order');
+  assert.ok(checkPrevious,'the retained request exposes recovery controls');
+  await toggle(checkPrevious);
+  assert.match(host.textContent,/No completed result is visible yet/);
+  assert.equal(calls.length,1,'checking recovery does not place another order');
+  assert.equal(JSON.parse(dom.window.localStorage.getItem(attemptKey)).requestId,retained.requestId,'the same request remains recoverable');
 });
 
 test('a changed-price rejection refreshes the Cart and requires an explicit second submit with the same request id', async()=>{
@@ -807,11 +838,16 @@ test('pickup does not require delivery-only fields and still places the order', 
   assert.equal(host.querySelector('#delivery-zone'),null);
   assert.equal(host.querySelector('#delivery-country'),null);
   assert.equal(button().disabled,false,'pickup remains available after an unsupported delivery country');
+  await chooseRadio('fulfilment','delivery');
+  assert.equal(countryInput().value,'Ghana','pickup does not overwrite the saved delivery-country preference');
+  assert.equal(button().disabled,true,'the unsupported delivery country still blocks delivery');
+  await chooseRadio('fulfilment','pickup');
   await submit();
   assert.equal(calls.length,1);
   assert.equal(calls[0].name,'place-order');
   assert.equal(calls[0].options.body.checkout.fulfilment,'pickup');
   assert.equal(calls[0].options.body.checkout.zone_id,'');
+  assert.equal(calls[0].options.body.checkout.country_code,'SL','pickup submits the canonical Lumley country');
   assert.equal('country' in calls[0].options.body.checkout,false);
 });
 

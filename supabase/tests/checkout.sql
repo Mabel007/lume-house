@@ -15,7 +15,7 @@ from public.cart_items ci join public.products p on p.id=ci.product_id
 join public.carts c on c.id=ci.cart_id where c.user_id=auth.uid(); $$;
 create function pg_temp.checkout(method text,zone text default null) returns jsonb language sql as $$
 select jsonb_build_object('full_name','Test Customer','email','fixture@example.invalid','contact_phone','+23276521208',
- 'payment_phone','+23230521209','provider','orange','fulfilment',method,'zone_id',zone,
+ 'payment_phone','+23230521209','provider','orange','fulfilment',method,'country_code','SL','zone_id',zone,
  'street','Test landmark','area','Lumley','city','Freetown','subtotal',1,'total',1,'fee',1,'zone_label','Untrusted','payment_status','paid','user_id','22222222-2222-4222-8222-222222222222'); $$;
 insert into auth.users(id) values('11111111-1111-4111-8111-111111111111'),('22222222-2222-4222-8222-222222222222');
 insert into public.carts(id,user_id) values('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','11111111-1111-4111-8111-111111111111');
@@ -56,7 +56,7 @@ select pg_temp.assert((select payment_phone_last4='1209' from public.orders),'on
 select pg_temp.assert((select delivery_zone_label='Goderich to Lumley' from public.orders),'trusted zone label');
 select pg_temp.assert((select unit_price_cents=30000 and product_name='Amber Glass Candle' and quantity=2 from public.order_items),'historical authoritative items');
 select pg_temp.assert((select count(*)=0 from public.cart_items),'cart converted atomically');
-select public.place_order('10000000-0000-4000-8000-000000000001','{}','[]');
+select public.place_order('10000000-0000-4000-8000-000000000001','{"country_code":"SL"}','[]');
 select pg_temp.assert((select count(*)=1 from public.orders),'same-key retry returns existing order with empty cart');
 reset role;
 select pg_temp.assert((select count(*)=1 from public.order_confirmation_jobs),'one durable email job');
