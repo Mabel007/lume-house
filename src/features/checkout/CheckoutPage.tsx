@@ -23,7 +23,7 @@ import {
   validatePaymentPhone,
   type PaymentProvider,
 } from "./payment";
-import { checkoutMessages, cityProblem, countryProblem, isValidEmail } from "./validation";
+import { checkoutMessages, cityProblem, countryProblem, countryValidationCode, isValidEmail } from "./validation";
 import { OrderSummary } from "./OrderSummary";
 import { EmptyCart } from "../../components/EmptyCart";
 import { useAuth } from "../auth/AuthContext";
@@ -144,6 +144,14 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
     return () => { active = false; };
   }, [userId, userEmail]);
   const paymentPhone = getPaymentPhone(contactPhone, phone, reusePhone);
+  // Pickup is always the domestic Lumley location. Delivery sends the
+  // canonical code only after the selected country passes the existing gate.
+  const submittedCountry =
+    fulfilment === "pickup"
+      ? deliveryConfig.serviceCountryCode
+      : countryProblem(countryCode, deliveryConfig.serviceCountryCode)
+        ? null
+        : deliveryConfig.serviceCountryCode;
   // Ordered as the form renders so the first problem is also the first field to
   // focus. Text rules mirror the trusted SQL; the database stays authoritative.
   const problems: { id: string; message: string }[] = [];
@@ -220,6 +228,7 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
       setOrderError(phonesOnly?'Enter valid 8-digit Sierra Leone contact and payment numbers.':'Please check your contact and delivery details before placing your order.');
       return;
     }
+    if(!submittedCountry){setOrderError(checkoutMessages.unsupportedCountry);return;}
     const checkoutTicket=direct?null:beginCheckout?.();
     if(!direct && beginCheckout && checkoutTicket==null){setOrderError('Wait for your Cart changes to finish saving.');return;}
     submittingRef.current=true;setSubmitting(true);setOrderError('');
@@ -250,7 +259,7 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
           ?{version:1,source:'direct',ownerId:userId,requestId:direct.id,intentId:direct.id,productId:direct.productId,variantId:direct.variantId,quantity:direct.quantity}
           :{version:1,source:'bag',ownerId:userId,requestId:existing?.requestId||requestId.current||crypto.randomUUID()};
         const attempt=rememberAttempt(candidate);requestId.current=attempt.requestId;setPendingAttempt(attempt);
-        const checkout={full_name:fullName,email,contact_phone:normalizePhone(contactPhone),payment_phone:normalizePhone(paymentPhone),provider,fulfilment,zone_id:zoneId,street:address,area,city,instructions};
+        const checkout={full_name:fullName,email,contact_phone:normalizePhone(contactPhone),payment_phone:normalizePhone(paymentPhone),provider,fulfilment,country_code:submittedCountry,zone_id:zoneId,street:address,area,city,instructions};
         const result=attempt.source==='direct'
           ?await placeDirectOrder(getSupabaseClient(),attempt,checkout,expected[0])
           :await placeOrder(getSupabaseClient(),attempt.requestId,checkout,expected,userId);
@@ -268,6 +277,7 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
       else if(error instanceof Error&&error.message==='CHECKOUT_BUSY')setOrderError('Checkout is active in another tab. Wait for it to finish, then check the previous order.');
       else if(['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART','OUT_OF_STOCK','QUOTE_CHANGED'].includes(code)){setOrderError(direct?'The selected price or availability changed. Review the refreshed selection before retrying. Any previous request is retained.':code==='OUT_OF_STOCK'?'A selected quantity is no longer available. Review your Cart and current availability before trying again.':'Your Cart or current prices changed. Review the refreshed Cart before placing your order.');refresh();if(!direct)retry?.();}
       else if(code==='AUTH_REQUIRED')setOrderError('Your session expired. Please sign in again before placing your order.');
+      else if(code===countryValidationCode)setOrderError(checkoutMessages.unsupportedCountry);
       else if(code==='DIRECT_UNAVAILABLE')setOrderError('Buy Now is unavailable on this server. Your request is retained; check My Orders or retry checking.');
       else if(code==='CATALOG_UNAVAILABLE')setOrderError('Current prices could not be checked. Your selection and any previous request are retained. Retry when product services are available.');
       else if(['CHECKOUT_SOURCE_CONFLICT','CHECKOUT_SELECTION_CONFLICT'].includes(code)){setRecoveryBlocked(true);setOrderError('This request belongs to a different checkout. Check My Orders before continuing.');}

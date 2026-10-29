@@ -49,4 +49,4 @@ export function parseOrder(value: unknown): Order {
     delivery_zone_label:nullable(r.delivery_zone_label), delivery_instructions:nullable(r.delivery_instructions), pickup_location:nullable(r.pickup_location),
     payment_provider:r.payment_provider as 'orange'|'afri', payment_phone_last4:nullable(r.payment_phone_last4), subtotal_cents:subtotal, delivery_fee_cents:fee, order_items };
 }
-export type CheckoutInput = { full_name:string; email:string; contact_phone:string; payment_phone:string; provider:'orange'|'afri'; fulfilment:'delivery'|'pickup'; zone_id:string; street:string; area:string; city:string; instructions:string };
+export type CheckoutInput = { full_name:string; email:string; contact_phone:string; payment_phone:string; provider:'orange'|'afri'; fulfilment:'delivery'|'pickup'; country_code:string; zone_id:string; street:string; area:string; city:string; instructions:string };

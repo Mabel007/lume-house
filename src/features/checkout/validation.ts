@@ -16,6 +16,9 @@ export const checkoutMessages = {
   unsupportedCity: "Delivery to this location isn't available yet. We currently deliver to selected areas of Freetown, Sierra Leone. You can choose a supported delivery area or Lumley pickup.",
 } as const;
 
+// Shared code for country eligibility rejected by Edge or trusted SQL.
+export const countryValidationCode = "INVALID_DELIVERY_COUNTRY";
+
 export function countryProblem(
   countryCode: string,
   serviceCountryCode: string,

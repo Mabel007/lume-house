@@ -73,7 +73,12 @@ test('PDP Buy Now uses selected quantity despite saved Bag error and quantity 99
 test('direct shared form orders one item and never clears or mutates saved Bag',async()=>{
  await mount();await fill();await submit();
  assert.match(host.textContent,/Order placed locally/);assert.equal(invocations.length,1);assert.equal(invocations[0].name,'place-direct-order');
- assert.equal(invocations[0].options.body.quantity,2);assert.equal(invocations[0].options.body.expected_quote.unit_price,1800);
+ const body=invocations[0].options.body;
+ assert.equal(body.protocol,1);assert.equal(body.quantity,2);assert.equal(body.expected_quote.unit_price,1800);
+ assert.equal(body.checkout.fulfilment,'pickup');
+ assert.equal(body.checkout.country_code,'SL','pickup submits the canonical country');
+ assert.equal('country_code' in body,false,'the country stays inside the existing checkout object');
+ assert.equal('expected_cart' in body,false);assert.equal('cart_version' in body,false);
  assert.equal(finishCalls,0);assert.equal(dispatchCalls,0);assert.equal(intents.parseDirectState(intents.directSnapshot()).hold,true);
 });
 test('unsupported delivery country blocks Buy Now with zero calls and preserves its intent',async()=>{
@@ -100,8 +105,23 @@ test('unsupported delivery country blocks Buy Now with zero calls and preserves 
  await submit();
  assert.equal(invocations.length,1);
  assert.equal(invocations[0].name,'place-direct-order');
- assert.equal('country' in invocations[0].options.body.checkout,false,'the payload contract is unchanged');
+ assert.equal(invocations[0].options.body.checkout.country_code,'SL','the direct payload sends the canonical country');
+ assert.equal('country' in invocations[0].options.body.checkout,false,'no competing country alias is submitted');
+ assert.equal('country_code' in invocations[0].options.body,false,'the country stays inside the existing checkout object');
  assert.equal(finishCalls,0);
+});
+test('a definite country rejection preserves the Buy Now intent and never retries automatically',async()=>{
+ await mount();await fillDelivery();
+ behavior=async()=>({data:null,error:{context:new Response(JSON.stringify({error:'INVALID_DELIVERY_COUNTRY',outcome:'rejected'}),{status:400,headers:{'Content-Type':'application/json'}})}});
+ await submit();
+ assert.equal(invocations.length,1,'one explicit placement attempt');
+ assert.match(host.textContent,/Delivery is currently available only in selected areas of Freetown/,'the rejection is explained with actionable guidance');
+ assert.doesNotMatch(host.textContent,/could not confirm order placement/i,'a definite rejection is not presented as a transient outage');
+ await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(invocations.length,1,'no automatic retry after a definite rejection');
+ assert.ok(intents.parseDirectState(intents.directSnapshot()).intent,'the Buy Now selection is retained');
+ assert.ok(host.querySelector('form#checkout-form'));
+ assert.equal(host.querySelector('button[type="submit"]').disabled,false);
 });
 test('uncertain response and missing lookup retain the same request across reload and retry',async()=>{
  await mount();await fill();behavior=async()=>({data:null,error:{}});await submit();

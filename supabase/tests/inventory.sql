@@ -7,7 +7,7 @@ begin begin execute statement;exception when others then if sqlerrm<>expected th
 create function pg_temp.denied(statement text) returns text language plpgsql as $$
 begin begin execute statement;exception when insufficient_privilege then return 'PASS: permission denied';end;raise exception 'FAIL: expected permission denial';end;$$;
 create function pg_temp.checkout() returns jsonb language sql as $$
-select '{"full_name":"Local inventory fixture","email":"fixture@example.invalid","contact_phone":"+23276521208","payment_phone":"+23276521209","provider":"orange","fulfilment":"pickup"}'::jsonb;$$;
+select '{"full_name":"Local inventory fixture","email":"fixture@example.invalid","contact_phone":"+23276521208","payment_phone":"+23276521209","provider":"orange","fulfilment":"pickup","country_code":"SL"}'::jsonb;$$;
 create function pg_temp.quote() returns jsonb language sql as $$
 select coalesce(jsonb_agg(jsonb_build_object('product_id',v.product_id,'variant_id',v.id,'quantity',ci.quantity,'unit_price',v.price_cents) order by v.id),'[]')
 from public.variant_cart_items ci join public.product_variants v on v.id=ci.variant_id
@@ -47,7 +47,7 @@ reset role;
 select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
 set local role authenticated;
 select public.place_variant_order('30000000-0000-4000-8000-000000000001',pg_temp.checkout(),pg_temp.quote());
-select public.place_variant_order('30000000-0000-4000-8000-000000000001','{}','[]');
+select public.place_variant_order('30000000-0000-4000-8000-000000000001','{"country_code":"SL"}','[]');
 reset role;
 select pg_temp.assert((select allocated=3 and on_hand=5 from public.variant_inventory),'tracked order allocates trusted quantity without decrementing physical on-hand');
 select pg_temp.assert((select count(*)=1 from public.inventory_ledger where event='order_allocation'),'order retry does not allocate twice');

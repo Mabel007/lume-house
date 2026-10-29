@@ -7,7 +7,7 @@ begin begin execute statement;exception when others then if sqlerrm<>expected th
 create function pg_temp.denied(statement text) returns text language plpgsql as $$
 begin begin execute statement;exception when insufficient_privilege then return 'PASS: permission denied';end;raise exception 'FAIL: expected permission denial';end;$$;
 create function pg_temp.checkout() returns jsonb language sql as $$
-select '{"full_name":"Local fixture","email":"fixture@example.invalid","contact_phone":"+23276521208","payment_phone":"+23276521209","provider":"orange","fulfilment":"pickup"}'::jsonb;$$;
+select '{"full_name":"Local fixture","email":"fixture@example.invalid","contact_phone":"+23276521208","payment_phone":"+23276521209","provider":"orange","fulfilment":"pickup","country_code":"SL"}'::jsonb;$$;
 create function pg_temp.quote(v text default 'default:amber-candle',q integer default 2) returns jsonb language sql as $$
 select coalesce((select jsonb_build_object('product_id',product_id,'variant_id',id,'quantity',q,'unit_price',price_cents) from public.product_variants where id=v),'{}'::jsonb);$$;
 create function pg_temp.direct(r uuid default 'a1000000-0000-4000-8000-000000000001',v text default 'default:amber-candle',q integer default 2, c jsonb default null) returns jsonb language sql as $$
@@ -75,8 +75,8 @@ select pg_temp.denied('delete from public.order_items');
 select pg_temp.denied('select * from public.order_confirmation_jobs');
 select pg_temp.denied('select * from public.variant_inventory');
 select pg_temp.denied('insert into public.variant_cart_items(cart_id,variant_id,quantity) values(''aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'',''default:amber-candle'',1)');
-select pg_temp.error($q$select public.place_order('a1000000-0000-4000-8000-000000000001','{}','[]')$q$,'CHECKOUT_SOURCE_CONFLICT');
-select pg_temp.error($q$select public.place_variant_order('a1000000-0000-4000-8000-000000000001','{}','[]')$q$,'CHECKOUT_SOURCE_CONFLICT');
+select pg_temp.error($q$select public.place_order('a1000000-0000-4000-8000-000000000001','{"country_code":"SL"}','[]')$q$,'CHECKOUT_SOURCE_CONFLICT');
+select pg_temp.error($q$select public.place_variant_order('a1000000-0000-4000-8000-000000000001','{"country_code":"SL"}','[]')$q$,'CHECKOUT_SOURCE_CONFLICT');
 select pg_temp.error($q$select pg_temp.direct('a1000000-0000-4000-8000-000000000001','default:table-lamp')$q$,'CHECKOUT_SELECTION_CONFLICT');
 select pg_temp.error($q$select pg_temp.direct('a1000000-0000-4000-8000-000000000001','default:amber-candle',3)$q$,'CHECKOUT_SELECTION_CONFLICT');
 reset role;
@@ -84,8 +84,15 @@ select pg_temp.error($q$update public.orders set checkout_source='bag'$q$,'Histo
 -- Constraint enforcement on inserts (updates are rejected by immutability first).
 do $$begin
  begin
-  insert into public.orders(user_id,full_name,customer_email,customer_phone,fulfilment_method,pickup_location,payment_provider,currency,subtotal_cents,delivery_fee_cents,total_cents,checkout_source)
-  values('11111111-1111-4111-8111-111111111111','Local source fixture','fixture@example.invalid','+23276521208','pickup','Lumley, Freetown','orange','NLE',100,0,100,'unknown');
+  -- 02900 adds a required country to new rows; keep this source-constraint test
+  -- meaningful at both schema boundaries without editing applied history.
+  if exists(select 1 from information_schema.columns where table_schema='public' and table_name='orders' and column_name='country_code') then
+   execute $s$insert into public.orders(user_id,full_name,customer_email,customer_phone,fulfilment_method,pickup_location,payment_provider,currency,subtotal_cents,delivery_fee_cents,total_cents,checkout_source,country_code)
+   values('11111111-1111-4111-8111-111111111111','Local source fixture','fixture@example.invalid','+23276521208','pickup','Lumley, Freetown','orange','NLE',100,0,100,'unknown','SL')$s$;
+  else
+   insert into public.orders(user_id,full_name,customer_email,customer_phone,fulfilment_method,pickup_location,payment_provider,currency,subtotal_cents,delivery_fee_cents,total_cents,checkout_source)
+   values('11111111-1111-4111-8111-111111111111','Local source fixture','fixture@example.invalid','+23276521208','pickup','Lumley, Freetown','orange','NLE',100,0,100,'unknown');
+  end if;
  exception when check_violation then
   if sqlerrm not like '%orders_checkout_source_check%' then raise;end if;
   return;
@@ -97,7 +104,7 @@ select pg_temp.assert((select attnotnull and atthasdef from pg_attribute where a
 select pg_temp.assert((select pg_get_constraintdef(oid) like '%bag%' and pg_get_constraintdef(oid) like '%direct%' from pg_constraint where conrelid='public.orders'::regclass and conname='orders_checkout_source_check'),'source is constrained to supported purchase modes');
 update public.product_variants set active=false,price_cents=price_cents+1 where id='default:amber-candle';
 set local role authenticated;
-select public.place_direct_variant_order('a1000000-0000-4000-8000-000000000001','default:amber-candle',2,'{}','{}');
+select public.place_direct_variant_order('a1000000-0000-4000-8000-000000000001','default:amber-candle',2,'{}','{"country_code":"SL"}');
 select pg_temp.error($q$select pg_temp.direct(gen_random_uuid())$q$,'PRODUCT_UNAVAILABLE');
 reset role;
 select pg_temp.assert((select count(*)=1 from public.orders),'accepted retry precedes current price and availability checks');
@@ -120,7 +127,7 @@ select public.adjust_variant_inventory('default:amber-candle',2,'Disposable loca
 update public.product_variants set inventory_policy='tracked' where id='default:amber-candle';
 set local role authenticated;
 select pg_temp.direct('a1000000-0000-4000-8000-000000000002');
-select public.place_direct_variant_order('a1000000-0000-4000-8000-000000000002','default:amber-candle',2,'{}','{}');
+select public.place_direct_variant_order('a1000000-0000-4000-8000-000000000002','default:amber-candle',2,'{}','{"country_code":"SL"}');
 select pg_temp.error($q$select pg_temp.direct(gen_random_uuid())$q$,'OUT_OF_STOCK');
 reset role;
 select pg_temp.assert((select allocated=2 and on_hand=2 from public.variant_inventory),'finite stock allocated once, physical count preserved');
@@ -161,7 +168,7 @@ select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111'
 update public.product_variants set inventory_policy='untracked' where id='default:amber-candle';
 set local role authenticated;
 select public.place_order('a1000000-0000-4000-8000-000000000010',pg_temp.checkout(),jsonb_build_array(jsonb_build_object('product_id','amber-candle','quantity',99,'unit_price',(select price_cents from public.products where id='amber-candle'))));
-select public.place_order('a1000000-0000-4000-8000-000000000010','{}','[]');
+select public.place_order('a1000000-0000-4000-8000-000000000010','{"country_code":"SL"}','[]');
 select pg_temp.error($q$select pg_temp.direct('a1000000-0000-4000-8000-000000000010')$q$,'CHECKOUT_SOURCE_CONFLICT');
 select pg_temp.assert((select checkout_source='bag' from public.orders where checkout_request_id='a1000000-0000-4000-8000-000000000010'),'legacy Bag defaults to bag source');
 reset role;
@@ -169,7 +176,7 @@ select set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222'
 update public.product_variants set price_cents=100 where id='default:table-lamp';
 set local role authenticated;
 select public.place_variant_order('a1000000-0000-4000-8000-000000000011',pg_temp.checkout(),(select jsonb_agg(jsonb_build_object('product_id',v.product_id,'variant_id',v.id,'quantity',ci.quantity,'unit_price',v.price_cents)) from public.variant_cart_items ci join public.product_variants v on v.id=ci.variant_id));
-select public.place_variant_order('a1000000-0000-4000-8000-000000000011','{}','[]');
+select public.place_variant_order('a1000000-0000-4000-8000-000000000011','{"country_code":"SL"}','[]');
 select pg_temp.error($q$select pg_temp.direct('a1000000-0000-4000-8000-000000000011')$q$,'CHECKOUT_SOURCE_CONFLICT');
 select pg_temp.assert((select checkout_source='bag' from public.orders where checkout_request_id='a1000000-0000-4000-8000-000000000011'),'variant Bag defaults to bag source');
 reset role;
