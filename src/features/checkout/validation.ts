@@ -8,11 +8,11 @@ export const checkoutMessages = {
   address: "Enter your street address or landmark.",
   area: "Enter your area or community.",
   city: "Enter your city or town.",
-  country: "Choose your delivery country.",
+  country: "Choose your country.",
   zone: "Choose your delivery zone.",
   contactPhone: "Enter your phone number.",
   paymentPhone: "Enter your mobile-money number.",
-  unsupportedCountry: "Delivery is currently available only in selected areas of Freetown, Sierra Leone. Change your country, or choose free pickup in Lumley, Freetown.",
+  unsupportedCountry: "Orders are currently available only for customers selecting Sierra Leone. Delivery is limited to selected areas of Freetown, and free pickup is available in Lumley, Freetown.",
   unsupportedCity: "Delivery to this location isn't available yet. We currently deliver to selected areas of Freetown, Sierra Leone. You can choose a supported delivery area or Lumley pickup.",
 } as const;
 

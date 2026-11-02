@@ -153,13 +153,13 @@ test('country selector defaults to Sierra Leone and exposes the complete standar
   assert.equal(input.getAttribute('aria-controls'),'delivery-country-listbox');
   assert.equal(input.getAttribute('aria-required'),'true');
   assert.equal(input.getAttribute('autocomplete'),'country-name');
-  assert.equal(host.querySelector('label[for="delivery-country"]').textContent,'Delivery country *');
+  assert.equal(host.querySelector('label[for="delivery-country"]').textContent,'Country *');
   assert.equal(input.getAttribute('aria-describedby'),'delivery-country-help');
-  assert.equal(host.querySelector('#delivery-country-help').textContent,'We currently deliver within Freetown, Sierra Leone only.');
+  assert.equal(host.querySelector('#delivery-country-help').textContent,'Orders are currently available only for customers selecting Sierra Leone.');
   const list=countryList();
   assert.ok(list);
   assert.equal(list.getAttribute('role'),'listbox');
-  assert.equal(list.getAttribute('aria-label'),'Delivery country options');
+  assert.equal(list.getAttribute('aria-label'),'Country options');
   assert.equal(list.hidden,true);
   const live=host.querySelector('#delivery-country-status');
   assert.equal(live.getAttribute('role'),'status');
@@ -450,7 +450,7 @@ test('pickup removes delivery requirements with a zero fee and switching back re
   assert.deepEqual(totals(),['NLE 36','NLE 0','NLE 36']);
   assert.equal(host.querySelector('[name="city"]'),null);
   assert.equal(host.querySelector('#delivery-zone'),null);
-  assert.equal(host.querySelector('#delivery-country'),null,'pickup does not require a delivery country');
+  assert.equal(countryInput().value,'Sierra Leone','the order-level country stays selectable during pickup');
   assert.equal(button().disabled,false);
   await chooseRadio('fulfilment','delivery');
   assert.match(host.textContent,/We currently deliver within Freetown only\./);
@@ -689,7 +689,7 @@ test('a blank checkout submit is blocked with field-associated errors and focuse
   assert.match(describedBy('full-name'),/full-name-error/);
   assert.match(describedBy('city'),/city-error/);
   assert.match(describedBy('delivery-zone'),/delivery-zone-error/);
-  assert.match(alertTexts().join(' '),/Please check your contact and delivery details before placing your order\./);
+  assert.match(alertTexts().join(' '),/Please check your contact, country and delivery details before placing your order\./);
   assert.equal(dom.window.document.activeElement.getAttribute('name'),'full-name');
 });
 
@@ -825,9 +825,10 @@ test('unsupported city and missing zone get accurate field-associated messages',
   assert.equal(errorText('city-error'),null);
 });
 
-test('pickup does not require delivery-only fields and still places the order', async()=>{
+test('an unsupported country blocks pickup and can be corrected without side effects', async()=>{
   const {calls,client}=recordingClient();
-  await mount({authSession:session,client});
+  let begun=0,finished=0;
+  await mount({authSession:session,client,beginCheckout:()=>{begun+=1;return 1;},finishCheckout:()=>{finished+=1;}});
   await chooseCountry('Ghana');
   assert.equal(button().disabled,true,'unsupported delivery blocks while delivery is selected');
   await setValue(host.querySelector('[name="full-name"]'),'Fixture Customer');
@@ -836,19 +837,68 @@ test('pickup does not require delivery-only fields and still places the order', 
   await chooseRadio('fulfilment','pickup');
   assert.equal(host.querySelector('[name="city"]'),null);
   assert.equal(host.querySelector('#delivery-zone'),null);
-  assert.equal(host.querySelector('#delivery-country'),null);
-  assert.equal(button().disabled,false,'pickup remains available after an unsupported delivery country');
-  await chooseRadio('fulfilment','delivery');
-  assert.equal(countryInput().value,'Ghana','pickup does not overwrite the saved delivery-country preference');
-  assert.equal(button().disabled,true,'the unsupported delivery country still blocks delivery');
-  await chooseRadio('fulfilment','pickup');
+  assert.ok(countryInput(),'the country selector stays available during pickup');
+  assert.equal(countryInput().value,'Ghana');
+  assert.equal(button().disabled,true,'unsupported country blocks pickup');
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.unsupportedCountry);
+  assert.equal(invalidAttr('delivery-country'),'true');
+  assert.match(describedBy('delivery-country'),/delivery-country-error/);
+  await submit();
+  assert.equal(calls.length,0,'no order-service call begins');
+  assert.equal(begun,0,'the saved Cart is not converted');
+  assert.equal(finished,0);
+  await setValue(countryInput(),'');
+  assert.equal(button().disabled,true,'missing country blocks pickup');
+  await submit();
+  assert.equal(calls.length,0,'missing country begins no order-service call');
+  assert.equal(begun,0);
+  assert.equal(finished,0);
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.country,'the blocked attempt explains the missing country');
+  await chooseCountry('Sierra Leone');
+  assert.equal(countryInput().value,'Sierra Leone');
+  assert.equal(errorText('delivery-country-error')||null,null);
+  assert.equal(button().disabled,false);
   await submit();
   assert.equal(calls.length,1);
   assert.equal(calls[0].name,'place-order');
   assert.equal(calls[0].options.body.checkout.fulfilment,'pickup');
   assert.equal(calls[0].options.body.checkout.zone_id,'');
-  assert.equal(calls[0].options.body.checkout.country_code,'SL','pickup submits the canonical Lumley country');
+  assert.equal(calls[0].options.body.checkout.country_code,'SL','pickup submits the canonical country only after eligibility passes');
   assert.equal('country' in calls[0].options.body.checkout,false);
+  assert.equal(begun,1,'the Cart ticket is begun only after country eligibility passes');
+});
+
+test('a missing country blocks delivery and pickup and restores on correction without side effects', async()=>{
+  const {calls,client}=recordingClient();
+  let begun=0,finished=0;
+  await mount({authSession:session,client,beginCheckout:()=>{begun+=1;return 1;},finishCheckout:()=>{finished+=1;}});
+  await fillRequired();
+  await fillValidPhones();
+  await setValue(countryInput(),'');
+  assert.equal(button().disabled,true,'missing country blocks delivery');
+  assert.equal(errorText('delivery-country-error')||null,null,'an untouched empty selection stays quiet');
+  await submit();
+  assert.equal(calls.length,0,'missing country begins no delivery order call');
+  assert.equal(begun,0,'the saved Cart is not converted');
+  assert.equal(finished,0);
+  assert.equal(errorText('delivery-country-error'),checkoutMessages.country,'the blocked delivery attempt explains the missing country');
+  assert.equal(host.querySelector('[name="address"]').value,'12 Test Street','the delivery draft is preserved');
+  assert.match(host.textContent,/Qty 2/,'the Cart contents remain visible');
+  await chooseRadio('fulfilment','pickup');
+  assert.equal(button().disabled,true,'missing country also blocks pickup');
+  await submit();
+  assert.equal(calls.length,0,'missing country begins no pickup order call');
+  assert.equal(begun,0);
+  assert.equal(finished,0);
+  await chooseCountry('Sierra Leone');
+  assert.equal(errorText('delivery-country-error')||null,null);
+  assert.equal(button().disabled,false,'Sierra Leone restores pickup eligibility');
+  await submit();
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].name,'place-order');
+  assert.equal(calls[0].options.body.checkout.fulfilment,'pickup');
+  assert.equal(calls[0].options.body.checkout.country_code,'SL','pickup submits the canonical country');
+  assert.equal(begun,1,'the Cart ticket is begun only after eligibility passes');
 });
 
 test('a pasted formatted phone number places once, and a corrected form resubmits cleanly', async()=>{
