@@ -7,7 +7,7 @@ import {createServer} from 'vite';
 import {readFileSync} from 'node:fs';
 import {renderConfirmation,sendResend} from '../supabase/functions/_shared/email.ts';
 import {parseOrder} from '../src/features/orders/orders.ts';
-import {placeOrder,loadOrders,loadOrder} from '../src/features/orders/orderRepository.ts';
+import {placeOrder,loadOrders,loadOrder,CheckoutError} from '../src/features/orders/orderRepository.ts';
 import {commerceHandler} from '../supabase/functions/_shared/handler.ts';
 import {deliverConfirmation} from '../supabase/functions/_shared/confirmation.ts';
 
@@ -103,6 +103,44 @@ test('browser order placement calls Edge with JWT and reuses request ID, never t
  await assert.rejects(placeOrder({auth:{getSession:async()=>({data:{session:null}})}},orderFixture.id,{},[]),/AUTH_REQUIRED/);
  await assert.rejects(placeOrder({auth:{getSession:async()=>({data:{session:{access_token:'synthetic-test-jwt',user:{id:'other-identity'}}}})}},orderFixture.id,{},[], 'previous-identity'),/AUTH_REQUIRED/);
 });
+test('Cart adapter classifies structured rejections as definite while ambiguous failures stay uncertain',async()=>{
+ const attempt=async error=>{
+  const calls=[];
+  const client={auth:{getSession:async()=>({data:{session:{access_token:'synthetic-test-jwt'}}})},functions:{invoke:async(name,options)=>{calls.push({name,options});return{data:null,error};}}};
+  try{await placeOrder(client,orderFixture.id,{country_code:'SL'},[]);}
+  catch(thrown){return {thrown,calls};}
+  assert.fail('placeOrder should reject');
+ };
+ const structured=await attempt({context:new Response(JSON.stringify({error:'INVALID_DELIVERY_COUNTRY',outcome:'rejected'}),{status:400,headers:{'Content-Type':'application/json'}})});
+ assert.ok(structured.thrown instanceof CheckoutError);
+ assert.equal(structured.thrown.code,'INVALID_DELIVERY_COUNTRY');
+ assert.equal(structured.thrown.definitive,true,'a structured country rejection is definite');
+ assert.equal(structured.calls.length,1,'a definite rejection is not retried automatically');
+ assert.equal(structured.calls[0].name,'place-order');
+ assert.equal(structured.calls[0].options.body.checkout.country_code,'SL','the Cart country contract is unchanged');
+ assert.equal('country_code' in structured.calls[0].options.body,false,'the country remains inside the checkout object');
+ const ambiguous=await attempt({});
+ assert.ok(ambiguous.thrown instanceof CheckoutError);
+ assert.equal(ambiguous.thrown.code,'ORDER_UNAVAILABLE');
+ assert.equal(ambiguous.thrown.definitive,false,'an ambiguous network failure stays uncertain');
+ assert.equal(ambiguous.calls.length,1,'an uncertain outcome is not retried automatically');
+ const unrelated=await attempt({context:new Response(JSON.stringify({error:'INVALID_DELIVERY_ZONE'}),{status:400,headers:{'Content-Type':'application/json'}})});
+ assert.ok(unrelated.thrown instanceof CheckoutError);
+ assert.equal(unrelated.thrown.code,'INVALID_DELIVERY_ZONE','unrelated validation codes are preserved');
+ assert.equal(unrelated.thrown.definitive,false,'a code without the agreed outcome is not definite');
+});
+test('checkout country travels inside the existing Cart envelope without top-level parameters',async()=>{
+ const calls=[];const client={auth:{getSession:async()=>({data:{session:{access_token:'synthetic-test-jwt'}}})},functions:{invoke:async(name,options)=>{calls.push({name,options});return{data:{order:{id:orderFixture.id},email_status:'queued'},error:null}}}};
+ const quote=[{product_id:'amber-candle',variant_id:'default:amber-candle',quantity:1,unit_price:25000}];
+ await placeOrder(client,orderFixture.id,{country_code:'SL'},quote);
+ const body=calls[0].options.body;
+ assert.equal(calls[0].name,'place-order');
+ assert.equal(body.request_id,orderFixture.id,'the owner-scoped request ID is preserved');
+ assert.equal(body.cart_version,2,'the existing variant Cart version is preserved');
+ assert.deepEqual(body.expected_cart,quote,'the quote contract is preserved');
+ assert.equal(body.checkout.country_code,'SL','the canonical country is inside the checkout object');
+ assert.equal('country_code' in body,false,'country is not a top-level RPC/envelope parameter');
+});
 test('owner history repository reads through RLS newest-first, with no browser writes',async()=>{
  const calls=[];let detail=false;
  const query={select(...args){calls.push(['select',...args]);return this},order(...args){calls.push(['order',...args]);return this},range(...args){calls.push(['range',...args]);return this},eq(...args){calls.push(['eq',...args]);return this},maybeSingle(){detail=true;return this},then(resolve){resolve({data:detail?orderFixture:[orderFixture],error:null})}};
@@ -132,11 +170,12 @@ test('trusted handler authenticates JWT, rejects invalid auth, and strips owners
  try {
   const handler=commerceHandler('place');
   assert.equal((await handler(new Request('https://edge.example.invalid',{method:'POST'}))).status,401);
-  const payload={request_id:orderFixture.id,expected_cart:[],checkout:{full_name:'Customer',email:'fixture@example.invalid',contact_phone:'76 521208',payment_phone:'30 521208',fulfilment:'pickup',provider:'orange',user_id:'another-user',total:1,payment_status:'paid'}};
+  const payload={request_id:orderFixture.id,expected_cart:[],checkout:{full_name:'Customer',email:'fixture@example.invalid',contact_phone:'76 521208',payment_phone:'30 521208',fulfilment:'pickup',provider:'orange',country_code:'SL',user_id:'another-user',total:1,payment_status:'paid'}};
   const response=await handler(new Request('https://edge.example.invalid',{method:'POST',headers:{Authorization:'Bearer synthetic-test-jwt','Content-Type':'application/json'},body:JSON.stringify(payload)}));
   assert.equal(response.status,200);assert.equal((await response.json()).email_status,'queued');
   const rpc=calls.find(call=>call.path.includes('/rpc/place_order'));const body=JSON.parse(rpc.options.body);
   assert.equal(body.p_checkout.contact_phone,'+23276521208');assert.equal(body.p_checkout.payment_phone,'+23230521208');
+  assert.equal(body.p_checkout.country_code,'SL','the exact canonical country is forwarded unchanged');
   assert.equal('user_id' in body.p_checkout,false);assert.equal('total' in body.p_checkout,false);assert.equal('payment_status' in body.p_checkout,false);
   const variantQuote=[{product_id:'amber-candle',variant_id:'default:amber-candle',quantity:1,unit_price:25000}];
   const variantResponse=await handler(new Request('https://edge.example.invalid',{method:'POST',headers:{Authorization:'Bearer synthetic-test-jwt','Content-Type':'application/json'},body:JSON.stringify({...payload,cart_version:2,expected_cart:variantQuote})}));
@@ -147,6 +186,33 @@ test('trusted handler authenticates JWT, rejects invalid auth, and strips owners
   assert.equal((await handler(new Request('https://edge.example.invalid',{method:'POST',headers:{Authorization:'Bearer synthetic-test-jwt','Content-Type':'application/json'},body:JSON.stringify({...payload,cart_version:3})}))).status,400);
   globalThis.fetch=async()=>new Response(JSON.stringify({msg:'invalid JWT'}),{status:401});
   assert.equal((await handler(new Request('https://edge.example.invalid',{method:'POST',headers:{Authorization:'Bearer invalid-test-jwt'},body:'{}'}))).status,401);
+ }finally{globalThis.fetch=previousFetch;if(previousDeno===undefined)delete globalThis.Deno;else globalThis.Deno=previousDeno;}
+});
+test('Cart handler rejects every non-canonical country before RPC and maps the SQL contract',async()=>{
+ const previousFetch=globalThis.fetch;const previousDeno=globalThis.Deno;
+ let rpcCount=0;
+ globalThis.Deno={env:{get:name=>({SUPABASE_URL:'https://unit.example.invalid',SUPABASE_ANON_KEY:'synthetic-public-config',SUPABASE_SERVICE_ROLE_KEY:'synthetic-server-config'})[name]}};
+ globalThis.fetch=async(url)=>{
+  const path=String(url);
+  if(path.includes('/auth/v1/user'))return new Response(JSON.stringify({id:orderFixture.id}),{status:200,headers:{'Content-Type':'application/json'}});
+  if(path.includes('/rest/v1/rpc/')){rpcCount++;return new Response(JSON.stringify({message:'INVALID_DELIVERY_COUNTRY'}),{status:400,headers:{'Content-Type':'application/json'}});}
+  throw new Error('Unexpected external request in isolated test');
+ };
+ const handler=commerceHandler('place');
+ const base={request_id:orderFixture.id,expected_cart:[],checkout:{full_name:'Customer',email:'fixture@example.invalid',contact_phone:'76 521208',payment_phone:'30 521208',fulfilment:'pickup',provider:'orange'}};
+ const send=value=>handler(new Request('https://edge.example.invalid',{method:'POST',headers:{Authorization:'Bearer synthetic-test-jwt','Content-Type':'application/json'},body:JSON.stringify(value)}));
+ try{
+  for(const country_code of [undefined,null,'',' SL ','sl','Sl','SLE','SLX','Sierra Leone','US',1,true,{},[]]){
+   const checkout={...base.checkout};if(country_code===undefined)delete checkout.country_code;else checkout.country_code=country_code;
+   const response=await send({...base,checkout});const body=await response.json();
+   assert.equal(response.status,400,JSON.stringify(country_code));assert.equal(body.error,'INVALID_DELIVERY_COUNTRY');assert.equal(body.outcome,'rejected');assert.equal('email_status' in body,false);
+  }
+  assert.equal(rpcCount,0,'invalid country never reaches SQL or email delivery');
+  for(const cart_version of [undefined,2]){
+   const response=await send({...base,cart_version,checkout:{...base.checkout,country_code:'SL'}});
+   assert.equal(response.status,400);assert.equal((await response.json()).error,'INVALID_DELIVERY_COUNTRY');
+  }
+  assert.equal(rpcCount,2,'a valid country reaches the existing Cart/SQL contract and its rejection stays a definite 400');
  }finally{globalThis.fetch=previousFetch;if(previousDeno===undefined)delete globalThis.Deno;else globalThis.Deno=previousDeno;}
 });
 test('confirmation forwards optional runtime Reply-To while preserving claimed sender and job completion',async()=>{

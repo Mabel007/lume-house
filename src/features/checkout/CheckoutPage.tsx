@@ -23,7 +23,7 @@ import {
   validatePaymentPhone,
   type PaymentProvider,
 } from "./payment";
-import { checkoutMessages, cityProblem, countryProblem, isValidEmail } from "./validation";
+import { checkoutMessages, cityProblem, countryProblem, countryValidationCode, isValidEmail } from "./validation";
 import { OrderSummary } from "./OrderSummary";
 import { EmptyCart } from "../../components/EmptyCart";
 import { useAuth } from "../auth/AuthContext";
@@ -144,6 +144,17 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
     return () => { active = false; };
   }, [userId, userEmail]);
   const paymentPhone = getPaymentPhone(contactPhone, phone, reusePhone);
+  // Country eligibility applies to the order, not the fulfilment method.
+  // Pickup is domestic, but only Sierra Leone orders may be placed.
+  const countryMessage = countryProblem(
+    countryCode,
+    deliveryConfig.serviceCountryCode,
+  );
+  const submittedCountry = countryMessage
+    ? null
+    : deliveryConfig.serviceCountryCode;
+  const unsupportedCountry =
+    countryMessage === checkoutMessages.unsupportedCountry;
   // Ordered as the form renders so the first problem is also the first field to
   // focus. Text rules mirror the trusted SQL; the database stays authoritative.
   const problems: { id: string; message: string }[] = [];
@@ -156,13 +167,9 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
     problems.push({ id: "email", message: checkoutMessages.email });
   else if (!isValidEmail(email))
     problems.push({ id: "email", message: checkoutMessages.emailFormat });
+  if (countryMessage)
+    problems.push({ id: "delivery-country", message: countryMessage });
   if (fulfilment === "delivery") {
-    const countryMessage = countryProblem(
-      countryCode,
-      deliveryConfig.serviceCountryCode,
-    );
-    if (countryMessage)
-      problems.push({ id: "delivery-country", message: countryMessage });
     if (!address.trim())
       problems.push({ id: "address", message: checkoutMessages.address });
     if (!area.trim())
@@ -183,11 +190,6 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
     city.trim() !== "" &&
     cityProblem(city, deliveryConfig.serviceCity) ===
       checkoutMessages.unsupportedCity;
-  const unsupportedCountry =
-    fulfilment === "delivery" &&
-    countryCode !== "" &&
-    countryProblem(countryCode, deliveryConfig.serviceCountryCode) ===
-      checkoutMessages.unsupportedCountry;
   const problemFor = (id: string) =>
     problems.find((problem) => problem.id === id)?.message;
   const markTouched = (id: string) =>
@@ -199,7 +201,7 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
   const areaError = showsError("area") ? problemFor("area") : undefined;
   const countryError =
     showsError("delivery-country") || unsupportedCountry
-      ? problemFor("delivery-country")
+      ? countryMessage
       : undefined;
   const cityError =
     showsError("city") || unsupportedCity ? problemFor("city") : undefined;
@@ -217,9 +219,10 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
       pendingFocus.current=problems[0].id;
       setFocusRequest(value=>value+1);
       const phonesOnly=problems.every(problem=>problem.id==='contact-phone'||problem.id==='payment-phone');
-      setOrderError(phonesOnly?'Enter valid 8-digit Sierra Leone contact and payment numbers.':'Please check your contact and delivery details before placing your order.');
+      setOrderError(phonesOnly?'Enter valid 8-digit Sierra Leone contact and payment numbers.':'Please check your contact, country and delivery details before placing your order.');
       return;
     }
+    if(!submittedCountry){setOrderError(checkoutMessages.unsupportedCountry);return;}
     const checkoutTicket=direct?null:beginCheckout?.();
     if(!direct && beginCheckout && checkoutTicket==null){setOrderError('Wait for your Cart changes to finish saving.');return;}
     submittingRef.current=true;setSubmitting(true);setOrderError('');
@@ -250,7 +253,7 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
           ?{version:1,source:'direct',ownerId:userId,requestId:direct.id,intentId:direct.id,productId:direct.productId,variantId:direct.variantId,quantity:direct.quantity}
           :{version:1,source:'bag',ownerId:userId,requestId:existing?.requestId||requestId.current||crypto.randomUUID()};
         const attempt=rememberAttempt(candidate);requestId.current=attempt.requestId;setPendingAttempt(attempt);
-        const checkout={full_name:fullName,email,contact_phone:normalizePhone(contactPhone),payment_phone:normalizePhone(paymentPhone),provider,fulfilment,zone_id:zoneId,street:address,area,city,instructions};
+        const checkout={full_name:fullName,email,contact_phone:normalizePhone(contactPhone),payment_phone:normalizePhone(paymentPhone),provider,fulfilment,country_code:submittedCountry,zone_id:zoneId,street:address,area,city,instructions};
         const result=attempt.source==='direct'
           ?await placeDirectOrder(getSupabaseClient(),attempt,checkout,expected[0])
           :await placeOrder(getSupabaseClient(),attempt.requestId,checkout,expected,userId);
@@ -268,6 +271,7 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
       else if(error instanceof Error&&error.message==='CHECKOUT_BUSY')setOrderError('Checkout is active in another tab. Wait for it to finish, then check the previous order.');
       else if(['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART','OUT_OF_STOCK','QUOTE_CHANGED'].includes(code)){setOrderError(direct?'The selected price or availability changed. Review the refreshed selection before retrying. Any previous request is retained.':code==='OUT_OF_STOCK'?'A selected quantity is no longer available. Review your Cart and current availability before trying again.':'Your Cart or current prices changed. Review the refreshed Cart before placing your order.');refresh();if(!direct)retry?.();}
       else if(code==='AUTH_REQUIRED')setOrderError('Your session expired. Please sign in again before placing your order.');
+      else if(code===countryValidationCode)setOrderError(checkoutMessages.unsupportedCountry);
       else if(code==='DIRECT_UNAVAILABLE')setOrderError('Buy Now is unavailable on this server. Your request is retained; check My Orders or retry checking.');
       else if(code==='CATALOG_UNAVAILABLE')setOrderError('Current prices could not be checked. Your selection and any previous request are retained. Retry when product services are available.');
       else if(['CHECKOUT_SOURCE_CONFLICT','CHECKOUT_SELECTION_CONFLICT'].includes(code)){setRecoveryBlocked(true);setOrderError('This request belongs to a different checkout. Check My Orders before continuing.');}
@@ -402,6 +406,20 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
                 </label>
               ))}
             </div>
+            <div className="form-grid">
+              <div className="sm:col-span-2">
+                <CountryCombobox
+                  id="delivery-country"
+                  name="delivery-country"
+                  label="Country"
+                  value={countryCode}
+                  onChange={setCountryCode}
+                  onBlur={() => markTouched("delivery-country")}
+                  hint="Orders are currently available only for customers selecting Sierra Leone."
+                  error={countryError}
+                />
+              </div>
+            </div>
             {fulfilment === "delivery" ? (
               <div className="fulfilment-panel" key="delivery">
                 <p className="small-note" id="delivery-note">
@@ -410,18 +428,6 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
                   fees are provisional.
                 </p>
                 <div className="form-grid">
-                  <div className="sm:col-span-2">
-                    <CountryCombobox
-                      id="delivery-country"
-                      name="delivery-country"
-                      label="Delivery country"
-                      value={countryCode}
-                      onChange={setCountryCode}
-                      onBlur={() => markTouched("delivery-country")}
-                      hint={`We currently deliver within ${deliveryConfig.serviceCity}, ${deliveryConfig.serviceCountry} only.`}
-                      error={countryError}
-                    />
-                  </div>
                   <Field
                     label="Street address / landmark"
                   name="address"
@@ -626,7 +632,9 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
             <OrderSummary
               subtotal={lines.reduce((sum, line) => sum + line.lineTotal, 0)}
               deliveryFee={deliveryFee}
-              deliveryUnavailable={unsupportedCountry}
+              deliveryUnavailable={
+                fulfilment === "delivery" && unsupportedCountry
+              }
               estimates
             />
           </div>
@@ -635,10 +643,10 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
               type="submit"
               form="checkout-form"
               className="button w-full"
-              disabled={submitting || cartStatus==='saving' || cartStatus==='loading' || cartStatus==='error' || recovering || deliveryFee===null}
+              disabled={submitting || cartStatus==='saving' || cartStatus==='loading' || cartStatus==='error' || recovering || !submittedCountry || deliveryFee===null}
               aria-describedby={
                 [
-                  unsupportedCountry ? "delivery-country-error" : undefined,
+                  countryError ? "delivery-country-error" : undefined,
                   unsupportedCity ? "delivery-unavailable-note" : undefined,
                   "checkout-payment",
                 ]

@@ -14,7 +14,7 @@ const children=new Set();
 function connection(){const p=spawn('docker',args);children.add(p);let output='',error='';p.stdout.on('data',v=>output+=v);p.stderr.on('data',v=>error+=v);const done=new Promise(resolve=>p.on('close',code=>{children.delete(p);resolve({code,output,error});}));return {p,done,get output(){return output;}};}
 function session(s){const c=connection();c.p.stdin.end(s);return c.done;}
 const a='91000000-0000-4000-8000-000000000001',b='91000000-0000-4000-8000-000000000002';
-const checkout=`'{"full_name":"Local race","email":"race@example.invalid","contact_phone":"+23276521208","payment_phone":"+23276521209","provider":"orange","fulfilment":"pickup"}'::jsonb`;
+const checkout=`'{"full_name":"Local race","email":"race@example.invalid","contact_phone":"+23276521208","payment_phone":"+23276521209","provider":"orange","fulfilment":"pickup","country_code":"SL"}'::jsonb`;
 const quote=`'{"product_id":"amber-candle","variant_id":"default:amber-candle","quantity":1,"unit_price":100}'::jsonb`;
 const start=owner=>`begin;set local statement_timeout='12s';select set_config('request.jwt.claim.sub','${owner}',true);set local role authenticated;`;
 const direct=r=>`select public.place_direct_variant_order('${r}','default:amber-candle',1,${quote},${checkout});`;

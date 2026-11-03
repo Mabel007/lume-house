@@ -22,6 +22,21 @@ function Run-DirectChecks {
   }
   node (Join-Path $testRoot 'direct-order-concurrency.mjs') $containerName
   if ($LASTEXITCODE -ne 0) { throw 'Direct-order two-session concurrency checks failed' }
+  Run-CountryChecks
+}
+function Run-CountryChecks {
+  $country = Read-Sql (Join-Path $supabaseRoot 'migrations/20261023002900_order_delivery_country.sql')
+  $countryBody = $country -replace '(?m)^begin;\s*$', '' -replace '(?m)^commit;\s*$', ''
+  Run-Sql 'country expansion preserves historical NULL orders and recovery' ((Read-Sql (Join-Path $testRoot 'country-before.sql')) + $countryBody + (Read-Sql (Join-Path $testRoot 'country-after.sql')))
+  Run-Sql 'delivery country forward migration' $country
+  Run-Sql 'trusted country snapshot, strict rejection and history' (Read-Sql (Join-Path $testRoot 'country-order.sql'))
+  foreach($suite in @('checkout','variant-checkout','inventory','direct-order')) {
+    Run-Sql 'existing checkout regression after country migration' (Read-Sql (Join-Path $testRoot ($suite+'.sql')))
+  }
+  node (Join-Path $testRoot 'direct-order-concurrency.mjs') $containerName
+  if ($LASTEXITCODE -ne 0) { throw 'Post-country direct-order concurrency checks failed' }
+  node (Join-Path $testRoot 'country-order-concurrency.mjs') $containerName
+  if ($LASTEXITCODE -ne 0) { throw 'Country concurrency checks failed' }
 }
 try {
   docker run --detach --rm --network none --name $containerName -e POSTGRES_HOST_AUTH_METHOD=trust postgres:14.1-alpine

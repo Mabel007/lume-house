@@ -1,0 +1,23 @@
+{
+  "$comment": "Expected CORS contract for the Lumé House staging Edge functions. Update this file in the SAME change as any authorised allowlist edit so expectation and configuration cannot drift apart. See docs/cors-origin-contract.md.",
+  "projectRef": "gscihjjwhmvddrmcfpxp",
+  "projectUrl": "https://gscihjjwhmvddrmcfpxp.supabase.co",
+  "functions": [
+    { "slug": "place-order", "verifyJwt": false },
+    { "slug": "place-direct-order", "verifyJwt": true }
+  ],
+  "requiredOrigins": [
+    "https://lume-house-git-feat-lume-web-s02-country-enforcement-najbuilds.vercel.app"
+  ],
+  "approvedPreviewOrigins": [
+    "https://lume-house-cucv9kk4a-najbuilds.vercel.app",
+    "https://lume-house-cjmywq9fy-najbuilds.vercel.app"
+  ],
+  "deniedOrigins": [
+    "https://lume-house-git-feat-lume-web-b2-1-a-direct-order-najbuilds.vercel.app"
+  ],
+  "unknownOrigin": "https://unknown-origin.invalid",
+  "fallbackProbeOrigin": "http://localhost:5173",
+  "expectedMethods": "POST,OPTIONS",
+  "expectedHeaders": "authorization,apikey,content-type,x-client-info"
+}

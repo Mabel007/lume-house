@@ -395,7 +395,7 @@ test("checkout localizes fields and honestly distinguishes delivery and payment"
     "Street address / landmark",
     "Area / community",
     "City / town",
-    "Delivery country",
+    "Country",
     "Delivery instructions",
     "Orange Money",
     "Afrimoney",
@@ -436,7 +436,7 @@ test("checkout localizes fields and honestly distinguishes delivery and payment"
   assert.match(html, /aria-controls="delivery-country-listbox"/);
   assert.match(html, /aria-expanded="false"/);
   assert.match(html, /value="Sierra Leone"/);
-  assert.match(html, /id="delivery-country-help"[^>]*>We currently deliver within Freetown, Sierra Leone only\./);
+  assert.match(html, /id="delivery-country-help"[^>]*>Orders are currently available only for customers selecting Sierra Leone\./);
   assert.match(html, /NLE 40/);
   assert.match(html, /NLE 50/);
   assert.match(html, /NLE 60/);

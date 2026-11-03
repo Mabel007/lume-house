@@ -56,9 +56,11 @@ export function commerceHandler(mode: 'place' | 'direct' | 'email') {
         }
         if (mode==='place' && (typeof body.request_id !== 'string' || !uuid.test(body.request_id) || !body.checkout || typeof body.checkout !== 'object' || Array.isArray(body.checkout) || !Array.isArray(body.expected_cart) || body.expected_cart.length>100)) return reply({error:'INVALID_REQUEST'},400);
         const checkout = body.checkout as Record<string,unknown>;
+        // The trusted SQL boundary enforces this again. Never trim or normalize.
+        if (checkout.country_code !== 'SL') return reply({error:'INVALID_DELIVERY_COUNTRY',outcome:'rejected'},400);
         // RPC validates again. No ownership/prices/fees/status taken from body.
         const clean = { full_name:checkout.full_name,email:checkout.email,contact_phone:normalize(checkout.contact_phone),payment_phone:normalize(checkout.payment_phone),
-          provider:checkout.provider,fulfilment:checkout.fulfilment,zone_id:checkout.zone_id,street:checkout.street,area:checkout.area,city:checkout.city,instructions:checkout.instructions };
+          provider:checkout.provider,fulfilment:checkout.fulfilment,country_code:checkout.country_code,zone_id:checkout.zone_id,street:checkout.street,area:checkout.area,city:checkout.city,instructions:checkout.instructions };
         if(body.cart_version!==undefined && body.cart_version!==2)return reply({error:'INVALID_REQUEST'},400);
         const result = mode==='direct'
           ? await client.rpc('place_direct_variant_order',{p_request_id:body.request_id,p_variant_id:body.variant_id,p_quantity:body.quantity,p_expected_quote:body.expected_quote,p_checkout:clean})
@@ -69,7 +71,7 @@ export function commerceHandler(mode: 'place' | 'direct' | 'email') {
           if (['CHECKOUT_SOURCE_CONFLICT','CHECKOUT_SELECTION_CONFLICT','QUOTE_CHANGED'].includes(code)) return reply({error:code,outcome:'rejected'},409);
           if(mode==='direct' && result.error.code==='PGRST202')return reply({error:'DIRECT_UNAVAILABLE'},503);
           if (['CART_CHANGED','PRODUCT_UNAVAILABLE','EMPTY_CART','OUT_OF_STOCK'].includes(code)) return reply({error:code,outcome:'rejected'},409);
-          if (['INVALID_REQUEST','INVALID_CHECKOUT','INVALID_DELIVERY_ZONE','INVALID_DELIVERY_DETAILS','ORDER_TOTAL_LIMIT','CART_LIMIT'].includes(code)) return reply({error:code,outcome:'rejected'},400);
+          if (['INVALID_REQUEST','INVALID_CHECKOUT','INVALID_DELIVERY_ZONE','INVALID_DELIVERY_DETAILS','INVALID_DELIVERY_COUNTRY','ORDER_TOTAL_LIMIT','CART_LIMIT'].includes(code)) return reply({error:code,outcome:'rejected'},400);
           return reply({error:'ORDER_UNAVAILABLE'},503);
         }
         order = result.data; orderId = String(order?.id);

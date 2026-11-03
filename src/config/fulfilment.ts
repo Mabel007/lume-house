@@ -60,8 +60,8 @@ export function getDeliveryFee(
 }
 
 // Delivery remains available only in the configured service country. Pickup is
-// domestic by definition here, so its free fee is independent of the country
-// selector. Trusted SQL city/zone checks remain authoritative for real orders.
+// domestic, so it has no delivery fee; country eligibility is enforced by
+// checkout and trusted SQL for every fulfilment method.
 export function getDeliveryFeeForCountry(
   fulfilment: Fulfilment,
   countryCode: string,

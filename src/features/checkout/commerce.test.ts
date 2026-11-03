@@ -98,6 +98,10 @@ test("three provisional zones, supported city and pickup calculate safely", () =
 test("country selector lists standardized countries and defaults to Sierra Leone", () => {
   assert.equal(deliveryConfig.serviceCountry, "Sierra Leone");
   assert.equal(deliveryConfig.serviceCountryCode, "SL");
+  assert.equal(
+    checkoutMessages.unsupportedCountry,
+    "Orders are currently available only for customers selecting Sierra Leone. Delivery is limited to selected areas of Freetown, and free pickup is available in Lumley, Freetown.",
+  );
   assert.equal(countries.length, 249);
   assert.equal(new Set(countries.map((country) => country.code)).size, 249);
   for (const code of ["SL", "GH", "NG", "GN", "LR"])

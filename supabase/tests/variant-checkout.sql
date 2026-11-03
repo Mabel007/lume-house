@@ -7,7 +7,7 @@ begin begin execute statement; exception when others then if sqlerrm<>expected t
 create function pg_temp.denied(statement text) returns text language plpgsql as $$
 begin begin execute statement;exception when insufficient_privilege then return 'PASS: permission denied';end;raise exception 'FAIL: expected permission denial';end;$$;
 create function pg_temp.checkout() returns jsonb language sql as $$
-select '{"full_name":"Local fixture","email":"fixture@example.invalid","contact_phone":"+23276521208","payment_phone":"+23276521209","provider":"orange","fulfilment":"pickup"}'::jsonb;$$;
+select '{"full_name":"Local fixture","email":"fixture@example.invalid","contact_phone":"+23276521208","payment_phone":"+23276521209","provider":"orange","fulfilment":"pickup","country_code":"SL"}'::jsonb;$$;
 -- Delivery checkout fixture. overrides are untrusted browser-supplied keys used
 -- to prove the trusted path ignores them; they never contribute to the order.
 create function pg_temp.delivery(zone text, overrides jsonb default '{}') returns jsonb language sql as $$
@@ -67,7 +67,7 @@ select public.place_variant_order('20000000-0000-4000-8000-000000000001',pg_temp
 select pg_temp.assert((select user_id='11111111-1111-4111-8111-111111111111' and subtotal_cents=210000 and total_cents=210000 and status='placed' and payment_status='awaiting_payment' from public.orders),'trusted identity/prices/totals/payment semantics retained');
 select pg_temp.assert((select count(*)=3 and count(distinct variant_id)=3 from public.order_items),'new order keeps two meaningful variants and default separately');
 select pg_temp.assert((select variant_options='{"Color":"Blue"}' and variant_sku='fixture-blue' and variant_currency='NLE' and unit_price_cents=30000 from public.order_items where variant_id='fixture-blue'),'trusted immutable SKU/options/price/currency snapshots');
-select public.place_variant_order('20000000-0000-4000-8000-000000000001','{}','[]');
+select public.place_variant_order('20000000-0000-4000-8000-000000000001','{"country_code":"SL"}','[]');
 select pg_temp.assert((select count(*)=1 from public.orders),'variant order retry idempotent after cart conversion');
 select pg_temp.assert((select count(*)=0 from public.variant_cart_items),'variant Bag converted atomically');
 reset role;
@@ -113,7 +113,7 @@ select pg_temp.assert((select user_id='11111111-1111-4111-8111-111111111111'
   from public.orders where checkout_request_id='20000000-0000-4000-8000-000000000010'),
   'trusted zone fee/label/address/subtotal/total/payment replace tampered browser values');
 select pg_temp.assert((select count(*)=0 from public.variant_cart_items),'delivery order converts the variant Bag atomically');
-select public.place_variant_order('20000000-0000-4000-8000-000000000010','{}','[]');
+select public.place_variant_order('20000000-0000-4000-8000-000000000010','{"country_code":"SL"}','[]');
 select pg_temp.assert((select count(*)=1 from public.orders where checkout_request_id='20000000-0000-4000-8000-000000000010'),'delivery order retry stays idempotent');
 select pg_temp.assert((select delivery_fee_cents=0 and delivery_zone_id is null and delivery_zone_label is null and pickup_location='Lumley, Freetown'
   from public.orders where fulfilment_method='pickup'),'pickup stays free with no zone snapshot');
