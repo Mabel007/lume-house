@@ -11,3 +11,8 @@ supabase/.temp/
 supabase/.branches/
 
 .codex/
+
+# Local tooling and project metadata
+.vercel/
+.playwright-mcp/
+.qoder/
