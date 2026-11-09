@@ -14,6 +14,7 @@ import { ProductProvider } from "./features/products/ProductProvider";
 import { AuthProvider } from "./features/auth/AuthProvider";
 import { NotificationProvider } from "./components/NotificationProvider";
 import { AuthCallback, CustomerAccount, CustomerCheckout, CustomerOrders,CustomerOrder } from "./features/auth/CustomerRoutes";
+import { NotificationInbox } from "./features/notifications/NotificationInbox";
 import { AboutPage } from "./features/content/AboutPage";
 import { HelpPage } from "./features/content/HelpPage";
 import { DeliveryPickupPage, ReturnsRefundsPage, PrivacyPage, TermsPage } from "./features/content/PolicyPages";
@@ -37,6 +38,7 @@ const router = createBrowserRouter(createRoutesFromElements(
               <Route path="/account" element={<CustomerAccount />} />
               <Route path="/account/orders" element={<CustomerOrders />} />
               <Route path="/account/orders/:orderId" element={<CustomerOrder />} />
+              <Route path="/account/notifications" element={<NotificationInbox />} />
               <Route path="/orders/:orderId/success" element={<CustomerOrder success />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route

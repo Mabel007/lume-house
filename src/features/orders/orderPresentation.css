@@ -12,4 +12,17 @@
 .order-activity p { margin: .4rem 0 0; line-height: 1.6; }
 .order-activity time { display: block; margin-top: .35rem; font-size: .875rem; color: #4c574a; }
 .order-activity-note { font-size: .875rem; line-height: 1.6; color: #4c574a; }
+
+/* Customer timeline styles */
+.timeline-description { font-size: .875rem; line-height: 1.6; color: #4c574a; margin-bottom: 1rem; }
+.timeline-loading, .timeline-empty { font-size: .875rem; color: #6b7c6e; line-height: 1.6; }
+.timeline-error { font-size: .875rem; color: #a63f3f; line-height: 1.6; padding: .75rem; background: #fdf5f5; border-left: 3px solid #a63f3f; }
+.order-activity .event-label { font-size: 1rem; line-height: 1.4; }
+.order-activity .event-time { font-size: .875rem; }
+.order-activity .event-current { display: inline-block; margin-left: .5rem; padding: .125rem .5rem; font-size: .75rem; font-weight: 600; color: #344a36; background: #eaf0e3; border-radius: 2px; text-transform: uppercase; letter-spacing: .03em; }
+.order-activity li.terminal-event { border-left-color: #6b7c6e; }
+.order-activity li.terminal-event .event-label { color: #6b7c6e; }
+.order-activity li[aria-current="step"] { border-left-color: #5a7c5a; }
+.order-activity li[aria-current="step"] .event-label { color: #344a36; font-weight: 600; }
+
 @media (max-width: 700px) { .order-snapshot .order-information { grid-template-columns: minmax(0, 1fr); } }

@@ -1,0 +1,213 @@
+/* Notification bell in header */
+.notification-bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+  border-radius: 50%;
+}
+
+.notification-bell:hover,
+.notification-bell:focus-visible {
+  background-color: rgba(90, 124, 90, 0.1);
+}
+
+.notification-bell .bell-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.notification-bell .unread-badge {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-align: center;
+  color: #fff;
+  background-color: #a63f3f;
+  border-radius: 0.625rem;
+  border: 2px solid #fff;
+}
+
+/* Notification inbox */
+.notifications-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #deddd1;
+}
+
+.notifications-count {
+  font-size: 0.875rem;
+  color: #6b7c6e;
+  margin: 0;
+}
+
+.notifications-empty {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+.notifications-empty p {
+  margin-bottom: 1rem;
+}
+
+.notifications-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.notification-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 1rem;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  background: #fff;
+  border: 1px solid #deddd1;
+  border-left: 3px solid #b9b1a0;
+  border-radius: 2px;
+  transition: border-left-color 0.15s ease, background-color 0.15s ease;
+}
+
+.notification-item.unread {
+  border-left-color: #5a7c5a;
+  background: #f9faf8;
+}
+
+.notification-item.terminal {
+  border-left-color: #6b7c6e;
+}
+
+.notification-item:hover {
+  background: #f5f7f3;
+}
+
+.notification-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  padding-top: 0.125rem;
+}
+
+.notification-content {
+  min-width: 0;
+}
+
+.notification-title {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.4;
+  margin-bottom: 0.25rem;
+  color: #344a36;
+}
+
+.notification-message {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #4c574a;
+  margin: 0 0 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.notification-time {
+  display: block;
+  font-size: 0.75rem;
+  color: #6b7c6e;
+}
+
+.notification-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.notification-toggle-read {
+  background: none;
+  border: 1px solid #b9b1a0;
+  border-radius: 50%;
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 0.875rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  padding: 0;
+  color: #6b7c6e;
+}
+
+.notification-toggle-read:hover:not(:disabled) {
+  background-color: #eaf0e3;
+  border-color: #5a7c5a;
+}
+
+.notification-toggle-read:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.notification-link {
+  font-size: 0.875rem;
+  color: #5a7c5a;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.notification-link:hover {
+  color: #344a36;
+  text-decoration: underline;
+}
+
+/* Responsive adjustments */
+@media (max-width: 700px) {
+  .notification-item {
+    grid-template-columns: auto 1fr;
+    gap: 0.75rem;
+  }
+
+  .notification-actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 0.75rem;
+    border-top: 1px solid #deddd1;
+  }
+
+  .notifications-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+}
+
+/* Accessibility: focus states */
+.notification-bell:focus-visible,
+.notification-toggle-read:focus-visible,
+.notification-link:focus-visible {
+  outline: 2px solid #5a7c5a;
+  outline-offset: 2px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .notification-bell,
+  .notification-item,
+  .notification-toggle-read,
+  .notification-link {
+    transition: none;
+  }
+}

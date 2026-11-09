@@ -1,4 +1,4 @@
-import { CurrencyEstimate } from '../currency/CurrencySelector';
+import { CurrencyEstimate } from '../currency/CurrencyEstimate';
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { useCart } from "./CartContext";
