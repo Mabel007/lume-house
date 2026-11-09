@@ -2,7 +2,7 @@ import {test,before,after,afterEach} from 'node:test';
 import assert from 'node:assert/strict';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
+import {createServer} from './helpers/vite.mjs';
 
 const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/'});
 const {document}=dom.window;
@@ -18,7 +18,7 @@ before(async()=>{
  ({ProductGallery}=await server.ssrLoadModule('/src/features/products/ProductGallery.tsx'));
 });
 afterEach(async()=>{if(root)await act(async()=>root.unmount());root=null;host.replaceChildren();});
-after(async()=>{await server.close();dom.window.close();});
+after(async()=>{await server?.close();dom.window.close();});
 
 const base={id:'fixture',name:'Test piece',category:'Home',price:100,image:'/images/mug.svg',color:'#ffffff',description:'Test description'};
 const gallery=['/images/mug.svg','/images/arch-vase.webp'];

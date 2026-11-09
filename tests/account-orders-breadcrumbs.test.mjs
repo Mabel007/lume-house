@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test, before, after, afterEach } from 'node:test';
 import React, { act } from 'react';
 import { JSDOM } from 'jsdom';
-import { createServer } from 'vite';
+import { createServer } from './helpers/vite.mjs';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 // Isolated account/order breadcrumb evidence. Supabase is replaced at the
@@ -77,7 +77,7 @@ afterEach(async () => {
   host.replaceChildren();
   delete globalThis.__breadcrumbClient;
 });
-after(async () => { await server.close(); dom.window.close(); });
+after(async () => { await server?.close(); dom.window.close(); });
 
 function fakeClient({ detail = order, fail = false } = {}) {
   const calls = [];

@@ -1,7 +1,7 @@
 // Network-disabled disposable harness only. No project environment/credentials.
 import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
-const container=process.argv[2];assert.equal(container,'lume-foundation-sql-check');
+const container=process.argv[2];assert.match(container,/^lume-foundation-sql-check(?:-[a-f0-9]{12})?$/);
 const info=JSON.parse(execFileSync('docker',['inspect',container],{encoding:'utf8'}))[0];
 assert.equal(info.HostConfig.NetworkMode,'none');assert.equal(info.HostConfig.AutoRemove,true);assert.equal(info.Config.Image,'postgres:14.1-alpine');
 const db='lume_roles_race';

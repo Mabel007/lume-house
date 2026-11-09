@@ -3,7 +3,7 @@ import { test, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import React, { act } from "react";
 import { JSDOM } from "jsdom";
-import { createServer } from "vite";
+import { createServer } from './helpers/vite.mjs';
 import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 
 const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost/", pretendToBeVisual: true });
@@ -58,7 +58,7 @@ afterEach(async () => {
   root = null; host.replaceChildren(); sessionStorage.clear(); delete globalThis.__bagClient;
   recorded.length = 0;
 });
-after(async () => { await server.close(); dom.window.close(); });
+after(async () => { await server?.close(); dom.window.close(); });
 
 function bagClient(handler) {
   const calls = [];

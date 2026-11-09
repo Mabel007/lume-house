@@ -39,7 +39,8 @@ try{
  for(const container of baseline().filter(c=>c.project===project&&c.state==='exited').sort((a,b)=>Number(b.name.includes('_db_'))-Number(a.name.includes('_db_'))))execFileSync('docker',['start',container.id],{stdio:'ignore',env:localDockerEnv});
  for(const name of migrations.slice(0,4))copyFileSync(resolve(root,'supabase/migrations',name),resolve(destination,name));
  console.log('Starting guarded LOCAL Supabase: 00100–00400 then reviewed seed.');
- await cli(['start','--exclude','edge-runtime,logflare,vector,realtime,storage-api,imgproxy,supavisor'],env);
+ // Migration 02300 requires the genuine Storage schema and its enabled RLS.
+ await cli(['start','--exclude','edge-runtime,logflare,vector,realtime,imgproxy,supavisor'],env);
  const db=await dockerRequest('GET','/containers/supabase_db_lume-house/json'),info=JSON.parse(db.body);
  if(info.Config.Labels?.['com.supabase.cli.project']!==project||info.HostConfig.PortBindings['5432/tcp']?.[0]?.HostPort!=='54322')throw new Error('LOCAL database target not proven');
  const sql=statement=>execFileSync('docker',['exec','-i','supabase_db_lume-house','psql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1','-At'],{input:statement,encoding:'utf8',env:localDockerEnv}).trim();

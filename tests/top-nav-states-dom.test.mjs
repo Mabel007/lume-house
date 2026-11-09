@@ -3,7 +3,7 @@ import { test, before, after, afterEach } from 'node:test';
 import React, { act } from 'react';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
-import { createServer } from 'vite';
+import { createServer } from './helpers/vite.mjs';
 import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 
 // Isolated header navigation-state evidence. Supabase is replaced at the
@@ -65,7 +65,7 @@ const teardown = async () => {
   delete globalThis.__navStatesClient;
 };
 afterEach(teardown);
-after(async () => { await server.close(); dom.window.close(); });
+after(async () => { await server?.close(); dom.window.close(); });
 
 const flush = async () => { await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); }); };
 

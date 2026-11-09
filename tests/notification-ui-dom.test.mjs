@@ -2,7 +2,7 @@ import { test, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import React, { act, useEffect, useLayoutEffect, useRef } from "react";
 import { JSDOM } from "jsdom";
-import { createServer } from "vite";
+import { createServer } from './helpers/vite.mjs';
 import { MemoryRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { readFileSync } from "node:fs";
 

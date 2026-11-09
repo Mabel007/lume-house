@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test,before,after,afterEach} from 'node:test';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
+import {createServer} from './helpers/vite.mjs';
 import {MemoryRouter,Routes,Route} from 'react-router-dom';
 const dom=new JSDOM('<!doctype html><div id="root"></div>',{url:'http://localhost/'});
 for(const name of ['window','document','HTMLElement'])Object.defineProperty(globalThis,name,{configurable:true,value:dom.window[name]});
@@ -10,7 +10,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 const {createRoot}=await import('react-dom/client');const host=dom.window.document.getElementById('root');let server,root;
 before(async()=>{server=await createServer({root:process.cwd(),configFile:false,envDir:false,server:{middlewareMode:true,hmr:false},plugins:[{name:'auth-route-fixtures',enforce:'pre',load(id){const path=id.replaceAll('\\','/');if(path.endsWith('/src/lib/supabase/client.ts'))return 'export function getSupabaseClient(){return globalThis.__authRouteClient;}';if(path.endsWith('/src/features/account/AccountPage.tsx'))return 'export function AccountPage(){return "Customer Account";}';if(path.endsWith('/src/features/admin/AdminWorkspace.tsx'))return 'export function AdminWorkspace(){return "Authorized Owner workspace";}';}}]});});
 afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;host.replaceChildren();dom.window.sessionStorage.clear();delete globalThis.__authRouteClient;});
-after(async()=>{await server.close();dom.window.close();});
+after(async()=>{await server?.close();dom.window.close();});
 async function mount(path,value,element){const {AuthContext}=await server.ssrLoadModule('/src/features/auth/AuthContext.ts');root=createRoot(host);await act(async()=>root.render(React.createElement(MemoryRouter,{initialEntries:[path]},React.createElement(AuthContext.Provider,{value},element))));}
 test('administration return paths are same-origin admin-only and single use; customer login clears old intent',async()=>{
  const {adminReturnPath,setAdminAuthIntent,consumeAdminAuthIntent}=await server.ssrLoadModule('/src/features/auth/adminAuthIntent.ts');

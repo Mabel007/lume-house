@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {MemoryRouter,Routes,Route} from 'react-router-dom';
-import {createServer} from 'vite';
+import {createServer} from './helpers/vite.mjs';
 import {readFileSync} from 'node:fs';
 let server,AdminPage,AuthContext,checkAdmin;
 before(async()=>{server=await createServer({server:{middlewareMode:true,hmr:false},appType:'custom'});({AdminPage}=await server.ssrLoadModule('/src/features/admin/AdminPage.tsx'));({AuthContext}=await server.ssrLoadModule('/src/features/auth/AuthContext.ts'));({checkAdmin}=await server.ssrLoadModule('/src/features/admin/adminRepository.ts'));});

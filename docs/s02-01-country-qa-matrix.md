@@ -1,21 +1,23 @@
 # S02-01 controlled staging QA matrix (country enforcement)
 
-**Status: NOT EXECUTED — specification only.**
+**Status: RELEASED — PR #21 merged to main 2026-11-03 (merge commit `fbe16d5`).**
 
-This document is the version-controlled QA specification for the S02-01 delivery-country
-contract. It defines the controlled staging scenarios that must be executed at gate **W4**.
-It records no results, claims no pass, and authorises nothing.
+This document was the QA specification for the S02-01 delivery-country contract.
+It defined the 17-scenario matrix and the controlled staging scenarios for gate **W4**.
+Sections §3–§5, §9–§12 are preserved as historical specification for repeatability.
+Post-execution results are recorded in §2 (scenario map) and §6 (individual scenarios).
 
 | Field | Value |
 | --- | --- |
-| Gate | W4 — controlled staging QA |
-| Target | Supabase staging project `gscihjjwhmvddrmcfpxp` (never production `wyvsbzcltrhnjeuijsva`) |
-| Branch under test | `feat/lume-web-s02-country-enforcement` @ `309c19e` |
-| Migration under test | `20261023002900_order_delivery_country.sql` (applied on staging) |
+| Original gate | W4 — controlled staging QA (specification) |
+| Staging target | Supabase project `gscihjjwhmvddrmcfpxp` (never production `wyvsbzcltrhnjeuijsva`) |
+| Branch under test | `feat/lume-web-s02-country-enforcement` @ `eb035f9` (PR head) |
+| Migration under test | `20261023002900_order_delivery_country.sql` |
 | Edge functions under test | `place-order`, `place-direct-order` |
 | QA origin (Web) | `https://lume-house-git-feat-lume-web-s02-country-enforcement-najbuilds.vercel.app` |
 | Matrix size | 17 numbered slots — 8 Web, 2 Mobile, 7 unreconciled |
-| Execution state | **NOT EXECUTED** |
+| W4 execution result | 6 PASS (owner-reported), 2 BLOCKED (code review only), 2 Mobile NOT EXECUTED, 7 NEEDS RECONCILIATION |
+| Production release | PR #21 merged to main 2026-11-03. Production schema deployed. Migration ledger `02900` reconciliation pending. |
 
 ---
 
@@ -76,43 +78,60 @@ The 17 slots are preserved exactly. Numbers are never renumbered or reused.
 
 | # | Surface | Behaviour (reconstructed) | In W4 controlled-order scope | Status |
 | --- | --- | --- | --- | --- |
-| 1 | Web | Bag + delivery, Sierra Leone — accepted | Yes | NOT EXECUTED |
-| 2 | Web | Bag + pickup, Sierra Leone — accepted | Yes | NOT EXECUTED |
-| 3 | Web | Non-Sierra-Leone + delivery — rejected | Yes | NOT EXECUTED |
-| 4 | Web | Non-Sierra-Leone + pickup — rejected | Yes | NOT EXECUTED |
+| 1 | Web | Bag + delivery, Sierra Leone — accepted | Yes | **PASS** — owner-reported; order LH-3F6EF8AE24764A72 |
+| 2 | Web | Bag + pickup, Sierra Leone — accepted | Yes | **PASS** — owner-reported; order LH-3CE149E56A444B57 |
+| 3 | Web | Non-Sierra-Leone + delivery — rejected | Yes | **PASS** — owner-reported UI-layer verification |
+| 4 | Web | Non-Sierra-Leone + pickup — rejected | Yes | **PASS** — owner-reported UI-layer verification |
 | 5 | Mobile | Mobile Bag + delivery, Sierra Leone — accepted | No — after APK | NOT EXECUTED |
 | 6 | Mobile | Mobile Bag + pickup, Sierra Leone — accepted | No — after APK | NOT EXECUTED |
-| 7 | Web | Buy Now (direct) + delivery, Sierra Leone — accepted | Yes | NOT EXECUTED |
+| 7 | Web | Buy Now (direct) + delivery, Sierra Leone — accepted | Yes | **PASS** — owner-reported; order LH-1368A9C7DEB24A02 |
 | 8 | — | Original objective unrecoverable | Unknown | **NEEDS RECONCILIATION** |
-| 9 | Web | Buy Now (direct) + pickup, Sierra Leone — accepted | Yes | NOT EXECUTED |
+| 9 | Web | Buy Now (direct) + pickup, Sierra Leone — accepted | Yes | **PASS** — owner-reported; order LH-D058CD112B05476A |
 | 10 | — | Original objective unrecoverable | Unknown | **NEEDS RECONCILIATION** |
-| 11 | Web | Missing / empty country — rejected | Yes | NOT EXECUTED |
+| 11 | Web | Missing / empty country — rejected | Yes | **NOT RUN at runtime** — code review only; owner-accepted gap |
 | 12 | — | Original objective unrecoverable | Unknown | **NEEDS RECONCILIATION** |
 | 13 | — | Original objective unrecoverable | Unknown | **NEEDS RECONCILIATION** |
 | 14 | — | Original objective unrecoverable | Unknown | **NEEDS RECONCILIATION** |
 | 15 | — | Original objective unrecoverable | Unknown | **NEEDS RECONCILIATION** |
 | 16 | — | Original objective unrecoverable | Unknown | **NEEDS RECONCILIATION** |
-| 17 | Web | Replay/idempotency + historical NULL preservation | Yes | NOT EXECUTED |
+| 17 | Web | Replay/idempotency + historical NULL preservation | Yes | **NOT RUN at runtime** — code review only; owner-accepted gap |
 
 Slots 8, 10 and 12–16 are **not** enumerated as controlled staging test orders in the only
 surviving reference. They are therefore treated as out of W4 controlled-order scope, but
 their original subject matter is unknown and must not be guessed (§8).
 
+**Evidence note:** Scenarios 1–4, 7, 9 were executed by the owner via browser on the staging
+Vercel preview and reported as PASS. Order IDs are owner-observed. No independent agent
+browser session verified these outcomes. Scenarios 11 and 17 were not executed at runtime;
+their PASS claims rest on code review of `handler.ts:60`, the migration RPCs, and the
+automated test suite (`tests/orders.test.mjs`, `supabase/tests/country-order.sql`,
+`supabase/tests/country-order-concurrency.mjs`).
+
 ---
 
-## 3. Preconditions — all must hold before the first order
+## 3. Preconditions — historical specification (preserved for repeatability)
+
+> **Note:** W4 executed on 2026-11-03 against staging `gscihjjwhmvddrmcfpxp`. These
+> preconditions are preserved as the original specification. Items that were satisfied at
+> execution time are noted inline.
+
+These must hold before the first order in any future re-execution:
 
 1. **Explicit authorisation** naming staging `gscihjjwhmvddrmcfpxp` and the exact scenario
    subset being executed. This document is not authorisation.
+   — *Satisfied for W4: owner authorised scenarios 1–4, 7, 9, 11, 17.*
 2. **Read-only baseline captured immediately before QA** (§4). A stale baseline invalidates
    the order-count deltas.
+   — *W4 baseline: 8 orders (6 NULL-country, 2 SL), 15 order items, 8 confirmation jobs.*
 3. **Reset/cleanup ownership agreed** for every order created. Without it the baseline
    becomes unreproducible and W4 cannot be re-run.
+   — *W4 test orders created; cleanup pending.*
 4. **Email suppression confirmed.** `RESEND_API_KEY` must be absent on staging so
    `email_status: "queued"` is an expected result, not a failure. If the key is present,
    this matrix's email expectation is wrong and must be revised before execution.
 5. **Migration state confirmed read-only**: `20261023002900` applied on staging; remote-only
    `20261030145607` retained untouched.
+   — *Satisfied. Migration also applied on production as part of W5 release sequence.*
 6. **Edge deployment matches the branch under test.** `place-order` and `place-direct-order`
    must both be the S02-01 build, not an earlier deployment.
 7. **Origin allowlist confirmed.** The QA origin must be in the staging `ALLOWED_ORIGINS`
@@ -123,20 +142,27 @@ their original subject matter is unknown and must not be guessed (§8).
 
 ---
 
-## 4. Staging baseline
+## 4. Staging baseline — historical record
 
-**Earlier reported baseline — not a fresh measurement.**
+> **Note:** This section records the baseline captured before W4 execution. A fresh baseline
+> must be taken before any re-execution.
+
+**Pre-W4 baseline (captured 2026-11-03):**
 
 | Recorded state | Value | Source |
 | --- | --- | --- |
 | Orders with `country_code IS NULL` | 6 | CORS report gate 5; readiness reconciliation §5 |
 | Orders with `country_code = 'SL'` | 2 | same |
+| Total orders | 8 | Owner-reported read-only staging query |
+| Order items | 15 | same |
+| Confirmation jobs | 8 | same |
 | Cart count | not recorded | — |
 
-This baseline is **historical**. It was not re-measured during this task, no hosted database
-was accessed, and it must not be used as the comparison point for execution.
+**Post-W4 state:** 4 additional test orders created (scenarios 1, 2, 7, 9), all with
+`country_code = 'SL'`. Cleanup pending.
 
-**A fresh read-only baseline is mandatory immediately before W4**, capturing at minimum:
+**For re-execution:** A fresh read-only baseline is mandatory immediately before QA,
+capturing at minimum:
 
 - total `orders` count and `country_code` distribution (NULL / SL / anything else);
 - `order_items` count;
@@ -150,7 +176,12 @@ orders. Nothing in §6–§7 may run until it exists.
 
 ---
 
-## 5. Common contract (applies to every scenario)
+## 5. Common contract — historical specification (preserved for repeatability)
+
+> **Note:** This section defines the expected behaviour for every scenario. It was the
+> acceptance criterion for W4 execution. Preserved unchanged for any future re-execution.
+
+Applies to every scenario:
 
 ### 5.1 Accept path
 
@@ -250,7 +281,7 @@ establish the expected behaviour — not that the scenario has been run.
 | Evidence to capture | Request envelope (redacting JWT), response JSON, owner-scoped `orders` row, `order_items` rows, jobs count, cart state after placement, `variant_inventory` before/after, ledger row. |
 | Cleanup | Record `orders.id` + `order_reference`. Do not delete unless reset ownership (§3.3) explicitly covers it. |
 | Sources | `handler.ts:57–75`; migration `place_variant_order` (`20261023002900_order_delivery_country.sql:230–276`) and legacy `place_order` untracked-only guard (`:120`); `supabase/tests/country-order.sql`; `supabase/tests/checkout.sql`; `tests/checkout-delivery-dom.test.mjs:400`. |
-| Status | **NOT EXECUTED** |
+| Status | **PASS** — owner-reported; order LH-3F6EF8AE24764A72 |
 
 > Path note: `cart_version: 2` routes to `place_variant_order`, which supports tracked
 > allocation. Omitting `cart_version` routes to the legacy `place_order`, which accepts only
@@ -274,7 +305,7 @@ establish the expected behaviour — not that the scenario has been run.
 | Evidence to capture | As Scenario 1, plus the pickup snapshot columns and the absence of zone/address snapshots. |
 | Cleanup | As Scenario 1. |
 | Sources | `src/config/fulfilment.ts` (`pickupLocation`, `getDeliveryFee` pickup → 0); migration pickup branch; `country-order.sql` (`Bag pickup snapshots exact SL with no fee`); `tests/checkout-delivery-dom.test.mjs:445`. |
-| Status | **NOT EXECUTED** |
+| Status | **PASS** — owner-reported; order LH-3CE149E56A444B57 |
 
 ### Scenario 3 — Non-Sierra-Leone + delivery (rejected)
 
@@ -292,7 +323,7 @@ establish the expected behaviour — not that the scenario has been run.
 | Evidence to capture | UI: screenshot of the blocked state + zero requests in the network log. Service: raw response body/status + before/after row counts proving no delta. |
 | Cleanup | None if UI-only. If a service probe ran, no rows were created, so nothing to reset. |
 | Sources | `handler.ts:60`; `tests/orders.test.mjs:191–217` (all 13 non-canonical variants rejected with `rpcCount === 0`); `country-order.sql` (`every non-canonical country and container is rejected by all three RPCs`, `invalid country allocates no stock`); `tests/checkout-delivery-dom.test.mjs:400`. |
-| Status | **NOT EXECUTED** |
+| Status | **PASS** — owner-reported UI-layer verification |
 
 ### Scenario 4 — Non-Sierra-Leone + pickup (rejected)
 
@@ -310,7 +341,7 @@ establish the expected behaviour — not that the scenario has been run.
 | Evidence to capture | UI: blocked state, error text, preserved form values, zero calls. Service: response + zero delta. |
 | Cleanup | None. |
 | Sources | Commit `309c19e` (`fix(checkout): enforce Sierra Leone eligibility for pickup`); `CheckoutPage.tsx:149–157, 225`; `tests/checkout-delivery-dom.test.mjs:828` (`an unsupported country blocks pickup…`); `tests/direct-checkout-dom.test.mjs:113`; `country-order.sql` (`invalid country rejects before Bag conversion or allocation`). |
-| Status | **NOT EXECUTED** |
+| Status | **PASS** — owner-reported UI-layer verification |
 
 ### Scenario 7 — Buy Now (direct) + delivery, Sierra Leone (accepted)
 
@@ -328,7 +359,7 @@ establish the expected behaviour — not that the scenario has been run.
 | Evidence to capture | Response JSON (including `protocol`/`checkout_source`), order row, single `order_items` row, jobs count, cart-table counts before/after (must be identical), inventory delta. |
 | Cleanup | Record order id/reference; do not delete without agreed reset ownership. |
 | Sources | Migration `place_direct_variant_order` (country guard, `checkout_source 'direct'`, `SL`, one job); `handler.ts:71–75`; `tests/direct-checkout-dom.test.mjs`; `direct-order.sql`; `direct-order-concurrency.mjs`; `scripts/cors-smoke.config.json` (`place-direct-order` `verifyJwt: true`). |
-| Status | **NOT EXECUTED** |
+| Status | **PASS** — owner-reported; order LH-1368A9C7DEB24A02 |
 
 > Gateway note: because `place-direct-order` has `verify_jwt = true`, a request without a
 > valid JWT is rejected by the platform before the function runs
@@ -351,7 +382,7 @@ establish the expected behaviour — not that the scenario has been run.
 | Evidence to capture | As Scenario 7, plus pickup snapshot columns and zero-fee assertion. |
 | Cleanup | As Scenario 7. |
 | Sources | `direct-order.sql` (`direct pickup snapshots exact SL with no fee`); `tests/direct-checkout-dom.test.mjs:113`; migration direct pickup branch. |
-| Status | **NOT EXECUTED** |
+| Status | **PASS** — owner-reported; order LH-D058CD112B05476A |
 
 ### Scenario 11 — Missing / empty country (rejected)
 
@@ -369,7 +400,7 @@ establish the expected behaviour — not that the scenario has been run.
 | Evidence to capture | UI blocked state + zero calls; or response body + zero delta with the producing layer named. |
 | Cleanup | None. |
 | Sources | `handler.ts:60`; migration `jsonb_typeof(p_checkout->'country_code') is distinct from 'string' → INVALID_CHECKOUT`; `tests/orders.test.mjs:205–208` (undefined/null/`""` all `400 INVALID_DELIVERY_COUNTRY`, `rpcCount === 0`); `tests/checkout-delivery-dom.test.mjs:871`. |
-| Status | **NOT EXECUTED** |
+| Status | **NOT RUN at runtime** — code review PASS (automated tests `orders.test.mjs:205-208`); owner-accepted gap |
 
 ### Scenario 17 — Replay / idempotency and historical NULL preservation
 
@@ -387,7 +418,7 @@ establish the expected behaviour — not that the scenario has been run.
 | Evidence to capture | Both response bodies, `orders`/`order_items`/jobs/ledger counts before and after each call, and the historical order's `country_code` value before and after. |
 | Cleanup | As Scenario 1/7. The historical order must not be modified or deleted. |
 | Sources | Migration (`country is nullable text without a backfill default`, `privileged updates cannot backfill historical country snapshots`, `Historical delivery country is immutable`, `replay never duplicates orders or jobs`); `country-order.sql`; `country-order-concurrency.mjs` (`two valid SL retries create one order, one allocation and one job`); `tests/orders.test.mjs:191`. |
-| Status | **NOT EXECUTED** |
+| Status | **NOT RUN at runtime** — code review PASS (automated tests `country-order-concurrency.mjs`); owner-accepted gap |
 
 ---
 
@@ -476,7 +507,7 @@ What is *not* claimed about these slots:
 - They are not renumbered, merged or dropped.
 
 Consequence: the matrix is **complete in numbering** (all 17 slots accounted for) but
-**incomplete in content** (7 of 17 unspecified). W4 can proceed on the 8 Web scenarios without
+**incomplete in content** (7 of 17 unspecified). W4 executed on the 8 Web scenarios without
 these seven, because W4's controlled-order subset never included them — but the 17-scenario
 matrix as a whole cannot be called closed until they are reconciled.
 
@@ -506,7 +537,9 @@ or provider token. Redact before storing.
 
 ---
 
-## 10. Cleanup and reset
+## 10. Cleanup and reset — historical specification
+
+> **Note:** W4 created 4 test orders on staging. Cleanup is pending.
 
 - Every accepted scenario creates real hosted rows. Nothing in this matrix may run until
   reset ownership is agreed (§3.3).
@@ -520,7 +553,10 @@ or provider token. Redact before storing.
 
 ---
 
-## 11. Prohibitions during execution
+## 11. Prohibitions during execution — historical specification
+
+> **Note:** These prohibitions applied during W4 execution. They remain in force for any
+> re-execution.
 
 - No access to production `wyvsbzcltrhnjeuijsva`.
 - No hosted command without an explicit `--remote=gscihjjwhmvddrmcfpxp`.
@@ -544,9 +580,12 @@ or provider token. Redact before storing.
 3. **R3 — service-level rejection probes.** Scenarios 3, 4 and 11 are blocked by the UI, so
    their HTTP expectations can only be observed with a crafted authenticated request. Decide
    whether W4 authorises that probe or accepts UI-level evidence only.
+   — *W4 accepted UI-level evidence for scenarios 3 and 4. Scenario 11 was not runtime-tested.*
 4. **R4 — slots 8, 10, 12–16.** Supply the original objectives, or confirm they are out of
    S02-01 scope permanently.
 5. **R5 — email expectation.** Confirm `RESEND_API_KEY` is still absent on staging at
    execution time; if present, §5.1's `email_status: "queued"` expectation is wrong.
+   — *Resolved: Resend is now active on staging per AGENTS.md. Email expectation needs revision for any re-execution.*
 6. **R6 — reset ownership.** Name the owner and the permitted reset mechanism before the
    first order.
+   — *W4 test orders created; cleanup still pending.*

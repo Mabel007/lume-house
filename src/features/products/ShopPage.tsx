@@ -5,7 +5,7 @@ import type { Product } from "./products";
 import { useProducts } from "./ProductContext";
 import { ProductStatus } from "./ProductStatus";
 import { formatMoney, shop } from "../../config/shop";
-import { CurrencyEstimate } from "../currency/CurrencySelector";
+import { CurrencyEstimate } from "../currency/CurrencyEstimate";
 import { useCart } from "../cart/CartContext";
 import { defaultVariant, MAX_QUANTITY } from "../cart/cart";
 import { bagAddedText, bagAddFailedText } from "../cart/bagFeedback";
