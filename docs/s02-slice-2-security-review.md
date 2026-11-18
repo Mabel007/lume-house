@@ -1,5 +1,7 @@
 # S02 Slice 2: Email Reliability — Security Review
 
+> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release. The security corrections below remain valid for the code that shipped; the retry **scheduling** they describe does not — the owner cancelled the scheduler on 2026-11-18 (D2), so the CRON configuration, deployment and enable/disable steps in "Retry Scheduling" and the closing checklist are not actions to take. Canonical decisions: [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions).
+
 **Date:** 2026-11-03  
 **Status:** SECURITY ISSUES IDENTIFIED AND REMEDIATED  
 **Function:** `supabase/functions/retry-failed-emails/index.ts`

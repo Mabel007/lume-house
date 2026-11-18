@@ -1,6 +1,10 @@
 # S02 retry scheduler authentication and operations contract
 
-Status: local implementation verified; hosted credential selection, scheduling and deployment are NOT authorized or configured.
+Status: **CANCELLED / OUT OF SCOPE by owner decision, 2026-11-18 (D2).** Hosted credential selection, scheduling and deployment are neither authorized nor requested. Do not configure a scheduler, create or select a named secret, set `RETRY_SCHEDULER_KEY_NAME`, deploy `retry-failed-emails`, or open tickets to finish this work. The existing fail-closed behavior is the intended behavior: a confirmation job that cannot send stays durable and is never retried on its own, and no document here may be cited as evidence that failed emails retry automatically.
+
+This contract is retained unchanged as the historical authentication and operations design record for the code that shipped in `20261103003001`. Reopen it only if the owner explicitly changes the requirement. Canonical decisions: [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions).
+
+Previously recorded status, superseded by the paragraph above: local implementation verified; hosted credential selection, scheduling and deployment are NOT authorized or configured.
 
 ## Implemented authentication
 
@@ -10,7 +14,7 @@ The function's repository configuration explicitly sets `verify_jwt=false`: this
 
 The selected key authenticates a service credential, not a human or an independently attested scheduler process. Anyone holding that key can call the endpoint. Supabase secret API keys also carry project service privileges outside this endpoint; the handler is not a way to reduce the key's project-wide authority.
 
-## Required owner decisions before hosted work
+## Owner decisions that would precede hosted work (not requested since the 2026-11-18 cancellation)
 
 1. Select a dedicated named Supabase secret API key for the scheduler (recommended, if available), or explicitly accept reuse of an existing named server key and its shared privilege/rotation exposure. Provide only the key NAME in ordinary documentation; never disclose the key value in chat, Git, browser configuration or logs. Creating a new key requires separate approval; none was created here.
 2. Select Supabase pg_cron + pg_net with Vault custody, or an external scheduler with its own approved secret store. Both can use the implemented POST/apikey contract. No scheduler was configured.
@@ -25,7 +29,7 @@ The selected key authenticates a service credential, not a human or an independe
 - pg_net temporarily places decrypted request headers in its request queue. Audit access to that queue and database login roles before approving this custody arrangement; Vault alone does not eliminate this exposure.
 - Rotation must coordinate the named key/handler selection, Vault or external-store value and scheduler. Pause invocation if necessary, update the approved key selection/store, verify a successful authorized request plus rejection of the old credential, then revoke the old key. A temporary 401/503 is fail-closed and does not mutate jobs. Active durable leases remain recoverable. Do not rotate the project's JWT signing secret to satisfy this endpoint.
 
-Example scheduling shape, for an owner-reviewed deployment only (not executed):
+Example scheduling shape, recorded only as the historical design and **not** an instruction: the cancelled status above forbids running this or any equivalent `cron.schedule`/`net.http_post` statement.
 
 ```sql
 select cron.schedule(
@@ -57,19 +61,23 @@ The existing confirmation path, immutable order snapshots, sender snapshot and p
 
 ## Monitoring and failure handling
 
+No scheduler runs today, so the cron-oriented checks below have no live source and are not monitoring work to set up. They describe the design as recorded before the 2026-11-18 cancellation.
+
 - Alert on repeated 401 (key/custody mismatch), 503 scheduler_not_configured, email_not_configured or retry_candidates_unavailable, and non-2xx cron HTTP results. Check both cron execution and the pg_net HTTP response, not just job submission.
 - Handler response counters are candidates/sent/queued/review. queued includes busy leases and uncertain outcomes; it is not proof of a send failure. The existing per-job constrained last_error_code provides operational detail without raw provider responses.
 - Monitor overdue pending/failed jobs, expired processing leases, attempts >= 10 and manual_reconciliation_required through authorized server-only monitoring. Do not grant customers access to the jobs table.
 - An individual unexpected delivery error leaves the durable lease for recovery. SQL candidate failure returns 503; do not report a healthy zero-job run.
 - Retry failure never rolls back or deletes an order and never changes its payment status.
 
-## Local evidence and hosted acceptance still required
+## Local evidence and the hosted acceptance that was never taken
+
+No hosted acceptance for this scheduler is pending. Cancellation (D2) closed the workstream, so the checks below are recorded as what would have been required and remain relevant only if the owner reauthorizes it.
 
 Executable local coverage: service-only SQL grants, real pending selection/claims, recovery, bounded attempts, manual-review exclusions, token-owned backoff, two-session claims and stale-token rejection; actual handler authorization and loopback Supabase/Resend HTTP interactions. The standard application command includes those handler tests; both disposable SQL commands include the database coverage.
 
 Native Deno validation is unavailable on this machine. Available strict source typechecking and Node/SDK execution pass, but they do not prove deployment bundling/runtime compatibility. No dependencies were installed.
 
-Before deployment: verify the actual target's injected named-key dictionary, gateway configuration and SDK import-map resolution; run native Deno validation; apply reviewed migrations with backup/ledger/shared-client checks; authorize staged cron and delivery acceptance; retain the Resend historical-403 and owned-domain evidence requirements. Acceptance/delivery/human receipt remain distinct; no Primary Inbox claim is made.
+Before any reauthorized deployment — not authorized now: verify the actual target's injected named-key dictionary, gateway configuration and SDK import-map resolution; run native Deno validation; apply reviewed migrations with backup/ledger/shared-client checks; and settle email configuration. The Resend historical-403 investigation is closed as historical (D3): it is not a deployment prerequisite and must not be reopened without evidence of a new failure; owned-domain verification stays separate future hardening. Acceptance/delivery/human receipt remain distinct. One owner-received production confirmation landed in Gmail Primary on 2026-11-18 (D5), which proves neither general inbox placement nor guaranteed deliverability.
 
 References:
 - https://supabase.com/docs/guides/functions/auth-headers

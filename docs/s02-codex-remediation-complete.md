@@ -2,7 +2,7 @@
 
 Date: 2026-11-04, release section added 2026-11-18
 Branch: feat/lume-web-s02-country-enforcement
-Status: S02 RELEASED TO PRODUCTION 2026-11-18. Retry scheduler and the 20261023002900 ledger drift remain open; neither blocks the released behaviour.
+Status: S02 RELEASED TO PRODUCTION 2026-11-18 and owner-verified in production checkout the same day. The retry scheduler is cancelled and out of scope (D2), not open; the 20261023002900 ledger drift is known, deferred maintenance (D4). S03 Premium UI, Editorial Design and Motion is now in progress (D7). Canonical decisions: [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions).
 
 This is the single current remediation status record. Earlier completion/status reports are historical and superseded. The sections below the release record describe the 2026-11-04 local state and are preserved as history; they no longer carry the current verdict. Detailed hosted evidence for the release lives in `.codex/s02-release-archive/` (Git-ignored working evidence, not durable documentation).
 
@@ -17,14 +17,14 @@ This is the single current remediation status record. Earlier completion/status 
 | Supabase GitHub automatic production deployment | OFF, verified twice: the pre-merge `Supabase Preview` check failed on `main` with `SQLSTATE 42701` at the non-idempotent `20261023002900` file, and the post-merge check reported *skipped* with the ledger unmoved |
 | Frontend | Vercel production deployment Ready; `https://lume.najbuilds.com` serves the merged bundle referencing only `wyvsbzcltrhnjeuijsva` |
 | Production smoke test | Storefront, Google authentication, saved-address create and delete, checkout review, order history, order timeline and notifications all passed with zero console errors |
-| Order placement / confirmation email | NOT tested — no production order placed and no email sent. Read-only proof: `orders` total 14, latest `created_at` 2026-10-30, 0 created on release day |
+| Order placement / confirmation email | Read-only pre-placement snapshot: `orders` total 14, latest `created_at` 2026-10-30, 0 created at the time of the smoke check. Owner-verified later on 2026-11-18, outside that snapshot: production order `LH-13A2F018980A4B23` — bell showed one unread, inbox showed the order event, confirmation arrived in Gmail Primary, references matched across notification and email, payment correctly stayed awaiting confirmation (D5). One transaction — not proof of payment settlement, guaranteed deliverability, retry processing or exhaustive checkout security testing. |
 
-Open after release:
+Updated 2026-11-18 against the recorded owner decisions:
 
-1. `20261023002900_order_delivery_country.sql` has objects in production but no ledger row. It needs a separate reviewed equivalence decision and must never be replayed.
-2. The retry scheduler remains unconfigured by choice: no named secret, no `pg_cron`/`pg_net` or external trigger. See [the scheduler contract](s02-retry-scheduler-auth.md).
-3. All 14 legacy orders carry `country_code` NULL; production test orders from 2026-10-30 need an owner-approved retention decision.
-4. End-to-end paid placement plus a genuine Resend receipt remains pending explicit authorization.
+1. `20261023002900_order_delivery_country.sql` has objects in production but no ledger row. **Known drift, deferred maintenance (D4)** — it needs a separate reviewed equivalence decision, must never be replayed, and must not be repaired automatically. Before any future migration, run a focused read-only equivalence check first.
+2. The retry scheduler is **cancelled and out of scope (D2)**, not pending work: no named secret, no `pg_cron`/`pg_net` and no external trigger will be configured. [The scheduler contract](s02-retry-scheduler-auth.md) is retained as a historical design record only. Do not create tickets for email retries or imply that failed emails retry automatically.
+3. All 14 legacy orders recorded at release carry `country_code` NULL; production test orders need an owner-approved retention decision. Still open, and re-count before acting on it.
+4. **Closed by D5.** The pending end-to-end placement plus genuine Resend receipt was owner-verified on 2026-11-18 with order `LH-13A2F018980A4B23`, whose confirmation arrived in Gmail Primary. Historical `resend_http_403` investigation is closed (D3).
 
 ## Authorization and evidence boundary
 
@@ -166,9 +166,11 @@ The prior 751-test and SQL evidence is reused: these corrections affect validati
 
 ## Hosted decisions and deployment blockers
 
-Use s02-retry-scheduler-auth.md as the implementation-ready authentication/operations contract. The owner must select a dedicated named Supabase secret API key or explicitly approve an existing named server key, choose Supabase Vault/pg_cron/pg_net versus an external scheduler/secret store, and approve scope/rotation/monitoring. No key, JWT secret or scheduler was created. API-key project privileges and pg_net queue exposure must be accepted; a different least-privilege broker would be separate work.
+Superseded on 2026-11-18 for the scheduler: the owner cancelled that workstream (D2), so the key/custody/scheduling choices below are **not** requested and no blocker is waiting on them.
 
-Before any hosted release: independent review; target-runtime bundling/deployed import-map verification; authorized staging plan with backup/migration-ledger/shared-client review; selected key and gateway acceptance; genuine notification/address/timeline/retry journeys; historical Resend 403 and verified-owned-domain/delivery evidence. Preserve owner-accepted prior QA exceptions; do not convert them to passes. Provider acceptance, reported delivery and human receipt are distinct; no external exactly-once or Primary Inbox claim is made.
+Historical, recorded before the cancellation: [s02-retry-scheduler-auth.md](s02-retry-scheduler-auth.md) was treated as the implementation-ready authentication/operations contract. The owner would have had to select a dedicated named Supabase secret API key or explicitly approve an existing named server key, choose Supabase Vault/pg_cron/pg_net versus an external scheduler/secret store, and approve scope/rotation/monitoring. No key, JWT secret or scheduler was created. API-key project privileges and pg_net queue exposure would have had to be accepted; a different least-privilege broker would be separate work.
+
+Before any future hosted release: independent review; target-runtime bundling/deployed import-map verification; an authorized staging plan with backup/migration-ledger/shared-client review — including the D4 read-only equivalence check on `20261023002900`; genuine notification/address/timeline journeys. The historical Resend 403 review is closed (D3) and is not a release prerequisite; verified-owned-domain work remains separate future hardening. Preserve owner-accepted prior QA exceptions; do not convert them to passes. Provider acceptance, reported delivery and human receipt are distinct. D5 records one production confirmation received in Gmail Primary on 2026-11-18; that single receipt is not a general inbox-placement or deliverability claim.
 
 ## Independent review checklist
 
@@ -178,7 +180,7 @@ Before any hosted release: independent review; target-runtime bundling/deployed 
 - Review notification lifetime keys and stale load/mutation cancellation; run identity tests including layout-effect commit observations and same-user reauthentication.
 - Review both checkout response orders, manual-edit precedence and failure fallback; confirm no profile write was added.
 - Run full npm test, lint, both available typechecks, build and diff check; inspect discovery and isolated-cache cleanup rather than relying on this report.
-- Review the completed native Deno evidence and two configuration corrections, then complete separately authorized hosted acceptance. Confirm the chosen API-key/gateway contract; never generate a JWT secret to fit the implementation.
+- Review the completed native Deno evidence and two configuration corrections, then complete separately authorized hosted acceptance. The API-key/gateway item is cancelled with the scheduler (D2); the standing rule survives it — never generate a JWT secret to fit an implementation.
 - Preserve original S02-02 scope, existing S02-01/02/03 closures, deferred QA, authentication deferral and the separate engineering foundation gate before S03.
 
 ## Local readiness verdict

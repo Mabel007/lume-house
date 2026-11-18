@@ -1,5 +1,7 @@
 # S02 Security Gate - Final Verification Report
 
+> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release. The retry-code checks below describe a pre-correction design: the concurrency/attempt/lease protections they verified shipped in `20261103003001`, but the service-role-JWT endpoint invocation shown here was later replaced by the apikey contract, and the scheduler itself is cancelled (D2) — nothing invokes `retry-failed-emails` and no CRON step is outstanding.
+
 **Date**: 2026-11-04  
 **Status**: ALL SECURITY GATES PASSED ✅  
 **Authorization**: Local implementation only - NO commits, pushes, deployments, or hosted changes

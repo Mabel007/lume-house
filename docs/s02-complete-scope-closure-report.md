@@ -1,6 +1,6 @@
 # S02 Complete Scope Closure Report
 
-> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release. The environment note below that `.env.local` pointed at production is no longer true — it now targets the staging project.
+> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release. The environment note below that `.env.local` pointed at production is no longer true — it now targets the staging project. Scheduler setup items below are withdrawn, not open: the retry scheduler was cancelled (D2) and the historical Resend 403 review closed (D3) on 2026-11-18.
 
 **Date:** November 4, 2026  
 **Status:** LOCAL IMPLEMENTATION AUDIT COMPLETE  
@@ -763,9 +763,9 @@ Constraints:
 - ⚠️ **S02-NEW-01:** Saved addresses (source complete, DB integration deferred)
 - ⚠️ **S02-NEW-02:** Customer order timeline (source complete, DB integration deferred)
 
-#### Ready for Closure (Pending Scheduler Configuration)
+#### Ready for Closure (Pending Scheduler Configuration) — CLOSED 2026-11-18 by cancellation, not configuration
 
-- ⚠️ **S02-06:** Email retries (security complete, scheduler deferred)
+- ⚠️ **S02-06:** Email retries (security complete, scheduler deferred) — the scheduler was subsequently cancelled and taken out of scope (D2). S02-06 is closed as-is: durable jobs plus fail-closed behavior, with no cron, credential or trigger ever to be configured without a new owner requirement.
 
 #### Already Closed
 

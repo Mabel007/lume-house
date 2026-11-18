@@ -1,8 +1,20 @@
 # S02-06 Email Reliability — 403 Investigation and CRON Retry
 
 **Date:** 2026-11-03  
-**Status:** LOCALLY IMPLEMENTED, PENDING HOSTED INVESTIGATION  
+**Status:** SUPERSEDED — closed as a historical record on 2026-11-18
+
 **Authorization:** Local implementation only, no hosted changes
+
+> **Do not act on this document.** Two owner decisions cancel what it asks for:
+>
+> - **The CRON retry workstream is cancelled and out of scope (D2).** Parts 2–5 are not a to-do list. Do not deploy `retry-failed-emails` as described here, do not enable a schedule, do not add credentials, and do not open tickets for email retries. Failed confirmations stay durable and unattempted until an explicitly authorized action; nothing retries them automatically.
+> - **The historical `resend_http_403` investigation is closed (D3).** Four jobs recorded that error and no root cause was conclusively established. The hypotheses and dashboard steps below were never confirmed, so they must not be repeated as findings or used to justify rotating credentials or changing sender-domain DNS. Reopen only with evidence of a new, reproducible failure.
+>
+> Part 2's code sample also predates the shipped design: it writes `order_confirmation_jobs` directly with a service-role key and bearer-token check. The retry primitives that actually exist use the service-only claim/finish RPCs and the apikey contract in [s02-retry-scheduler-auth.md](s02-retry-scheduler-auth.md), which carries the same cancelled status.
+>
+> Email evidence has moved on since this document: on 2026-11-18 the owner placed a production order and received its confirmation directly in Gmail Primary (D5) — one transaction, not verified deliverability. Canonical decisions: [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions).
+
+The remaining analysis is preserved as the 2026-11-03 working record; the status lines that claimed pending hosted work were corrected in place, and no investigation content was rewritten.
 
 ---
 
@@ -80,7 +92,7 @@ Investigated historical Resend 403 errors using available source code and config
 3. DNS configuration (SPF/DKIM records)
 4. Resend API key permissions and status
 
-### Recommended Investigation Steps (Owner Action Required)
+### Recommended Investigation Steps (Owner Action Required) — CLOSED, no root cause established (D3)
 
 1. **Access Resend dashboard:**
    - Navigate to https://resend.com/dashboard
@@ -109,7 +121,7 @@ Investigated historical Resend 403 errors using available source code and config
 
 ### Findings Documentation
 
-**Status:** PENDING OWNER INVESTIGATION
+**Status:** CLOSED 2026-11-18 as historical without a confirmed root cause (D3). The dashboard steps above were never executed.
 
 **Owner action required:**
 - Provide Resend dashboard access or error logs
@@ -117,12 +129,14 @@ Investigated historical Resend 403 errors using available source code and config
 - Confirm API key validity
 - Document findings in this section
 
-**Interim conclusion:**
+**Interim conclusion (never confirmed):**
 Based on source code analysis and AGENTS.md notes, the most likely root causes are:
 1. **Unverified sending domain** (using `onboarding@resend.dev` testing domain)
 2. **Recipient restrictions** (testing domain only allows verified recipients)
 
-**Recommended fix path:**
+These remain hypotheses. Owner decision D3 records that no root cause was conclusively established, so neither may be repeated as a finding, and the fix path below is not authorization to touch sender-domain DNS or email configuration.
+
+**Recommended fix path (not authorized, not executed):**
 1. Verify owned domain (`lumehouse.sl` or subdomain) in Resend
 2. Configure SPF/DKIM DNS records
 3. Update `RESEND_FROM` environment variable to use verified domain
@@ -221,7 +235,7 @@ Deno.serve(async (req) => {
 });
 ```
 
-### Deployment Instructions (Owner Action Required)
+### Deployment Instructions (Owner Action Required) — CANCELLED 2026-11-18 (D2); do not execute these steps
 
 **Step 1: Deploy the function**
 ```bash
@@ -289,7 +303,9 @@ supabase functions delete retry-failed-emails --project-ref <project-id>
 - ✅ Error handling and logging
 - ✅ Service-role only (no browser access)
 
-### Hosted Gates (Pending Owner Action)
+### Hosted Gates (Pending Owner Action) — CLOSED WITHOUT ACTION, 2026-11-18
+
+These gates were never executed. The retry gates are cancelled (D2); the 403 and verified-domain gates are closed as historical or remain unrelated future hardening (D3). The list is kept to show what this slice once assumed, not what is still owed.
 
 - ⏳ Deploy function to staging
 - ⏳ Configure CRON schedule (every 15 minutes)
@@ -335,7 +351,9 @@ supabase functions delete retry-failed-emails --project-ref <project-id>
 
 ---
 
-## Part 5: Next Steps
+## Part 5: Next Steps — SUPERSEDED 2026-11-18
+
+The steps below were never carried out and are no longer requested. Do not perform them; the decisions that replaced them are D2 (retry scheduler cancelled) and D3 (historical 403 investigation closed).
 
 **Owner action required:**
 1. Investigate Resend 403 root cause (dashboard access needed)
@@ -352,9 +370,9 @@ supabase functions delete retry-failed-emails --project-ref <project-id>
 - ✅ Rollback plan
 - ✅ Acceptance criteria
 
-**Slice 2 status:** LOCALLY IMPLEMENTED, PENDING HOSTED INVESTIGATION AND DEPLOYMENT
+**Slice 2 status:** superseded — locally implemented, then closed without hosted investigation or deployment by the 2026-11-18 owner decisions (D2, D3).
 
 ---
 
 **Prepared by:** S02 Consolidated Execution Coordinator  
-**Review status:** Local implementation complete, awaiting owner investigation and deployment
+**Review status:** historical — local implementation complete on 2026-11-03; the awaited owner investigation and deployment were cancelled on 2026-11-18

@@ -68,6 +68,8 @@ Server: RESEND_API_KEY,optional RESEND_FROM/ALLOWED_ORIGINS; built-in Supabase s
 
 These are applied history, not replay instructions. Never reset hosted data, rewrite applied history or replay seed. seed.sql is a reproducible local reference, not an automatic production operation. Authorized hosted changes require inspection/reviewed forward changes; current catalogue updates never rewrite historical order items.
 
+**Known ledger drift (D4, deferred maintenance).** Production migration `20261023002900_order_delivery_country.sql` has its country-enforcement schema objects verified present in production but no complete ledger record, so the ledger is not a reliable inventory of what production contains. Never rerun that migration blindly, fabricate its history, reset migration state or repair the ledger automatically, and never enable unattended production migration deployment. Before any future migration, run a focused read-only equivalence check against the target; if reconciliation looks necessary, prepare a narrowly scoped plan and obtain explicit approval before modifying anything. See [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions).
+
 ## Local validation
 
 ```powershell
@@ -84,4 +86,6 @@ Baseline: 44 tests and 163 SQL PASS assertions/messages. Function typecheck uses
 
 ## Remaining work
 
-Testing-sender limitations, verified domain/deliverability, scheduled retry worker, live payments, deferred unproven profile/autofill issue and broader authenticated cross-user runtime testing. Admin/product management, Storage, inventory, variants, order workflow and analytics are post-HNG. These are not evidenced submission blockers.
+Testing-sender limitations, verified domain/deliverability, live payments, deferred unproven profile/autofill issue and broader authenticated cross-user runtime testing. Admin/product management, Storage, inventory, variants, order workflow and analytics are post-HNG. These are not evidenced submission blockers.
+
+A scheduled retry worker is **not** remaining work: the owner cancelled it on 2026-11-18 (D2 in [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions)). Do not add cron, a queue processor, scheduler credentials or triggers, and do not claim failed emails retry automatically. The durable job, its leases and its attempt limits stay in place and fail closed.

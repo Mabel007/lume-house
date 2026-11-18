@@ -1,5 +1,7 @@
 # S02 Slices 0-3 Consolidated Verification Report
 
+> Historical record, superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md) and the 2026-11-18 production release. The scheduler "BLOCKER" recorded below is no longer a blocker: the owner cancelled the email retry scheduler (D2), and the historical Resend 403 review closed without a confirmed root cause (D3). Canonical decisions: [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions). Do not action this report's pending items.
+
 **Date**: 2026-11-04  
 **Status**: LOCAL VERIFICATION COMPLETE - STAGING BLOCKERS IDENTIFIED  
 **Authorization**: Local implementation only - NO commits, pushes, deployments, or hosted changes

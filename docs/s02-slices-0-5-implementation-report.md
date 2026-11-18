@@ -1,6 +1,6 @@
 # S02 Slices 0-5 Implementation Report
 
-> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release.
+> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release. External-scheduler setup listed below is withdrawn, not open: the retry scheduler was cancelled (D2) and the historical Resend 403 review closed (D3) on 2026-11-18.
 
 **Date:** November 4, 2026  
 **Status:** LOCAL IMPLEMENTATION COMPLETE  
@@ -54,13 +54,15 @@ const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] });
 - `supabase/functions/retry-failed-emails/index.ts`
 - `supabase/migrations/20261104003002_email_retry_security.sql`
 
+Correction on re-verification: no `20261104003002_email_retry_security.sql` exists in `supabase/migrations/`. The retry claiming that actually shipped is `20261103003001_retry_job_claiming.sql`; the surrounding November migrations are `20261103003000`, `20261104004000` and `20261104005000`. Treat the three references to `003002` in this report as a historical mislabel, not a migration to apply, verify or replay.
+
 **Two-Layer Protection:**
 1. **FOR UPDATE SKIP LOCKED** - Prevents concurrent job selection
 2. **Lease mechanism with claim_token** - Ensures only one worker processes each job
 
 **Test Coverage:** `tests/retry-concurrency.test.mjs` (17/17 tests PASS)
 
-**Blocker:** External scheduler (cron/Vercel cron) must be configured to invoke `/functions/v1/retry-failed-emails` periodically.
+**Blocker:** External scheduler (cron/Vercel cron) must be configured to invoke `/functions/v1/retry-failed-emails` periodically. — **Closed 2026-11-18 as cancelled, not resolved:** the owner took the retry scheduler out of scope (D2), so this blocker is no longer a gate on anything and must not be "unblocked" by configuring a scheduler.
 
 ---
 

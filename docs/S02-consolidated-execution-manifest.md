@@ -2,6 +2,8 @@
 
 **SUPERSEDED by v2.0** — See `docs/S02-consolidated-execution-manifest-v2.md`
 
+Also superseded on 2026-11-18 for its email-retry content: the CRON retry scheduler was cancelled and the historical Resend 403 investigation closed without a confirmed root cause (decisions D2 and D3 in [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions)). The "D1–D6" labels below are 2026-11-03 planning decisions, unrelated to the canonical D1–D7 engineering decisions. Do not treat any approval request in this manifest as still outstanding.
+
 **Supersession date:** 2026-11-03
 **Reason:** v2.0 incorporates six owner-approved planning decisions (D1–D6), adds S02-NEW-04 authentication (not deferred), includes SQL security audit, and defines sequential slice execution with gates.
 
@@ -776,6 +778,8 @@ GRANT EXECUTE ON FUNCTION count_unread_notifications() TO authenticated;
 - Failed emails retried automatically within 23-hour window
 - No duplicate emails sent
 - CRON function logs show successful execution
+
+These criteria were never met and were withdrawn on 2026-11-18: there is no CRON retry to log (D2), the 23-hour window ends in fail-closed manual review rather than automatic retry, and "inbox not spam" is not a property this application can claim — one owner-received production confirmation did land in Gmail Primary, and that single receipt proves nothing general (D5).
 
 **Owner approval request:**
 

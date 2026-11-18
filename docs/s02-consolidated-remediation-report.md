@@ -1,5 +1,7 @@
 # S02 Consolidated Remediation and Continuation Report
 
+> Historical record, superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md). The "Action required" scheduler and retry-deployment items below were never carried out and are cancelled: the owner closed the email retry scheduler as out of scope on 2026-11-18 (D2) and closed the historical Resend 403 review without a confirmed root cause (D3). Canonical decisions: [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions).
+
 **Date:** 2026-11-03  
 **Session:** Phase A-D Remediation and Continuation  
 **Authorization:** Local implementation of S02 Slices 0-5 (no commits, pushes, deployments)
