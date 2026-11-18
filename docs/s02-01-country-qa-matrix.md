@@ -1,5 +1,7 @@
 # S02-01 controlled staging QA matrix (country enforcement)
 
+> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section covers the full S02 production release.
+
 **Status: RELEASED — PR #21 merged to main 2026-11-03 (merge commit `fbe16d5`).**
 
 This document was the QA specification for the S02-01 delivery-country contract.

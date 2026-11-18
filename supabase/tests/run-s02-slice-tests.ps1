@@ -32,6 +32,7 @@ try {
     }
   }
   Run-Sql 'address RLS and CRUD' (Join-Path $repoRoot 'tests/addresses-rls.test.sql')
+  Run-Sql 'notification failure and atomic checkout retry' (Join-Path $testRoot 'notification-failure.sql')
   Run-Sql 'actual retry and notification security' (Join-Path $testRoot 's02-security.sql')
   Run-Sql 'migration privilege validation' (Join-Path $repoRoot 'tests/s02-migration-validation.sql')
   node (Join-Path $testRoot 's02-concurrency.mjs') $containerName

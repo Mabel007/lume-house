@@ -18,15 +18,15 @@ Lumé House is a modern home and lifestyle e-commerce experience for Sierra Leon
 - Sign in with Google, edit customer profile defaults, and view personal order history.
 - Choose Freetown delivery or pickup, review totals, and place orders through a trusted server-side flow.
 - Follow orders from placement through history and fulfilment information. Order placement and payment confirmation are separate.
-- See NLE prices and, in the Batch 2 staging candidate, optional **informational** GNF, GHS, NGN and USD estimates. **NLE remains the only checkout and settlement currency.**
+- See NLE prices with optional **informational** GNF, GHS, NGN and USD estimates shown alongside. **NLE remains the only checkout and settlement currency.**
 
 **Administration**
 - Protected admin sign-in and role-gated workspaces.
 - Catalogue, variants, inventory and reviewed product media workflows.
 - Order-management and fulfilment interfaces, reporting, filtering and export workflows, with server-enforced permissions.
-- Restricted staff views; additional owner/admin/staff role design remains planned rather than released.
+- Restricted staff views alongside owner and legacy administration access. Inviting new members and finer delegated-role boundaries are **not released** and remain unfinished work.
 
-**Release status:** The Batch 2 Buy Now, navigation and automatic-currency improvements are in a separately validated staging release candidate. They should not be assumed live on the production domain until that branch is merged, deployed and smoke-tested.
+**Release status:** S02 — Sierra Leone country enforcement, saved addresses, order timeline and notifications — is live in production as of 2026-11-18 (candidate `8aa2df6`, merged as `9084f7d`). The earlier Batch 2 Buy Now, navigation and automatic-currency work is also released. Still not enabled: the transactional-email retry scheduler, which needs an owner-selected credential and scheduler before it will run. Current status and evidence: [S02 production release record](docs/s02-codex-remediation-complete.md).
 
 ## Technology
 

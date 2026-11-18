@@ -1,10 +1,30 @@
 # S02 local remediation — implementation and verification record
 
-Date: 2026-11-04
+Date: 2026-11-04, release section added 2026-11-18
 Branch: feat/lume-web-s02-country-enforcement
-Status: LOCAL CORRECTIONS AND NATIVE DENO VERIFIED; INDEPENDENT REVIEW AND HOSTED ACCEPTANCE PENDING.
+Status: S02 RELEASED TO PRODUCTION 2026-11-18. Retry scheduler and the 20261023002900 ledger drift remain open; neither blocks the released behaviour.
 
-This is the single current remediation status record. Earlier completion/status reports are historical and superseded. This record does not declare S02 released, approve staging, or authorize commits, pushes, hosted settings, migrations, scheduling or deployment.
+This is the single current remediation status record. Earlier completion/status reports are historical and superseded. The sections below the release record describe the 2026-11-04 local state and are preserved as history; they no longer carry the current verdict. Detailed hosted evidence for the release lives in `.codex/s02-release-archive/` (Git-ignored working evidence, not durable documentation).
+
+## Production release — 2026-11-18
+
+| Item | Result |
+| --- | --- |
+| Candidate | `8aa2df6a68ade3f071c6e3d6a4ca11a54763583c` |
+| Merge | PR #22 merged 2026-11-18T11:22:13Z into merge commit `9084f7dcbb90155fc98568194784cc0ff22b3bb2`; `main` = that commit |
+| Migrations applied to production | `20261103003000` customer_addresses, `20261103003001` retry_job_claiming, `20261104004000` customer_order_timeline, `20261104005000` customer_notifications — in that order, from the isolated package `.codex/s02-production-package` |
+| Migration ledger | 33 rows, max version `20261104005000` |
+| Supabase GitHub automatic production deployment | OFF, verified twice: the pre-merge `Supabase Preview` check failed on `main` with `SQLSTATE 42701` at the non-idempotent `20261023002900` file, and the post-merge check reported *skipped* with the ledger unmoved |
+| Frontend | Vercel production deployment Ready; `https://lume.najbuilds.com` serves the merged bundle referencing only `wyvsbzcltrhnjeuijsva` |
+| Production smoke test | Storefront, Google authentication, saved-address create and delete, checkout review, order history, order timeline and notifications all passed with zero console errors |
+| Order placement / confirmation email | NOT tested — no production order placed and no email sent. Read-only proof: `orders` total 14, latest `created_at` 2026-10-30, 0 created on release day |
+
+Open after release:
+
+1. `20261023002900_order_delivery_country.sql` has objects in production but no ledger row. It needs a separate reviewed equivalence decision and must never be replayed.
+2. The retry scheduler remains unconfigured by choice: no named secret, no `pg_cron`/`pg_net` or external trigger. See [the scheduler contract](s02-retry-scheduler-auth.md).
+3. All 14 legacy orders carry `country_code` NULL; production test orders from 2026-10-30 need an owner-approved retention decision.
+4. End-to-end paid placement plus a genuine Resend receipt remains pending explicit authorization.
 
 ## Authorization and evidence boundary
 
@@ -162,5 +182,7 @@ Before any hosted release: independent review; target-runtime bundling/deployed 
 - Preserve original S02-02 scope, existing S02-01/02/03 closures, deferred QA, authentication deferral and the separate engineering foundation gate before S03.
 
 ## Local readiness verdict
+
+Historical — recorded 2026-11-04, before staging execution and the 2026-11-18 production release above.
 
 READY FOR INDEPENDENT ACCEPTANCE of the locally remediable corrections. Native Deno validation now passes for all five Edge entry points, alongside the retained local gate evidence. No original finding remains unresolved at the local implementation level; independent review and hosted configuration/acceptance remain pending. Staging planning may proceed, with staging execution requiring separate approval. This is not approval to stage, release, deploy or declare production readiness.
