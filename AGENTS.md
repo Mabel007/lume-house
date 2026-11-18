@@ -32,5 +32,7 @@ Resend is active; Mailgun/Brevo are not integrated. Default sender Lumé House <
 ## Validation
 Run lint, frontend/function typechecks, build, existing tests and git diff --check. Use the disposable local SQL harness for transaction/RLS changes, never hosted fixtures. Preserve quantity/repricing/zone/idempotency/atomicity/ownership/snapshot/email-failure tests. Browser-check relevant responsive/keyboard/routes where tooling permits. Distinguish source, automated, hosted read-only and human E2E evidence; report limitations honestly.
 
-## Post-HNG direction (not implemented)
-Protected /admin, roles/dashboard, product CRUD, Supabase Storage, inventory, variants, order management/status workflow, analytics, real Orange Money/Afrimoney, verified sender/domain/deliverability and remaining UI/profile polish. Do not implement without a scoped task. Profile/autofill remains unproven; avoid speculative UI/data fixes.
+## Post-HNG direction
+Implemented and released, so preserve rather than rebuild: protected `/admin` with server-side business-access gating and owner/legacy/staff workspaces, dashboard and analytics, product/variant CRUD, inventory adjustments, order management and manual fulfilment, reviewed product media on Supabase Storage, and CSV export.
+
+Still not implemented — do not add without a scoped task: real Orange Money/Afrimoney processing, verified sender domain and deliverability, and remaining UI/profile polish. Profile/autofill remains unproven; avoid speculative UI/data fixes. Owner-managed access invitations and the delegated-role cutover exist only on unmerged admin branches and are not in released code; treat them as unfinished work to integrate, not as features to re-implement.

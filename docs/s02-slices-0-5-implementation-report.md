@@ -1,5 +1,7 @@
 # S02 Slices 0-5 Implementation Report
 
+> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release.
+
 **Date:** November 4, 2026  
 **Status:** LOCAL IMPLEMENTATION COMPLETE  
 **Authorization:** Local-only implementation, no commits/pushes/deployments

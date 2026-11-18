@@ -1,5 +1,7 @@
 # S02 Consolidated Execution Status — 2026-11-03
 
+> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release.
+
 **Last updated:** 2026-11-03 (end of session)  
 **Authorization:** Local implementation of S02 Slices 0-5 (no commits, pushes, deployments)
 

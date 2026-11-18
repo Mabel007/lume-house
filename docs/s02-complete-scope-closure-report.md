@@ -1,5 +1,7 @@
 # S02 Complete Scope Closure Report
 
+> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release. The environment note below that `.env.local` pointed at production is no longer true — it now targets the staging project.
+
 **Date:** November 4, 2026  
 **Status:** LOCAL IMPLEMENTATION AUDIT COMPLETE  
 **Authorization:** Local-only audit, no commits/pushes/deployments

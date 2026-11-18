@@ -1,5 +1,7 @@
 # S02 Consolidated Execution Manifest v2.1
 
+> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release.
+
 **Date:** 2026-11-03
 **Branch:** `feat/lume-web-s02-country-enforcement`
 **Local HEAD:** `eb035f9` (PR #21 head)
