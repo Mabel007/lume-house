@@ -11,6 +11,7 @@ import { useAuth } from "../features/auth/AuthContext";
 import { accountInitials } from "../features/account/accountInitials";
 import { accountDisplayName } from "../features/account/accountIdentity";
 import { AccountMenu } from "./AccountMenu";
+import { NotificationBell } from "../features/notifications/NotificationBell";
 import { useCustomerSignOut } from "../features/auth/useCustomerSignOut";
 
 export function Layout() {
@@ -107,7 +108,10 @@ export function Layout() {
           <Link to="/about" className={aboutActive ? "active" : undefined} aria-current={aboutActive ? "page" : undefined}>About</Link>
           <Link to="/help" className={helpActive ? "active" : undefined} aria-current={helpActive ? (current === "/help" ? "page" : "location") : undefined}>Help</Link>
           {signedIn ? (
-            <AccountMenu initials={initials} signingOut={accountSigningOut} error={accountSignOutError} active={accountSection} onSignOut={() => void accountSignOut()} />
+            <>
+              <NotificationBell />
+              <AccountMenu initials={initials} signingOut={accountSigningOut} error={accountSignOutError} active={accountSection} onSignOut={() => void accountSignOut()} />
+            </>
           ) : (
             <Link to="/account" className={accountSection ? "active" : undefined} aria-current={accountSection ? (current === "/account" ? "page" : "location") : undefined}>Account</Link>
           )}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {test,before,after,afterEach} from 'node:test';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
+import {createServer} from './helpers/vite.mjs';
 import {MemoryRouter,Routes,Route} from 'react-router-dom';
 
 // Isolated customer-authentication DOM evidence. Supabase Auth is replaced at
@@ -31,7 +31,7 @@ before(async()=>{
   ({NotificationProvider}=await server.ssrLoadModule('/src/components/NotificationProvider.tsx'));
 });
 afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;host.replaceChildren();dom.window.sessionStorage.clear();delete globalThis.__accountAuthClient;});
-after(async()=>{await server.close();dom.window.close();});
+after(async()=>{await server?.close();dom.window.close();});
 
 function fakeClient(){
   const calls=[];

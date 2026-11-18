@@ -2,7 +2,7 @@ import {test,before,after,afterEach} from 'node:test';
 import assert from 'node:assert/strict';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
+import {createServer} from './helpers/vite.mjs';
 const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/'});
 const {document}=dom.window;
 for(const name of ['window','document','HTMLElement','Element'])Object.defineProperty(globalThis,name,{configurable:true,value:dom.window[name]});
@@ -13,7 +13,7 @@ const product={id:'fixture',name:'Test piece',image_path:'/images/mug.svg'};
 const images=[{source:'static',path:'/images/mug.svg',position:0},{source:'static',path:'/images/arch-vase.webp',position:1}];
 before(async()=>{server=await createServer({configFile:false,envDir:false,server:{middlewareMode:true,hmr:false},plugins:[{name:'isolated-media-client',enforce:'pre',load(id){if(id.replaceAll('\\','/').endsWith('/src/lib/supabase/client.ts'))return 'export function getSupabaseClient(){return globalThis.__mediaClient;}';}}]});({ProductGalleryEditor:Editor}=await server.ssrLoadModule('/src/features/admin/ProductGalleryEditor.tsx'));});
 afterEach(async()=>{if(root)await act(async()=>root.unmount());root=null;host.replaceChildren();delete globalThis.__mediaClient;});
-after(async()=>{await server.close();dom.window.close();});
+after(async()=>{await server?.close();dom.window.close();});
 function mock({fail=false,pending}={}){const state={fail,saves:[],loads:0};globalThis.__mediaClient={rpc(name,args){const result=name==='admin_product_gallery_v1'?(state.loads++===0&&pending?pending:Promise.resolve({data:{items:images,updated_at:'2026-10-10T00:00:00Z'},error:null})):(state.saves.push(args),Promise.resolve({data:state.fail?null:{items:args.p_items.map((row,position)=>({...row,position}))},error:state.fail?{code:'40001'}:null}));return {setHeader(){return result;}};}};return state;}
 const props=token=>({product,token,blocked:false,assets:{status:'ready',paths:['/images/mug.svg','/images/arch-vase.webp']},saved:()=>{}});
 async function mount(token='first'){root=createRoot(host);await act(async()=>root.render(React.createElement(Editor,props(token))));}

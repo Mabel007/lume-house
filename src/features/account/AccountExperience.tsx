@@ -6,6 +6,7 @@ import type { Profile } from "./profile";
 import { accountInitials } from "./accountInitials";
 import { AccountNavigation } from "./AccountNavigation";
 import { Breadcrumbs } from "../../components/PageHeader";
+import { AddressManager } from "../addresses/AddressManager";
 import "./account.css";
 
 const fields = {
@@ -54,6 +55,11 @@ export function AccountExperience({ profile, savedName, email, authenticatedName
         <fieldset className="account-fieldset"><legend id="delivery-details" tabIndex={-1}>Delivery Details</legend><p className="small-note">These are Freetown delivery defaults. Choose a supported Freetown, Sierra Leone delivery area or free Lumley pickup at checkout. Your delivery country is selected for each order and is not saved here.</p><div className="form-grid">{field("default_street_address")}{field("default_area")}{field("default_city")}</div></fieldset>
         <div className="profile-actions"><button className="button" disabled={busy || !ready}>{busy ? "Saving…" : "Save profile & delivery details"}</button><button className="account-cancel" type="button" disabled={busy || !ready} onClick={onCancel}>Cancel</button><p className="feedback" role="status">{status}</p>{profileError ? <p className="feedback" role="alert">{profileError}</p> : null}</div>
       </form>
+      <section className="saved-addresses-section" aria-labelledby="saved-addresses">
+        <h2 id="saved-addresses">Saved Addresses</h2>
+        <p className="small-note">Store up to 5 delivery addresses for faster checkout. Select a saved address at checkout or enter a new one.</p>
+        <AddressManager />
+      </section>
       <aside className="account-aside"><section className="account-note" aria-labelledby="account-orders"><h2 id="account-orders">Orders</h2><p>Revisit your orders, their delivery details and payment status.</p><Link className="text-link" to="/account/orders">My Orders →</Link></section>
         <section className="account-note account-session" aria-labelledby="account-security"><h2 id="account-security" tabIndex={-1}>Account & Security</h2><p>Signed in with Google</p><p className="account-email">{email}</p><p>You sign in with Google. Lumé House does not manage a password for this account.</p><button className="text-link" type="button" disabled={busy || signOut.signingOut} onClick={() => void signOut.signOut()}>{signOut.signingOut ? "Signing out…" : "Sign Out"}</button><p className="feedback" role="alert">{signOut.error || error}</p><Link className="text-link" to="/">Continue shopping →</Link></section>
         <section className="account-note account-help" aria-labelledby="account-help"><h2 id="account-help" tabIndex={-1}>Help & Support</h2><p>Find guidance for your account, delivery or a question about your order.</p><ul><li><Link className="text-link" to="/help#contact">Help & Contact →</Link></li><li><Link className="text-link" to="/help/delivery-pickup">Delivery & Pickup →</Link></li><li><Link className="text-link" to="/help/returns-refunds">Returns & Refunds →</Link></li></ul></section>

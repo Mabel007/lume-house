@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {test,before,after,afterEach} from 'node:test';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
+import {createServer} from './helpers/vite.mjs';
 import {MemoryRouter} from 'react-router-dom';
 import {checkoutMessages} from '../src/features/checkout/validation.ts';
 
@@ -36,9 +36,33 @@ before(async()=>{
   ({AuthContext}=await server.ssrLoadModule('/src/features/auth/AuthContext.ts'));
 });
 afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;host.replaceChildren();delete globalThis.__checkoutDeliveryClient;dom.window.sessionStorage.clear();dom.window.localStorage.clear();globalThis.fetch=nativeFetch;if(originalNavigator)Object.defineProperty(globalThis,'navigator',originalNavigator);else delete globalThis.navigator;});
-after(async()=>{await server.close();dom.window.close();});
+after(async()=>{await server?.close();dom.window.close();});
 
 const session={access_token:'synthetic-jwt',user:{id:'11111111-1111-4111-8111-111111111111',email:'fixture@example.invalid'}};
+const defaultAddress={id:'saved-home',customer_id:session.user.id,label:'Home',street_address:'Saved street',area:'Saved area',city:'Freetown',zone_id:'zone-2',is_default:true};
+function deferredDefaults(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
+function defaultsClient(profile,addresses){return {
+  auth:{getSession:async()=>({data:{session}})},
+  functions:{invoke(){throw Error('Autofill must never place an order');}},
+  from(table){return {select(){return this;},eq(){return this;},order(){return this;},maybeSingle(){return profile.promise;},then(resolve,reject){assert.equal(table,'customer_addresses');return addresses.promise.then(resolve,reject);}};},
+};}
+const defaultsProfile={full_name:'Saved customer',phone:'+23276521208',default_street_address:'Profile street',default_area:'Profile area',default_city:'Freetown'};
+for(const first of ['profile','addresses'])test('saved-address precedence is deterministic when '+first+' resolves first',async()=>{
+  const profile=deferredDefaults(),addresses=deferredDefaults();await mount({authSession:session,client:defaultsClient(profile,addresses)});
+  await act(async()=>{if(first==='profile')profile.resolve({data:defaultsProfile,error:null});else addresses.resolve({data:[defaultAddress],error:null});await new Promise(r=>setImmediate(r));});
+  await act(async()=>{if(first==='profile')addresses.resolve({data:[defaultAddress],error:null});else profile.resolve({data:defaultsProfile,error:null});await new Promise(r=>setImmediate(r));});
+  assert.equal(host.querySelector('[name="address"]').value,'Saved street');assert.equal(host.querySelector('[name="area"]').value,'Saved area');assert.equal(host.querySelector('#delivery-zone').value,'zone-2');assert.equal(host.querySelector('[name="full-name"]').value,'Saved customer');
+});
+test('late default loads preserve manual checkout values while making saved choices available',async()=>{
+  const profile=deferredDefaults(),addresses=deferredDefaults();await mount({authSession:session,client:defaultsClient(profile,addresses)});
+  await setValue(host.querySelector('[name="address"]'),'Manual street');await setValue(host.querySelector('[name="area"]'),'Manual area');await selectZone('zone-1');
+  await act(async()=>{profile.resolve({data:defaultsProfile,error:null});addresses.resolve({data:[defaultAddress],error:null});await new Promise(r=>setImmediate(r));});
+  assert.equal(host.querySelector('[name="address"]').value,'Manual street');assert.equal(host.querySelector('[name="area"]').value,'Manual area');assert.equal(host.querySelector('#delivery-zone').value,'zone-1');assert.ok(host.querySelector('input[name="saved-address"]'));
+});
+test('address-load failure falls back to profile defaults without writes',async()=>{
+  const profile=deferredDefaults(),addresses=deferredDefaults();await mount({authSession:session,client:defaultsClient(profile,addresses)});
+  await act(async()=>{profile.resolve({data:defaultsProfile,error:null});addresses.reject(Error('offline'));await new Promise(r=>setImmediate(r));});assert.equal(host.querySelector('[name="address"]').value,'Profile street');
+});
 const fixture={id:'fixture-product',name:'Fixture mug',description:'Fixture description',category:'Fixture category',price:1800,image:'/images/mug.svg',color:'#e9e3d8'};
 const noop=()=>{};
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 const container=process.argv[2];
-assert.equal(container,'lume-foundation-sql-check');
+assert.match(container,/^lume-foundation-sql-check(?:-[a-f0-9]{12})?$/);
 const inspected=JSON.parse(execFileSync('docker',['inspect',container],{encoding:'utf8'}))[0];
 assert.equal(inspected.HostConfig.NetworkMode,'none');
 assert.equal(inspected.HostConfig.AutoRemove,true);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test, before, after, afterEach } from 'node:test';
 import React, { act } from 'react';
 import { JSDOM } from 'jsdom';
-import { createServer } from 'vite';
+import { createServer } from './helpers/vite.mjs';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 // B2.7 automatic display-currency selection evidence.
@@ -26,7 +26,7 @@ const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 
 const originalLocalStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
 const { createRoot } = await import('react-dom/client');
 
-let server, root, container, CurrencyProvider, CurrencySelector, CurrencyDisclosure, ProductContext, CartContext, AuthContext, NotificationProvider, ShopPage, ProductDetailsPage, CheckoutPage, currency;
+let server, root, container, CurrencyProvider, ProductContext, CartContext, AuthContext, NotificationProvider, ShopPage, ProductDetailsPage, CheckoutPage, currency;
 const host = dom.window.document.getElementById('root');
 let calls = 0;
 const CURRENCY_STORAGE_KEY = 'lume:currency';
@@ -46,8 +46,13 @@ const stampLocalStorageUnavailable = () => {
   });
 };
 const persistedPreference = () => localStorage.getItem(CURRENCY_STORAGE_KEY);
-const selectedCurrency = () => host.querySelector('select[aria-label="Display currency"]')?.value;
 const estimates = () => [...host.querySelectorAll('.currency-estimate')].map(e => e.textContent);
+const selectedCurrency = () => {
+  const estimateList = estimates();
+  if (estimateList.length === 0) return 'NLE';
+  const match = estimateList[0].match(/≈ ([A-Z]+)/);
+  return match ? match[1] : 'NLE';
+};
 const flush = async () => { await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); }); };
 const settle = async () => { for (let i = 0; i < 5; i += 1) await flush(); };
 
@@ -71,7 +76,6 @@ before(async () => {
     }],
   });
   ({ CurrencyProvider } = await server.ssrLoadModule('/src/features/currency/CurrencyProvider.tsx'));
-  ({ CurrencySelector, CurrencyDisclosure } = await server.ssrLoadModule('/src/features/currency/CurrencySelector.tsx'));
   currency = await server.ssrLoadModule('/src/features/currency/currency.ts');
   ({ ProductContext } = await server.ssrLoadModule('/src/features/products/ProductContext.ts'));
   ({ CartContext } = await server.ssrLoadModule('/src/features/cart/CartContext.ts'));
@@ -107,19 +111,8 @@ async function mount(path = '/', { strict = false, cart = [] } = {}) {
               React.createElement(Routes, null,
                 React.createElement(Route, { path: '/', element: React.createElement(ShopPage) }),
                 React.createElement(Route, { path: '/products/:productId', element: React.createElement(ProductDetailsPage) }),
-                React.createElement(Route, { path: '/checkout', element: React.createElement(CheckoutPage) })),
-              React.createElement(CurrencySelector, null),
-              React.createElement(CurrencyDisclosure, null)))))));
+                React.createElement(Route, { path: '/checkout', element: React.createElement(CheckoutPage) }))))))));
   await act(async () => root.render(strict ? React.createElement(React.StrictMode, null, tree) : tree));
-  await settle();
-}
-
-async function select(code) {
-  await act(async () => {
-    const control = host.querySelector('select[aria-label="Display currency"]');
-    control.value = code;
-    control.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-  });
   await settle();
 }
 
@@ -139,7 +132,7 @@ afterEach(async () => {
   delete globalThis.__localeClient;
   calls = 0;
 });
-after(async () => { await server.close(); dom.window.close(); });
+after(async () => { await server?.close(); dom.window.close(); });
 
 test('a fresh Sierra Leone visitor keeps the authoritative NLE and never requests rates', async () => {
   serve();
@@ -175,9 +168,6 @@ for (const [locales, code] of [
   assert.ok(estimates().length >= 1);
   assert.ok(estimates().every(value => value.includes(code)));
   assert.match(host.textContent, /NLE 18/);
-  const notice = host.querySelector('#currency-disclosure');
-  assert.match(notice.textContent, /Informational estimates from Frankfurter/);
-  assert.match(notice.textContent, /Checkout and payment amounts remain in NLE/);
   assert.equal(persistedPreference(), code);
 });
 
@@ -233,9 +223,9 @@ test('localStorage unavailable neither crashes nor mislabels and never persists'
   await mount('/');
   assert.equal(selectedCurrency(), 'USD');
   assert.equal(calls, 1);
-  assert.ok(host.querySelector('select[aria-label="Display currency"]'));
+  assert.equal(host.querySelector('select[aria-label="Display currency"]'), null, 'no manual selector');
   assert.doesNotMatch(host.textContent, /Available|error/i);
-  assert.match(host.textContent, /Checkout and payment amounts remain in NLE/);
+  assert.ok(estimates().length >= 1, 'estimates displayed');
   // Restore only the real storage for the persistence assertion.
   if (originalLocalStorageDescriptor) Object.defineProperty(globalThis, 'localStorage', originalLocalStorageDescriptor);
   assert.equal(persistedPreference(), null);
@@ -262,22 +252,6 @@ test('provider remount and route change keep the automatic choice without a seco
   assert.ok(estimates().length >= 1);
   assert.ok(estimates().every(value => value.includes('USD')));
   assert.match(host.textContent, /NLE 18/);
-});
-
-test('switching away from the automatic choice and back never duplicates the request', async () => {
-  serve();
-  setLocales(['en-US']);
-  await mount('/');
-  assert.equal(calls, 1);
-  await select('NLE');
-  assert.deepEqual(estimates(), []);
-  assert.equal(calls, 1);
-  assert.equal(persistedPreference(), 'NLE');
-  assert.match(host.textContent, /NLE 18/);
-  await select('USD');
-  assert.ok(estimates().length >= 1);
-  assert.equal(calls, 1);
-  assert.equal(persistedPreference(), 'USD');
 });
 
 test('a stale cached rate is revalidated once and the stale value never displays', async () => {

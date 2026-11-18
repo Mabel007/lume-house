@@ -3,12 +3,13 @@ param([switch]$DirectOrderOnly)
 $ErrorActionPreference = 'Stop'
 $testRoot = $PSScriptRoot
 $supabaseRoot = Split-Path $testRoot -Parent
-$containerName = 'lume-foundation-sql-check'
+$repoRoot = Split-Path $supabaseRoot -Parent
+$containerName = 'lume-foundation-sql-check-' + [guid]::NewGuid().ToString('N').Substring(0,12)
 $created = $false
 function Read-Sql([string]$path) { Get-Content -LiteralPath $path -Raw -Encoding UTF8 }
 function Run-Sql([string]$label, [string]$sql) {
   Write-Output "CHECK: $label"
-  $sql | docker exec -i $containerName psql -U postgres -v ON_ERROR_STOP=1 -At
+  $sql | docker exec -i $containerName psql -U postgres -v ON_ERROR_STOP=1 -v LUME_DISPOSABLE_TEST=1 -At
   if ($LASTEXITCODE -ne 0) { throw "SQL check failed: $label" }
 }
 function Run-DirectChecks {
@@ -149,6 +150,19 @@ $guard$;
   Run-Sql 'permanent admin HTTP conflicts' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261012002700_admin_conflict_http.sql'))
   Run-Sql 'final admin conflict and preservation regressions' (Read-Sql (Join-Path $testRoot 'admin-conflicts.sql'))
   Run-DirectChecks
+  # S02 Slice 3: Saved addresses with concurrency controls
+  Run-Sql 'customer addresses foundation' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261103003000_customer_addresses.sql'))
+  Run-Sql 'customer addresses RLS and CRUD' (Read-Sql (Join-Path $repoRoot 'tests/addresses-rls.test.sql'))
+  # S02 Slice 2: Email retry security hardening
+  Run-Sql 'retry job claiming and lease mechanism' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261103003001_retry_job_claiming.sql'))
+  # S02 Slice 4: Customer order timeline
+  Run-Sql 'customer order timeline function' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261104004000_customer_order_timeline.sql'))
+  # S02 Slice 5: Persistent notifications
+  Run-Sql 'customer notifications table and triggers' (Read-Sql (Join-Path $supabaseRoot 'migrations/20261104005000_customer_notifications.sql'))
+  Run-Sql 'S02 actual retry leases and notification security' (Read-Sql (Join-Path $testRoot 's02-security.sql'))
+  Run-Sql 'S02 migration privilege validation' (Read-Sql (Join-Path $repoRoot 'tests/s02-migration-validation.sql'))
+  node (Join-Path $testRoot 's02-concurrency.mjs') $containerName
+  if ($LASTEXITCODE -ne 0) { throw 'S02 two-session checks failed' }
   Run-Sql 'fixture rollback leaves no identities/private data' @'
 do $$
 begin
@@ -168,6 +182,8 @@ begin
     or exists(select 1 from public.business_product_creations)
     or exists(select 1 from public.variant_inventory)
     or exists(select 1 from public.inventory_ledger)
+    or exists(select 1 from public.customer_addresses)
+    or exists(select 1 from public.customer_notifications)
     or (select count(*) from public.product_variants) <> 20
     or (select count(*) from public.products where active and currency='NLE') <> 20 then
     raise exception 'Unexpected fixture persistence or seed mutation';

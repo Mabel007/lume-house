@@ -1,4 +1,4 @@
-import { CurrencyEstimate } from '../currency/CurrencySelector';
+import { CurrencyEstimate } from '../currency/CurrencyEstimate';
 import { CountryCombobox } from '../../components/CountryCombobox';
 import { FormField } from '../../components/FormField';
 import { HelpDisclosure } from '../../components/HelpDisclosure';
@@ -35,6 +35,7 @@ import { completeAttempt, readAttempt, rememberAttempt, withCheckoutLock, type C
 import { cancelDirectIntent, directCheckoutPath, finishDirectIntent, restoreDirectIntent, type DirectIntent } from './directIntent';
 import { prepareCustomerAuthReturn } from '../auth/customerAuthIntent';
 import { loadProducts } from '../products/productRepository';
+import { listAddresses, createAddress, type SavedAddress, type NewAddress } from '../addresses/addressRepository';
 
 function phoneProblem(value: string, emptyMessage: string): string | undefined {
   if (!value.trim()) return emptyMessage;
@@ -83,6 +84,10 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
   const pendingFocus = useRef<string | null>(null);
   const userId = auth.session?.user.id;
   const userEmail = auth.session?.user.email;
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [saveNewAddress, setSaveNewAddress] = useState(false);
+  const [newAddressLabel, setNewAddressLabel] = useState('Home');
   function current(){return mounted.current&&identity.current===lifetime;}
   function accepted(id:string,attempt:CheckoutAttempt,ticket?:number|null){
     if(!current())return;
@@ -131,16 +136,42 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
   },[userId,navigate]);
   useEffect(() => {
     let active = true;
-    if (userId) void loadProfile(getSupabaseClient(), userId).then(profile => {
-      if (!active || dirty.current) return;
-      const defaults = checkoutDefaults(profile, userEmail || "");
-      setEmail(defaults.email);
-      if (profile) {
-        setFullName(defaults.fullName); setContactPhone(defaults.contactPhone);
-        setAddress(defaults.address); setArea(defaults.area); setCity(defaults.city);
-        setProfileNote("Your profile defaults are filled in. Checkout edits apply here only.");
-      }
-    }).catch(() => { if (active) setProfileNote("Profile defaults could not be loaded. Please enter your checkout details."); });
+    if (userId) {
+      // Load concurrently, then apply once. Saved default wins over profile
+      // delivery fields regardless of response order; user edits win over both.
+      void Promise.allSettled([
+        loadProfile(getSupabaseClient(), userId),
+        listAddresses(getSupabaseClient(), userId),
+      ]).then(([profileResult, addressResult]) => {
+        if (!active) return;
+        const profile = profileResult.status === 'fulfilled' ? profileResult.value : null;
+        const addresses = addressResult.status === 'fulfilled' ? addressResult.value : [];
+        const activeZones = deliveryConfig.zones.filter(z => z.active);
+        const validAddresses = addresses.filter(addr => {
+          const zone = activeZones.find(z => z.id === addr.zone_id);
+          return zone?.active === true && addr.city.trim().toLowerCase() === deliveryConfig.serviceCity.toLowerCase();
+        });
+        setSavedAddresses(validAddresses);
+        if (dirty.current) return;
+        const defaults = checkoutDefaults(profile, userEmail || "");
+        setEmail(defaults.email);
+        setFullName(defaults.fullName);
+        setContactPhone(defaults.contactPhone);
+        const defaultAddress = validAddresses.find(a => a.is_default);
+        if (defaultAddress) {
+          setSelectedAddressId(defaultAddress.id);
+          setAddress(defaultAddress.street_address);
+          setArea(defaultAddress.area);
+          setCity(defaultAddress.city);
+          setZoneId(defaultAddress.zone_id);
+        } else {
+          setAddress(defaults.address); setArea(defaults.area); setCity(defaults.city);
+        }
+        setProfileNote(profileResult.status === 'rejected'
+          ? "Profile defaults could not be loaded. Please enter your checkout details."
+          : "Your saved defaults are filled in. Checkout edits apply here only.");
+      });
+    }
     return () => { active = false; };
   }, [userId, userEmail]);
   const paymentPhone = getPaymentPhone(contactPhone, phone, reusePhone);
@@ -211,6 +242,21 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
   const contactError = showsError("contact-phone")
     ? problemFor("contact-phone")
     : undefined;
+  function handleAddressSelect(addressId: string) {
+    const addr = savedAddresses.find(a => a.id === addressId);
+    if (addr) {
+      setSelectedAddressId(addressId);
+      setAddress(addr.street_address);
+      setArea(addr.area);
+      setCity(addr.city);
+      setZoneId(addr.zone_id);
+      setSaveNewAddress(false);
+    }
+  }
+  function handleNewAddressEntry() {
+    setSelectedAddressId(null);
+    setSaveNewAddress(false);
+  }
   async function submit(event:React.FormEvent) {
     event.preventDefault();
     if(submittingRef.current||recovering||recoveryBlocked||state.status!=='ready'||!userId)return;
@@ -257,6 +303,21 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
         const result=attempt.source==='direct'
           ?await placeDirectOrder(getSupabaseClient(),attempt,checkout,expected[0])
           :await placeOrder(getSupabaseClient(),attempt.requestId,checkout,expected,userId);
+        if (saveNewAddress && fulfilment === 'delivery' && userId && newAddressLabel.trim()) {
+          try {
+            const newAddr: NewAddress = {
+              label: newAddressLabel.trim(),
+              street_address: address.trim(),
+              area: area.trim(),
+              city: city.trim(),
+              zone_id: zoneId,
+              is_default: savedAddresses.length === 0,
+            };
+            await createAddress(getSupabaseClient(), userId, newAddr);
+          } catch {
+            // Address save failure should not block order confirmation
+          }
+        }
         accepted(result.id,attempt,checkoutTicket);
       });
     }catch(error){
@@ -427,6 +488,40 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
                   Choose the zone that best matches your address. These delivery
                   fees are provisional.
                 </p>
+                {savedAddresses.length > 0 && (
+                  <div className="saved-addresses-section">
+                    <p className="small-note"><strong>Deliver to saved address:</strong></p>
+                    <div className="saved-address-list">
+                      {savedAddresses.map(addr => (
+                        <label key={addr.id} className="saved-address-option">
+                          <input
+                            type="radio"
+                            name="saved-address"
+                            value={addr.id}
+                            checked={selectedAddressId === addr.id}
+                            onChange={() => handleAddressSelect(addr.id)}
+                          />
+                          <div className="saved-address-preview">
+                            <strong>{addr.label}</strong>
+                            <span>{addr.street_address}, {addr.area}, {addr.city}</span>
+                          </div>
+                        </label>
+                      ))}
+                      <label className="saved-address-option">
+                        <input
+                          type="radio"
+                          name="saved-address"
+                          value="new"
+                          checked={selectedAddressId === null}
+                          onChange={handleNewAddressEntry}
+                        />
+                        <div className="saved-address-preview">
+                          <strong>Enter new address</strong>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
                 <div className="form-grid">
                   <Field
                     label="Street address / landmark"
@@ -524,6 +619,34 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
                 <p className="small-note" id="delivery-city-help">
                   We currently deliver within {deliveryConfig.serviceCity} only.
                 </p>
+                {selectedAddressId === null && savedAddresses.length < 5 && (
+                  <div className="save-address-section">
+                    <label className="save-address-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={saveNewAddress}
+                        onChange={(e) => setSaveNewAddress(e.target.checked)}
+                      />
+                      Save this address for future orders
+                    </label>
+                    {saveNewAddress && (
+                      <div className="form-field">
+                        <label htmlFor="new-address-label">
+                          Address label (Home, Work, or custom)
+                          <input
+                            id="new-address-label"
+                            type="text"
+                            value={newAddressLabel}
+                            onChange={(e) => setNewAddressLabel(e.target.value)}
+                            maxLength={20}
+                            required
+                            placeholder="Home"
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <p key="pickup" className="checkout-notice fulfilment-panel">

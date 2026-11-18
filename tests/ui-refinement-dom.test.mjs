@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test,before,after,afterEach} from 'node:test';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
+import {createServer} from './helpers/vite.mjs';
 const dom=new JSDOM('<!doctype html><button id="opener">Open</button><div id="root"></div>',{url:'http://localhost/'});
 const document=dom.window.document;
 for(const name of ['window','document','HTMLElement'])Object.defineProperty(globalThis,name,{configurable:true,value:dom.window[name]});
@@ -11,7 +11,7 @@ const {createRoot}=await import('react-dom/client');
 let server,root;const host=document.getElementById('root');
 before(async()=>{server=await createServer({root:process.cwd(),configFile:false,envDir:false,server:{middlewareMode:true,hmr:false}});});
 afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;host.replaceChildren();});
-after(async()=>{await server.close();dom.window.close();});
+after(async()=>{await server?.close();dom.window.close();});
 async function mount(node){root=createRoot(host);await act(async()=>root.render(node));}
 test('read states expose live loading, errors with retry, and useful empty feedback',async()=>{
  const {AdminReadState}=await server.ssrLoadModule('/src/features/admin/AdminReadState.tsx');let retried=0;

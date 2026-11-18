@@ -1,4 +1,4 @@
-import { CurrencyEstimate } from '../currency/CurrencySelector';
+import { CurrencyEstimate } from '../currency/CurrencyEstimate';
 import { useOptionalCurrency } from '../currency/CurrencyContext';
 import { formatMoney } from "../../config/shop";
 export function OrderSummary({

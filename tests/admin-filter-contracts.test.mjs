@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';import {test,before,after} from 'node:test';import {createServer} from 'vite';
+import assert from 'node:assert/strict';import {test,before,after} from 'node:test';import {createServer} from './helpers/vite.mjs';
 let server;before(async()=>{server=await createServer({configFile:false,envDir:false,server:{middlewareMode:true,hmr:false}});});after(async()=>server.close());
 test('saved views isolate accounts, never persist search terms, and reject duplicates/corruption/stale keys',async()=>{
  const {readSavedFilters,writeSavedFilters}=await server.ssrLoadModule('/src/features/admin/filters/savedFilters.ts');const records=new Map();const storage={getItem:key=>records.get(key)||null,setItem:(key,value)=>records.set(key,value)};

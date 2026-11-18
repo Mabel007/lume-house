@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {MemoryRouter} from 'react-router-dom';
-import {createServer} from 'vite';
+import {createServer} from './helpers/vite.mjs';
 import {readFileSync} from 'node:fs';
 import {renderConfirmation,sendResend} from '../supabase/functions/_shared/email.ts';
 import {parseOrder} from '../src/features/orders/orders.ts';

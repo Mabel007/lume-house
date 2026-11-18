@@ -2,7 +2,7 @@ import {test,before,after,afterEach} from 'node:test';
 import assert from 'node:assert/strict';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
+import {createServer} from './helpers/vite.mjs';
 import {MemoryRouter,Routes,Route,useNavigate} from 'react-router-dom';
 const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/',pretendToBeVisual:true});
 for(const name of ['window','document','Element','HTMLElement','HTMLInputElement','HTMLSelectElement','sessionStorage','navigator'])Object.defineProperty(globalThis,name,{configurable:true,value:dom.window[name]});
@@ -35,7 +35,7 @@ before(async()=>{
  authReturn=await server.ssrLoadModule('/src/features/auth/customerAuthIntent.ts');
 });
 afterEach(async()=>{if(root)await act(async()=>root.unmount());root=null;host.replaceChildren();sessionStorage.clear();dom.window.localStorage.clear();delete globalThis.__directClient;delete globalThis.__freshProducts;authSession=session;generation=0;invocations=[];finishCalls=0;dispatchCalls=0;refreshes=0;recovery=null;behavior=null;signIns=0;savedBag=[{product_id:'fixture',variant_id:'v',quantity:5}];rpcCalls=[];cartSnapshot=null;lookupFailure=false;navigate=null;});
-after(async()=>{await server.close();dom.window.close();});
+after(async()=>{await server?.close();dom.window.close();});
 function Probe(){cartSnapshot=useCart();navigate=useNavigate();return null;}
 function tree(path,products=[fixture],bagStatus='error',realBag=false){
  return React.createElement(MemoryRouter,{initialEntries:[path]},React.createElement(AuthContext.Provider,{value:{loading:false,session:authSession,sessionGeneration:generation,error:null,signIn:async()=>{signIns++;},signOut:async()=>({ok:true})}},

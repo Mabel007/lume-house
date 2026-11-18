@@ -19,3 +19,9 @@ import_map = "./functions/deno.json"
 [functions.order-email]
 verify_jwt = false
 import_map = "./functions/deno.json"
+
+# Service-to-service API-key authentication is enforced by retryHandler.
+# Fails closed until the owner selects RETRY_SCHEDULER_KEY_NAME.
+[functions.retry-failed-emails]
+verify_jwt = false
+import_map = "./functions/deno.json"

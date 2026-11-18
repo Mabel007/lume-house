@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {after, afterEach, before, test} from 'node:test';
 import React, {act} from 'react';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
+import {createServer} from './helpers/vite.mjs';
 import {createMemoryRouter, RouterProvider} from 'react-router-dom';
 
 // Isolated component/query evidence. No hosted endpoint, Auth identity or credentials.
@@ -21,7 +21,7 @@ before(async () => {
   ({useProducts} = await server.ssrLoadModule('/src/features/products/ProductContext.ts'));
 });
 afterEach(async () => {if (root) await act(async () => root.unmount()); root = undefined; router?.dispose(); router = undefined; delete globalThis.__catalogClient; host.replaceChildren();});
-after(async () => {await server.close(); dom.window.close();});
+after(async () => {await server?.close(); dom.window.close();});
 
 function deferred() {let resolve; const promise = new Promise(done => {resolve = done;}); return {promise, resolve};}
 function catalogue(name = 'Original piece', price = 100, available = true) {

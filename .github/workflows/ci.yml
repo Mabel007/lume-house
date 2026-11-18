@@ -1,0 +1,37 @@
+# Minimal CI verification for reviewed PR commits (Naj Builds standard release SOP, item 2).
+# No container/service credentials are provided to this untrusted context: every check
+# below runs offline against repository source, the jsdom/string fixture harness and
+# Vite's isolated caches. The disposable SQL harness (npm run test:sql) is deliberately
+# excluded: its PowerShell runner is not portable to hosted CI yet.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint (source-wide)
+        run: npm run lint
+      - name: Frontend typecheck
+        run: npm run typecheck
+      - name: Edge function typecheck
+        run: npm run typecheck:functions
+      - name: Build
+        run: npm run build
+      - name: Application tests (jsdom/local fixtures)
+        run: npm test

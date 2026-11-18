@@ -3,7 +3,7 @@ import {test,before,after,afterEach} from 'node:test';
 import {readFileSync} from 'node:fs';
 import React,{act,useRef} from 'react';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
+import {createServer} from './helpers/vite.mjs';
 import {createMemoryRouter,RouterProvider,Link,Outlet,MemoryRouter} from 'react-router-dom';
 
 // DOM/component evidence only. Supabase is replaced at the module boundary;
@@ -20,7 +20,7 @@ let server,root,router;const host=document.getElementById('test-root');
 const clients=[];
 before(async()=>{server=await createServer({configFile:false,envDir:false,server:{middlewareMode:true,hmr:false},plugins:[{name:'isolated-test-client',enforce:'pre',load(id){if(id.replaceAll('\\','/').endsWith('/src/main.tsx'))return readFileSync(id,'utf8').split('ReactDOM.createRoot')[0].replace('const router =','export const testRouter =');if(id.replaceAll('\\','/').endsWith('/src/lib/supabase/client.ts'))return 'export function getSupabaseClient(){return globalThis.__lumeFormTestClient;}';}}]});});
 afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;router?.dispose();router=undefined;host.replaceChildren();delete globalThis.__lumeFormTestClient;window.confirm=()=>{throw new Error('Unexpected confirmation');};window.alert=()=>{throw new Error('Unexpected alert');};});
-after(async()=>{await server.close();dom.window.close();});
+after(async()=>{await server?.close();dom.window.close();});
 async function module(path){return server.ssrLoadModule(`/src/${path}`);}
 async function mount(element){root=createRoot(host);await act(async()=>root.render(element));}
 async function render(element){await act(async()=>root.render(element));}
@@ -225,7 +225,7 @@ test('actual application router keeps Auth/Product/Cart providers across custome
  const initial={restores,reads,unsubscribes};for(const path of ['/about','/help','/products/synthetic-product','/cart']){await act(async()=>router.navigate(path));assert.equal(router.state.location.pathname,path);}assert.deepEqual({restores,reads,unsubscribes},initial);assert.ok(host.querySelector('[aria-label="Cart (3)"]'));
  await act(async()=>router.navigate('/admin/orders/synthetic-order'));assert.match(host.textContent,/does not have business administration access/);assert.equal(host.querySelector('.admin-workspace'),null);assert.deepEqual({restores,reads,unsubscribes},initial);
  await act(async()=>client.auth.signOut());await act(async()=>router.navigate('/cart'));assert.equal(host.querySelector('[aria-label="Cart (3)"]'),null);assert.ok(host.querySelector('[aria-label="Cart (0)"]'));
- current=session('customer-b');await act(async()=>receive('SIGNED_IN',current));assert.ok(host.querySelector('[aria-label="Cart (0)"]'));assert.doesNotMatch(host.textContent,/customer-a@example.invalid/);assert.deepEqual({restores,reads,unsubscribes},{...initial,reads:initial.reads+2});
+ current=session('customer-b');await act(async()=>receive('SIGNED_IN',current));assert.ok(host.querySelector('[aria-label="Cart (0)"]'));assert.doesNotMatch(host.textContent,/customer-a@example.invalid/);assert.deepEqual({restores,reads,unsubscribes},{...initial,reads:initial.reads+3});
 });
 
 test('customer Account hub hides previous-user drafts and stale profile responses when identity switches or signs out',async()=>{

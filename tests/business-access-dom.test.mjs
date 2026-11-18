@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test,before,after,afterEach} from 'node:test';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
+import {createServer} from './helpers/vite.mjs';
 import {MemoryRouter,Routes,Route} from 'react-router-dom';
 const dom=new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>',{url:'http://localhost/'});
 for(const name of ['window','document','Element','HTMLElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','MutationObserver','FormData'])Object.defineProperty(globalThis,name,{configurable:true,value:dom.window[name]});
@@ -11,7 +11,7 @@ const {createRoot}=await import('react-dom/client');
 let server,root;const host=dom.window.document.getElementById('root');
 before(async()=>{server=await createServer({root:process.cwd(),configFile:false,envDir:false,server:{middlewareMode:true,hmr:false},plugins:[{name:'isolated-business-access',enforce:'pre',load(id){if(id.replaceAll('\\','/').endsWith('/src/lib/supabase/client.ts'))return 'export function getSupabaseClient(){return globalThis.__roleClient;}';}}]});});
 afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;host.replaceChildren();delete globalThis.__roleClient;});
-after(async()=>{await server.close();dom.window.close();});
+after(async()=>{await server?.close();dom.window.close();});
 const module=path=>server.ssrLoadModule('/src/features/'+path);
 function client(handler){const calls=[];const value={rpc(name,args){return {setHeader(key,token){assert.equal(key,'Authorization');calls.push({name,args,token});return Promise.resolve(handler(name,args,token));}};}};globalThis.__roleClient=value;return {value,calls};}
 function deferred(){let resolve;const promise=new Promise(done=>resolve=done);return {promise,resolve};}

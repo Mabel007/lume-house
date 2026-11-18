@@ -1,5 +1,6 @@
 import { CancellationRequest } from './CancellationRequest';
 import { OrderSnapshot } from './OrderSnapshot';
+import { CustomerOrderTimeline } from './CustomerOrderTimeline';
 export { OrderSnapshot } from './OrderSnapshot';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -199,6 +200,7 @@ export function OrderDetailPage({ success = false }: { success?: boolean }) {
         <>
           {success && <OrderSuccessMessage />}
           <OrderSnapshot order={order} />
+          <CustomerOrderTimeline orderId={order.id} />
           <CancellationRequest
             key={`${order.id}:${order.status}`}
             orderId={order.id}

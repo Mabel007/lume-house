@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup as plainMarkup } from "react-dom/server";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
-import { createServer } from "vite";
+import { createServer } from './helpers/vite.mjs';
 import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 
@@ -525,8 +525,8 @@ test("header keeps guest/loading Account text and shows only private initials wh
   assert.doesNotMatch(trigger, /class="header-account active"|aria-current=/);
   const nav = signed.match(/<nav aria-label="Main navigation"[^>]*>(.*?)<\/nav>/s)?.[1] ?? "";
   // The initials badge replaces the Account *label* with a menu trigger, so the nav
-  // holds one trigger and the four remaining destinations as links.
-  assert.equal((nav.match(/<a /g) ?? []).length, 4, "the badge replaces the label, not the destination");
+  // holds one trigger, the notification bell, and the three remaining destinations as links.
+  assert.equal((nav.match(/<a /g) ?? []).length, 5, "the badge replaces the label, not the destination");
   assert.equal((nav.match(/<button\b/g) ?? []).length, 1, "the signed-in account control is the only button in the nav");
   assert.doesNotMatch(renderLayout("/admin", undefined, signedIn), /site-header|Account, signed in/);
   const signedOut = renderLayout("/", undefined, { ...signedIn, session: null });
