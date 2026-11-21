@@ -16,16 +16,34 @@ import { useNotifications } from '../../components/notifications';
 import { formatMoney } from '../../config/shop';
 import { PageHeader } from '../../components/PageHeader';
 
+const productDetailsHeadingId = 'product-details-heading';
+
+function focusProductDetailsHeading() {
+  document.getElementById(productDetailsHeadingId)?.focus();
+}
+
 export function ProductDetailsPage() {
   const { productId }=useParams();
   const { state }=useProducts();
-  if(state.status!=='ready') return <section className="wrap page-section"><PageHeader title="Product details." trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} /><ProductStatus /></section>;
-  const product=state.products.find(product=>product.id===productId);
-  if(!product)return <section className="wrap page-section empty-state"><PageHeader title="This piece is unavailable." trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} /><p>It may no longer be part of the active collection.</p><Link className="button" to="/">Explore the collection</Link></section>;
-  return <ProductDetails key={product.id} product={product} />;
+  const ready=state.status==='ready';
+  const product=ready?state.products.find(item=>item.id===productId):undefined;
+  const missing=ready&&!product;
+  // ProductStatus must stay mounted across the loading → ready transition for
+  // its lifecycle-aware recovery effect to run; only its position is stable
+  // when it renders inside this branch-independent section.
+  return <section className={missing?'wrap page-section empty-state':'wrap page-section'}>
+    {!ready && <PageHeader title="Product details." trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} headingId={productDetailsHeadingId} />}
+    {missing && <div>
+      <PageHeader title="This piece is unavailable." trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} headingId={productDetailsHeadingId} />
+      <p>It may no longer be part of the active collection.</p>
+      <Link className="button" to="/">Explore the collection</Link>
+    </div>}
+    {ready && product && <ProductDetails key={product.id} product={product} headingId={productDetailsHeadingId} />}
+    <ProductStatus onRecover={focusProductDetailsHeading} />
+  </section>;
 }
 
-export function ProductDetails({product}:{product:Product}) {
+export function ProductDetails({product,headingId}:{product:Product;headingId?:string}) {
   const auth=useAuth();const navigate=useNavigate();
   const {items,dispatch,status}=useCart();
   const {notify}=useNotifications();
@@ -70,8 +88,8 @@ export function ProductDetails({product}:{product:Product}) {
     if(outcome.kind==='confirmed')notify({tone:'success',message:bagAddedText(addedAmount,name,detail)});
     else if(outcome.kind==='rejected')notify({tone:'error',message:bagAddFailedText(name,outcome.failure)});
   }
-  return <section className="wrap page-section product-details">
-    <PageHeader title={product.name} trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} />
+  return <div className="product-details">
+    <PageHeader title={product.name} trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} headingId={headingId} />
     <div className="product-details-grid"><ProductGallery key={product.id} product={product}/>
       <div className="product-details-copy"><p className="eyebrow">{product.category}</p>
         <p className="product-details-price">{!variant&&optionsRequired?'From ':''}{formatMoney(price)}<CurrencyEstimate minorUnits={price} /></p><p className="product-details-description">{product.description}</p>
@@ -122,5 +140,5 @@ export function ProductDetails({product}:{product:Product}) {
         <p className="small-note">Payment awaits confirmation after order placement.</p>
       </div>
     </div>
-  </section>;
+  </div>;
 }

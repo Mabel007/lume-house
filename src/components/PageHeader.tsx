@@ -20,7 +20,7 @@ export function Breadcrumbs({ title, ancestors }: { title: string; ancestors: re
   </nav>;
 }
 
-export function PageHeader({ title, description, breadcrumb, trail, breadcrumbLabel, actions }: {
+export function PageHeader({ title, description, breadcrumb, trail, breadcrumbLabel, actions, headingId }: {
   title: string;
   description?: string;
   breadcrumb?: BreadcrumbItem;
@@ -28,12 +28,14 @@ export function PageHeader({ title, description, breadcrumb, trail, breadcrumbLa
   /** Breadcrumb label for the current page when it differs from the visible h1. */
   breadcrumbLabel?: string;
   actions?: ReactNode;
+  /** Stable destination id for focus recovery after this page's reload resolves. */
+  headingId?: string;
 }) {
   const ancestors = trail ?? (breadcrumb ? [breadcrumb] : []);
   return <header className="ui-page-header">
     <div>
       <Breadcrumbs title={breadcrumbLabel ?? title} ancestors={ancestors} />
-      <h1>{title}</h1>
+      <h1 id={headingId} tabIndex={headingId === undefined ? undefined : -1}>{title}</h1>
       {description && <p>{description}</p>}
     </div>
     {actions && <div className="ui-page-actions">{actions}</div>}
