@@ -569,9 +569,16 @@ test('storefront search has a labelled native search control and polite results 
  const html=render(ShopPage,{status:'ready',products:[fixture]},[]);
  assert.match(html,/<label for="product-search">Search the collection/);
  assert.match(html,/id="product-search"[^>]*type="search"/);
- assert.match(html,/class="collection-results" role="status">1 piece found/);
+ assert.match(html,/class="collection-results"[^>]*role="status"[^>]*>/);
+ assert.match(html,/1 piece found\./);
  assert.match(html,/aria-label="Filter products"/);
  assert.doesNotMatch(html,/No pieces found|Reset search/);
+ // Slice 1A: the focus affordance is decorative and never replaces the native control.
+ assert.match(html,/class="search-field"[\s\S]*?id="product-search"/,"the search input keeps its focus wrapper");
+ assert.match(html,/class="search-glyph" aria-hidden="true"/,"the magnifier is hidden from assistive technology");
+ assert.doesNotMatch(html,/<svg[^>]*class="search-glyph"[^>]*>[\s\S]*?<title>/,"the magnifier exposes no accessible name");
+ assert.match(html,/class="search-glyph-ring"/);
+ assert.match(html,/class="search-glyph-handle"/);
 });
 
 test("Add to Cart feedback waits for confirmed persistence before claiming success", async () => {

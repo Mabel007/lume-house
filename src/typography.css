@@ -27,7 +27,7 @@ main h3, .about-values-grid h3, .admin-screen h3, .admin-screen h4, .order-snaps
 .site-header nav a, .admin-nav-title, .admin-storefront-link, .admin-sign-out { font-size: var(--type-functional); min-height: 44px; }
 .site-header nav a { display: inline-flex; align-items: center; }
 .button, .add-button, .filters button, .remove-button, .text-link, .back-link, .collection-links a, .form-grid label, .form-grid input, .form-grid select, .form-grid textarea, .form-field input[type="text"], .admin-screen label, .admin-screen input, .admin-screen select, .admin-screen textarea, .admin-screen button { font-size: var(--type-functional); line-height: 1.5; }
-.filters button, .remove-button, .back-link, .text-link { min-height: 44px; }
+.remove-button, .back-link, .text-link { min-height: 44px; }
 .quantity-control button { width: 44px; height: auto; min-height: 44px; }
 .quantity-control input { min-height: 44px; font-size: var(--type-functional); }
 .product-card h3, .cart-row h2, .summary-items h3, .order-reference strong, .order-items strong, .admin-order-link, .admin-product-name { font-size: var(--type-name); line-height: 1.35; overflow-wrap: anywhere; }

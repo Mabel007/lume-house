@@ -49,11 +49,16 @@ input[aria-invalid=true], textarea[aria-invalid=true], select[aria-invalid=true]
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 
 /* Storefront: comfortable spacing and controls without replacing the editorial layout. */
-.product-search { padding: 1rem 1.25rem; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: var(--ui-surface); }
+/* The collection section, not the field, carries the editorial width: the wrapper
+   stays flush and unboxed so the one visible boundary is the field's own (styles.css). */
+.product-search { padding: 0; border: 0; border-radius: 0; background: transparent; }
 .product-search input { min-width: 0; }
 .collection-toolbar { gap: 1rem; align-items: center; }
 .collection-toolbar > div { flex-wrap: wrap; min-width: 0; }
-.filters button { min-height: 44px; padding: .65rem 1rem; }
+.filters button { padding: .65rem 1rem; }
+@media (min-width: 701px) {
+  .filters button { min-height: 44px; }
+}
 .product-card { min-width: 0; }
 .product-card h3, .product-details h1 { overflow-wrap: anywhere; }
 .product-card .price { flex-shrink: 0; }
@@ -72,7 +77,7 @@ input[aria-invalid=true], textarea[aria-invalid=true], select[aria-invalid=true]
 .order-information, .email-information, .account-note { border-radius: var(--ui-radius); }
 .field-error, .feedback { overflow-wrap: anywhere; }
 @media (max-width: 700px) {
-  .product-search { padding: 1rem; }
+  .product-search { padding: 0; }
   .collection-toolbar { align-items: flex-start; }
   .collection-toolbar > div { width: 100%; }
   .product-card .price { font-size: .875rem; }

@@ -18,8 +18,10 @@ import { NotificationInbox } from "./features/notifications/NotificationInbox";
 import { AboutPage } from "./features/content/AboutPage";
 import { HelpPage } from "./features/content/HelpPage";
 import { DeliveryPickupPage, ReturnsRefundsPage, PrivacyPage, TermsPage } from "./features/content/PolicyPages";
+import { StoryPrototypePage } from "./features/story/StoryPrototypePage";
 import "./typography.css";
 import "./refinement.css";
+import "./motion.css";
 
 const router = createBrowserRouter(createRoutesFromElements(
             <Route element={<AuthProvider><ProductProvider><CartProvider><CurrencyProvider><NotificationProvider><Layout /></NotificationProvider></CurrencyProvider></CartProvider></ProductProvider></AuthProvider>}>
@@ -41,6 +43,14 @@ const router = createBrowserRouter(createRoutesFromElements(
               <Route path="/account/notifications" element={<NotificationInbox />} />
               <Route path="/orders/:orderId/success" element={<CustomerOrder success />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
+              {/* The sideways editorial walk is an S03-02 candidate under review, not a
+                  storefront route. It is mounted in development only, so the branch can be
+                  walked on a real device; Vite replaces import.meta.env.DEV before the
+                  production bundle is written, which leaves the route, the page and its
+                  stylesheet out of what ships. */}
+              {import.meta.env.DEV && (
+                <Route path="/prototype/story" element={<StoryPrototypePage />} />
+              )}
               <Route
                 path="*"
                 element={

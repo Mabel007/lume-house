@@ -1,0 +1,417 @@
+/* S03-01 editorial motion. The authored state is always the finished composition:
+   motion is opt-in under prefers-reduced-motion: no-preference only, so content,
+   imagery and headline text stay readable if a feature, observer or animation is absent. */
+:root {
+  --motion-ease-editorial: cubic-bezier(0.16, 0.84, 0.24, 1);
+  --motion-rise: 1.15rem;
+  --motion-hero-line: 1000ms;
+  --motion-soft: 620ms;
+  --motion-curtain: 1150ms;
+  --motion-curtain-card: 420ms;
+  --motion-drift: 9000ms;
+  /* Five phrases, each owning a fifth of the loop (see lume-search-prompt). */
+  --motion-prompt-step: 4s;
+  --motion-prompt-loop: 20s;
+}
+
+.hero-line,
+.hero-line-inner {
+  display: block;
+}
+
+/* Retracted by default; only the no-preference block below puts it in front of the image. */
+.hero-art-curtain {
+  display: none;
+}
+
+@keyframes lume-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--motion-rise), 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes lume-line-rise {
+  from {
+    transform: translate3d(0, 118%, 0);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes lume-curtain-open {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(101%, 0, 0);
+  }
+}
+/* One-shot decelerating settle, then a slow breath that finishes and releases the layer. */
+@keyframes lume-hero-drift {
+  0% {
+    transform: scale(1.06);
+  }
+  55% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.014);
+  }
+}
+/* 7% of travel each way inside a 16% overscale, so the image never uncovers the
+   frame it is clipped by at either end of the range. */
+@keyframes lume-parallax-soft {
+  from {
+    transform: translate3d(0, -7%, 0) scale(1.16);
+  }
+  to {
+    transform: translate3d(0, 7%, 0) scale(1.16);
+  }
+}
+/* Slice 1A: the magnifier strokes redraw on focus. Stroke offsets are paint-only,
+   so the glyph keeps its box and never nudges the input beside it. */
+@keyframes lume-search-ring-draw {
+  from {
+    stroke-dasharray: 33;
+    stroke-dashoffset: 33;
+  }
+  to {
+    stroke-dasharray: 33;
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes lume-search-handle-draw {
+  from {
+    stroke-dasharray: 6;
+    stroke-dashoffset: 6;
+  }
+  to {
+    stroke-dasharray: 6;
+    stroke-dashoffset: 0;
+  }
+}
+/* One phrase owns a fifth of the loop: it rises into the mask, holds, then
+   leaves upward while the next one arrives. Five phrases at 4s each. */
+@keyframes lume-search-prompt {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0.6em, 0);
+  }
+  3% {
+    opacity: 1;
+    transform: none;
+  }
+  17% {
+    opacity: 1;
+    transform: none;
+  }
+  20% {
+    opacity: 0;
+    transform: translate3d(0, -0.6em, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, -0.6em, 0);
+  }
+}
+@keyframes lume-link-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes lume-eyebrow-reink {
+  from {
+    opacity: 0.65;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes lume-results-morph {
+  from {
+    opacity: 0.6;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-copy .eyebrow {
+    animation: lume-rise 520ms var(--motion-ease-editorial) 60ms both;
+  }
+  .hero-line {
+    overflow: hidden;
+    padding-bottom: 0.14em;
+    margin-bottom: -0.14em;
+  }
+  .hero-line-inner {
+    animation: lume-line-rise var(--motion-hero-line) var(--motion-ease-editorial) 40ms both;
+  }
+  .hero-line:nth-child(2) .hero-line-inner {
+    animation-delay: 190ms;
+  }
+  .hero-line:nth-child(3) .hero-line-inner {
+    animation-delay: 330ms;
+  }
+  .hero-copy .hero-description {
+    animation: lume-rise var(--motion-soft) var(--motion-ease-editorial) 480ms both;
+  }
+  .hero-copy .button {
+    animation: lume-rise var(--motion-soft) var(--motion-ease-editorial) 610ms both;
+  }
+  .hero-copy .hero-note {
+    animation: lume-rise var(--motion-soft) var(--motion-ease-editorial) 740ms both;
+  }
+  .hero-art img {
+    animation: lume-hero-drift var(--motion-drift) var(--motion-ease-editorial) both;
+  }
+  .hero-art-curtain {
+    display: block;
+    position: absolute;
+    top: -1px;
+    bottom: -1px;
+    left: 0;
+    width: 108%;
+    /* Painted after the image and before the caption, so it covers without hiding the label. */
+    background: linear-gradient(90deg, #eeece3 0%, #eeece3 88%, rgba(238, 236, 227, 0.55) 100%);
+    transform: translate3d(101%, 0, 0);
+    animation: lume-curtain-open var(--motion-curtain) var(--motion-ease-editorial) 120ms both;
+    pointer-events: none;
+  }
+  [data-lume-reveal="pending"] {
+    opacity: 0;
+    transform: translate3d(0, var(--motion-rise), 0);
+  }
+  [data-lume-reveal="shown"] {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 720ms var(--motion-ease-editorial),
+      transform 720ms var(--motion-ease-editorial);
+  }
+  /* Already scrolled past, so the composition is simply finished: a fade nobody
+     is watching would only cost a composite layer. */
+  [data-lume-reveal="passed"] {
+    opacity: 1;
+    transform: none;
+  }
+  /* Living typography: a section that choreographs its own children — masked
+     lines here, links below — fades in place instead of travelling as well, so
+     one beat is not spent twice. The wrapper clips and the inner line moves,
+     exactly as in the hero. */
+  .lume-edit[data-lume-reveal="pending"],
+  .collection-links[data-lume-reveal="pending"],
+  .closing-note[data-lume-reveal="pending"] {
+    transform: none;
+  }
+  .lume-edit[data-lume-reveal="shown"] .edit-line,
+  .closing-note[data-lume-reveal="shown"] .closing-line {
+    overflow: hidden;
+    padding-bottom: 0.14em;
+    margin-bottom: -0.14em;
+  }
+  .lume-edit[data-lume-reveal="shown"] .edit-line-inner,
+  .closing-note[data-lume-reveal="shown"] .closing-line-inner {
+    animation: lume-line-rise var(--motion-soft) var(--motion-ease-editorial) both;
+  }
+  .lume-edit[data-lume-reveal="shown"] .edit-line:nth-child(2) .edit-line-inner,
+  .closing-note[data-lume-reveal="shown"] .closing-line:nth-child(2) .closing-line-inner {
+    animation-delay: 150ms;
+  }
+  .lume-edit[data-lume-reveal="shown"] .eyebrow {
+    animation: lume-eyebrow-reink 420ms var(--motion-ease-editorial) both;
+  }
+  .collection-links[data-lume-reveal="shown"] a {
+    animation: lume-link-rise var(--motion-soft) var(--motion-ease-editorial) both;
+  }
+  .collection-links[data-lume-reveal="shown"] a:nth-child(2) {
+    animation-delay: 60ms;
+  }
+  .collection-links[data-lume-reveal="shown"] a:nth-child(3) {
+    animation-delay: 120ms;
+  }
+  .collection-links[data-lume-reveal="shown"] a:nth-child(4) {
+    animation-delay: 180ms;
+  }
+  .collection-links[data-lume-reveal="shown"] a:nth-child(5),
+  .collection-links[data-lume-reveal="shown"] a:nth-child(6) {
+    animation-delay: 240ms;
+  }
+  /* The links are how the homepage routes a shopper, so they answer the pointer:
+     the rule beneath a link darkens and its arrow steps toward the collection. */
+  @media (hover: hover) {
+    .collection-links a:hover {
+      color: #2d4033;
+      border-bottom-color: #2d4033;
+    }
+    .collection-links a:hover span:last-child {
+      transform: translate3d(3px, -2px, 0);
+    }
+  }
+  /* Catalogue cards enter as they are browsed, on the same arm/settle engine as
+     the sections above (useProductCardEntrance arms only a card it can observe
+     and has not seen yet, so any other state — reduced motion, a missing
+     IntersectionObserver, a settled card, a card the effect never reached —
+     leaves the card visible, priced and purchasable.) The stagger follows the
+     column the card sits in, so a row arrives as one restrained beat. */
+  .product-card[data-lume-enter="pending"] {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  .product-card[data-lume-enter="shown"] {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 380ms var(--motion-ease),
+      transform 380ms var(--motion-ease);
+  }
+  .product-card[data-lume-enter="shown"]:nth-child(4n + 2) {
+    transition-delay: 40ms;
+  }
+  .product-card[data-lume-enter="shown"]:nth-child(4n + 3) {
+    transition-delay: 80ms;
+  }
+  .product-card[data-lume-enter="shown"]:nth-child(4n) {
+    transition-delay: 120ms;
+  }
+  /* The Lumé Curtain, echoed from the hero: the paper veil a card rests under is
+     retracted once, on the same arming pass that settles the card, and stays
+     retracted. Cards the engine settles as passed, and every reduced-motion
+     reader, never see the veil move because it never leaves its retracted edge. */
+  .product-card[data-lume-enter="shown"] .product-image::after {
+    animation: lume-curtain-open var(--motion-curtain-card) var(--motion-ease-editorial) 90ms both;
+  }
+  /* A staggered card starts its fade later, so its veil waits the same beat: a
+     card that is still transparent has no reason to spend its retraction. */
+  .product-card[data-lume-enter="shown"]:nth-child(4n + 2) .product-image::after {
+    animation-delay: 130ms;
+  }
+  .product-card[data-lume-enter="shown"]:nth-child(4n + 3) .product-image::after {
+    animation-delay: 170ms;
+  }
+  .product-card[data-lume-enter="shown"]:nth-child(4n) .product-image::after {
+    animation-delay: 210ms;
+  }
+  /* Tactile cards. The lift is transform-only, so nothing reflows. Hover is
+     dropped on touch, where the press state at the bottom is the whole response. */
+  @media (hover: hover) {
+    .product-card:hover .product-image {
+      transform: translate3d(0, -3px, 0);
+      box-shadow: 0 12px 22px -18px rgba(41, 56, 46, 0.6);
+    }
+    .product-card:hover .product-image img {
+      transform: scale(1.025);
+    }
+    /* The index rides the frame it sits in and drifts a little further, so the
+       label reads as its own small response rather than part of the photograph. */
+    .product-card:hover .product-index {
+      transform: translate3d(3px, -3px, 0);
+    }
+    .product-card:hover .product-category {
+      color: #2d4033;
+    }
+  }
+  /* The keyboard gets the same response as the pointer — but only for a focus the
+     reader can only have tabbed to. :focus-within alone would leave a card lifted
+     after a click or a tap, because pressing the add button focuses it, and a
+     pointer user never asked the card to stay selected. The category inks for the
+     keyboard too: the lift alone left half the pointer response unclaimed. */
+  .product-card:has(:focus-visible) .product-image,
+  .product-card:has(:focus-visible) .product-index {
+    transform: translate3d(0, -3px, 0);
+  }
+  .product-card:has(:focus-visible) .product-category {
+    color: #2d4033;
+  }
+  .product-card:active .product-image {
+    transform: translate3d(0, -1px, 0) scale(0.995);
+    box-shadow: none;
+  }
+  /* Search focus: only the strokes redraw, and only for readers who allow it.
+     Reduced motion keeps the glyph fully drawn and the field fully usable. */
+  .search-field:focus-within .search-glyph-ring {
+    animation: lume-search-ring-draw var(--motion-time) var(--motion-ease-editorial) both;
+  }
+  .search-field:focus-within .search-glyph-handle {
+    animation: lume-search-handle-draw var(--motion-time) var(--motion-ease-editorial) both;
+  }
+  .collection-results-morph {
+    display: inline-block;
+    animation: lume-results-morph 180ms var(--motion-ease-editorial) both;
+  }
+  /* Idle search prompts: the moving typography sits over the empty field, starts
+     at the first character of typed text and stands down for the reader. The
+     layer is aria-hidden, so a screen reader never hears it and never hears it
+     again; hiding it is a fade of one container, not five animated children. */
+  .search-prompts {
+    display: block;
+    opacity: 0;
+    transition: opacity var(--motion-time) linear;
+  }
+  .product-search[data-search-idle="true"]:not(:focus-within) .search-prompts {
+    opacity: 1;
+  }
+  /* The prompts say what the placeholder says, so only one of them is ever up. */
+  .product-search input::placeholder {
+    transition: opacity var(--motion-time) linear;
+  }
+  .product-search[data-search-idle="true"]:not(:focus-within) input::placeholder {
+    opacity: 0;
+  }
+  .search-prompts span {
+    animation: lume-search-prompt var(--motion-prompt-loop) var(--motion-ease-editorial)
+      infinite both;
+  }
+  .search-prompts span:nth-child(2) {
+    animation-delay: var(--motion-prompt-step);
+  }
+  .search-prompts span:nth-child(3) {
+    animation-delay: calc(var(--motion-prompt-step) * 2);
+  }
+  .search-prompts span:nth-child(4) {
+    animation-delay: calc(var(--motion-prompt-step) * 3);
+  }
+  .search-prompts span:nth-child(5) {
+    animation-delay: calc(var(--motion-prompt-step) * 4);
+  }
+  /* Paused, not cancelled, while the layer is put away: the phrase that was on
+     screen is still the phrase on screen when the reader clears the field, and a
+     decorative loop costs nothing while nobody can see it. */
+  .product-search:not([data-search-idle="true"]) .search-prompts span,
+  .product-search:focus-within .search-prompts span {
+    animation-play-state: paused;
+  }
+}
+
+/* Scroll-driven depth stays off the main thread and is ignored entirely where unsupported. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* overflow: clip, not hidden: hidden would make the frame a scroll container,
+       and view() then tracks that never-scrolling box instead of the page. */
+    .edit-pieces .product-image {
+      overflow: clip;
+    }
+    .edit-pieces .product-image img {
+      transform: scale(1.16);
+      animation: lume-parallax-soft linear both;
+      animation-timeline: view();
+      /* The same travel the old full-journey range spent off-screen is spent
+         while the piece is actually being looked at, which is what makes the
+         depth read at an ordinary scrolling speed. */
+      animation-range: cover 20% cover 80%;
+    }
+  }
+}
