@@ -12,6 +12,7 @@ import {
   type CustomerNotification
 } from './notificationRepository';
 import { PageHeader } from '../../components/PageHeader';
+import { UiStatus } from '../../components/UiStatus';
 import './notifications.css';
 
 /**
@@ -109,7 +110,7 @@ function CustomerInbox() {
   }
 
   return (
-    <section className="wrap page-section motion-enter">
+    <section className="wrap page-section motion-enter" aria-busy={state.status === 'loading' || markAllBusy || busy !== null || undefined}>
       <PageHeader
         title="Notifications"
         breadcrumbLabel="Notifications"
@@ -124,7 +125,20 @@ function CustomerInbox() {
       )}
 
       {state.status === 'error' && (
-        <div role="alert"><p>{state.message}</p><button type="button" onClick={() => { setState({status: 'loading'}); void loadNotificationsList(); }}>Try again</button></div>
+        <UiStatus
+          kind="error"
+          action={(
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => { setState({status: 'loading'}); void loadNotificationsList(); }}
+            >
+              Try again
+            </button>
+          )}
+        >
+          {state.message}
+        </UiStatus>
       )}
 
       {state.status === 'ready' && state.notifications.length === 0 && (

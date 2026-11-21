@@ -64,7 +64,10 @@ export function CartPage() {
   const busy = status === "saving" || status === "loading" || status === "error" || status === "checking-out";
   const { state } = useProducts();
   const trail = [{ label: 'Home', to: '/' }];
-  if (status === "loading" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Cart." trail={trail} breadcrumbLabel="Cart" /><UiStatus kind="loading">Your saved Cart is not ready yet.</UiStatus></section>;
+  // Layout owns the polite announcement while a saved Cart loads, so the visible
+  // route-level panel stays silent. Checkout has no shell-level owner, so its
+  // in-flight transition keeps the existing announcement.
+  if (status === "loading" || status === "checking-out") return <section className="wrap page-section"><PageHeader title="Your Cart." trail={trail} breadcrumbLabel="Cart" /><UiStatus kind="loading" announce={status !== "loading"}>Your saved Cart is not ready yet.</UiStatus></section>;
   if (status === "error" && state.status !== "ready")
     return (
       <section className="wrap page-section">
@@ -72,7 +75,9 @@ export function CartPage() {
         <ProductStatus />
       </section>
     );
-  if (status === "error") return <section className="wrap page-section"><PageHeader title="Your Cart." trail={trail} breadcrumbLabel="Cart" /><UiStatus kind="error">Your saved Cart is not ready yet.</UiStatus></section>;
+  // The shell's error panel carries the specific message and the retry action;
+  // this fallback is still visible but must not announce the same failure twice.
+  if (status === "error") return <section className="wrap page-section"><PageHeader title="Your Cart." trail={trail} breadcrumbLabel="Cart" /><UiStatus kind="error" announce={false}>Your saved Cart is not ready yet.</UiStatus></section>;
   if (!items.length) return <div ref={emptyRef}><EmptyCart /></div>;
   if (state.status !== "ready")
     return (

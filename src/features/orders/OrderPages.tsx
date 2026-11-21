@@ -10,6 +10,7 @@ import { formatMoney } from '../../config/shop';
 import { loadOrders,loadOrder,retryConfirmation,historyPageSize } from './orderRepository';
 import { orderLabel,type Order,type OrderListItem } from './orders';
 import { PageHeader, Breadcrumbs, type BreadcrumbItem } from '../../components/PageHeader';
+import { UiStatus } from '../../components/UiStatus';
 
 
 export function OrderHistory({ orders }: {orders:OrderListItem[]}) {
@@ -94,17 +95,24 @@ export function MyOrdersPage() {
   if (!id || auth.loading) return <AccountRequired />;
 
   return (
-    <section className="wrap page-section orders-page motion-enter">
+    <section className="wrap page-section orders-page motion-enter" aria-busy={busy || undefined}>
       <PageHeader title="Orders for your home." breadcrumbLabel="My Orders" trail={[{ label: 'Home', to: '/' }, { label: 'My Account', to: '/account' }]} />
       <p className="account-intro">A record of the pieces you have chosen.</p>
       {busy && <p role="status">Loading your orders…</p>}
       {error && (
-        <p role="alert">
-          {error} <button onClick={() => { setBusy(true); setRevision(v => v + 1) }}>Retry</button>
-        </p>
+        <UiStatus
+          kind="error"
+          action={(
+            <button type="button" className="button secondary" onClick={() => { setBusy(true); setRevision(v => v + 1); }}>
+              Retry
+            </button>
+          )}
+        >
+          {error}
+        </UiStatus>
       )}
       {!busy && !error && !orders.length && (
-        <p>You haven’t placed an order yet. <Link to="/">Explore the collection</Link></p>
+        <UiStatus kind="empty">You haven’t placed an order yet. <Link to="/">Explore the collection</Link></UiStatus>
       )}
       <OrderHistory orders={orders} />
       {more && !busy && !error && (
@@ -178,7 +186,7 @@ export function OrderDetailPage({ success = false }: { success?: boolean }) {
   }
 
   return (
-    <section className="wrap page-section order-page motion-enter">
+    <section className="wrap page-section order-page motion-enter" aria-busy={busy || undefined}>
       <PageHeader
         title={order?.order_reference || 'Your order.'}
         breadcrumbLabel={order?.order_reference || 'Your order.'}
@@ -191,11 +199,18 @@ export function OrderDetailPage({ success = false }: { success?: boolean }) {
       {busy ? (
         <p role="status">Loading your order…</p>
       ) : error ? (
-        <p role="alert">
-          {error} <button onClick={() => { setBusy(true); setRevision(v => v + 1) }}>Retry</button>
-        </p>
+        <UiStatus
+          kind="error"
+          action={(
+            <button type="button" className="button secondary" onClick={() => { setBusy(true); setRevision(v => v + 1); }}>
+              Retry
+            </button>
+          )}
+        >
+          {error}
+        </UiStatus>
       ) : !order ? (
-        <p>This order is unavailable for your account.</p>
+        <UiStatus kind="empty">This order is unavailable for your account.</UiStatus>
       ) : (
         <>
           {success && <OrderSuccessMessage />}

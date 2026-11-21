@@ -6,6 +6,7 @@ export const checkoutMessages = {
   email: "Enter your email address.",
   emailFormat: "Enter a valid email address.",
   address: "Enter your street address or landmark.",
+  addressLabel: "Enter an address label.",
   area: "Enter your area or community.",
   city: "Enter your city or town.",
   country: "Choose your country.",

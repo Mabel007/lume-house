@@ -95,7 +95,7 @@ test('cancellation copy preserves request and refund boundaries',async()=>{
  assert.match(html,/<h2 tabindex="-1">Cancellation request/);assert.match(html,/not immediate cancellation/);assert.match(html,/confirmation is required/);assert.match(html,/does not issue a refund/);
  const request={order_id:'local',reason:'Changed plans',requested_at:'2026-10-06T00:00:00Z',status:'pending',resolution:null};
  assert.deepEqual(parseCancellation(request),request);assert.equal(parseCancellation(null),null);assert.throws(()=>parseCancellation({status:'refunded'}));
- const pending=renderToStaticMarkup(React.createElement(CancellationStatus,{request}));assert.match(pending,/pending/);assert.match(pending,/Changed plans/);assert.doesNotMatch(pending,/Payment successful/);
+ const pending=renderToStaticMarkup(React.createElement(CancellationStatus,{request}));assert.match(pending,/pending/);assert.match(pending,/Changed plans/);assert.doesNotMatch(pending,/Payment successful/);assert.doesNotMatch(pending,/role="status"|aria-live/,'static cancellation history is not announced as a live status');
 });
 
 test('scoped workspace preserves routes, contextual headings and one active navigation link',async()=>{

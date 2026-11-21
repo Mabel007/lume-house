@@ -849,6 +849,24 @@ test('unsupported city and missing zone get accurate field-associated messages',
   assert.equal(errorText('city-error'),null);
 });
 
+test('a zone change is described once and announced by the totals live region only', async()=>{
+  await mount({authSession:session});
+  await fillRequired();
+  const help=host.querySelector('#zone-help');
+  assert.ok(help);
+  assert.equal(describedBy('delivery-zone'),'zone-help');
+  assert.equal(help.getAttribute('role'),null,'the static help text is not a second live region');
+  assert.equal(help.closest('[aria-live]'),null);
+
+  await selectZone('zone-2');
+  assert.match(help.textContent,/NLE 50/);
+  const announcing=[...host.querySelectorAll('[role="status"],[aria-live]')]
+    .filter(node=>node.textContent.includes('NLE 50'));
+  assert.equal(announcing.length,1,'one live region owns the zone/fee update');
+  assert.ok(announcing[0].querySelector('.totals'),'the owner is the order summary');
+  assert.match(announcing[0].textContent,/NLE 86/,'the derived total is announced with the fee');
+});
+
 test('an unsupported country blocks pickup and can be corrected without side effects', async()=>{
   const {calls,client}=recordingClient();
   let begun=0,finished=0;
@@ -955,6 +973,42 @@ test('a repeated submit while placement is in flight does not place a second ord
   await submit();
   assert.equal(calls.length,1);
   await act(async()=>resolveInvoke({data:null,error:null}));
+});
+
+test('the checkout save-address label gets the same invalid semantics as other customer fields', async()=>{
+  await mount({authSession:session});
+  const optIn=host.querySelector('.save-address-checkbox input');
+  assert.ok(optIn,'the save-address option is offered to a signed-in shopper');
+  await toggle(optIn);
+  const input=host.querySelector('#new-address-label');
+  assert.ok(input);
+  assert.ok(input.closest('.form-field'),'the existing .form-field structure is preserved');
+  assert.equal(input.required,true,'native validation is still declared');
+  assert.equal(input.maxLength,20);
+  assert.equal(input.getAttribute('aria-invalid'),null);
+  assert.equal(input.getAttribute('aria-describedby'),null);
+  await setValue(input,'');
+  await blur(input);
+  assert.equal(input.getAttribute('aria-invalid'),'true');
+  assert.equal(input.getAttribute('aria-describedby'),'new-address-label-error');
+  assert.equal(errorText('new-address-label-error'),'Enter an address label.');
+  await setValue(input,'Work');
+  assert.equal(input.getAttribute('aria-invalid'),null);
+  assert.equal(input.getAttribute('aria-describedby'),null);
+  assert.equal(host.querySelector('#new-address-label-error'),null);
+});
+
+test('a blank save-address label is reported without changing checkout submission', async()=>{
+  const {calls,client}=recordingClient();
+  await mount({authSession:session,client});
+  await fillRequired();
+  await fillValidPhones();
+  await toggle(host.querySelector('.save-address-checkbox input'));
+  await setValue(host.querySelector('#new-address-label'),'');
+  await submit();
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].name,'place-order');
+  assert.equal(errorText('new-address-label-error'),'Enter an address label.');
 });
 
 function renderCurrency(element) { root.render(React.createElement(CurrencyProvider, null, element)); }
