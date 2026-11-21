@@ -96,6 +96,7 @@ export function ProductDetails({product,headingId}:{product:Product;headingId?:s
         {optionsRequired && <fieldset className="variant-options"><legend>Choose your options</legend>{choices.map(choice=><label key={choice.id}><input type="radio" name={`variant-${product.id}`} value={choice.id} disabled={!variantAvailable(choice)} checked={selection===choice.id} onChange={()=>setSelection(choice.id)}/><span>{variantLabel(choice)}{!variantAvailable(choice)&&' — Unavailable'}<span className="variant-option-price">{formatMoney(choice.price)}<CurrencyEstimate minorUnits={choice.price} /></span></span></label>)}</fieldset>}
         <p className="small-note">{compatible?'Available to add to your Cart.':optionsRequired && !variant && optionsAvailable ? 'Choose an available combination.':'This piece is currently unavailable.'}</p>
         <div className="product-details-quantity">
+          <label className="product-quantity-label" htmlFor="product-quantity">Quantity<span className="sr-only"> for {product.name}</span></label>
           <div className="quantity-control">
             <button
               type="button"
@@ -105,7 +106,6 @@ export function ProductDetails({product,headingId}:{product:Product;headingId?:s
             >
               −
             </button>
-            <label className="sr-only" htmlFor="product-quantity">{product.name} quantity</label>
             <input
               id="product-quantity"
               type="number"

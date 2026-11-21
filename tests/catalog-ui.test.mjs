@@ -765,6 +765,32 @@ test("Product Details groups add action and Cart link in one stable actions row"
   assert.match(css, /@media \(max-width: 479px\)[^@]*\.product-details-actions \.product-details-add \{ width: 100%;/);
 });
 
+test("Product Details has a visible Quantity label and keeps its native number input", () => {
+  const dom = new JSDOM(renderDetails(fixture));
+  try {
+    const document = dom.window.document;
+    const input = document.querySelector("#product-quantity");
+    assert.ok(input, "the quantity input renders");
+    assert.equal(input.tagName, "INPUT");
+    assert.equal(input.type, "number");
+    assert.equal(input.min, "1");
+    assert.equal(input.max, "99");
+    assert.equal(input.step, "1");
+    const label = document.querySelector('label[for="product-quantity"]');
+    assert.ok(label, "the label is associated by for/id");
+    assert.ok(!label.classList.contains("sr-only"), "the Quantity prompt is visible");
+    assert.equal(label.textContent, `Quantity for ${fixture.name}`);
+    assert.equal(label.querySelector(".sr-only")?.textContent, ` for ${fixture.name}`, "product context stays with the accessible name");
+    assert.equal(label.parentElement, input.closest(".product-details-quantity"));
+    assert.equal(label.nextElementSibling, input.closest(".quantity-control"));
+    assert.equal(input.closest(".quantity-control").querySelectorAll("label").length, 0, "the stepper group stays a native input with two buttons");
+    assert.equal(input.closest(".quantity-control").querySelectorAll("button").length, 2);
+    const buy = document.querySelector("button.product-details-buy");
+    assert.ok(buy, "Buy Now stays a native button");
+    assert.equal(buy.type, "button");
+  } finally { dom.window.close(); }
+});
+
 test("account initials handle whitespace, single names, missing names and Unicode graphemes", () => {
   for (const [name, expected] of [["Naj Builds", "NB"], [" Naj  ", "N"], ["", "LH"], [null,"LH"], [undefined,"LH"], ["  ---  ", "LH"], ["Élodie 東京", "É東"], ["e\u0301lodie", "É"]]) assert.equal(accountInitials(name), expected);
 });

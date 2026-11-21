@@ -730,3 +730,52 @@ test("D2 the deferred invalid-ink harmonization is still deferred, not quietly a
   assert.notEqual(resolve("color", panel).value, "var(--danger-text)", "do not claim palette adoption here");
 });
 
+// ---------------------------------------------------------------------------
+// PDP-03A — the PDP-only 48px controls consume the approved large-control token.
+// The Cart deliberately keeps the shared 44px floor, so both sides are resolved.
+// ---------------------------------------------------------------------------
+const pdpQuantityAncestors = () => chain(["quantity-control"], ["product-details"]);
+const cartQuantityAncestors = () => chain(["quantity-control"], ["cart-line"]);
+
+test("PDP-03A PDP quantity and Buy Now controls resolve to the 48px large-control token", () => {
+  const stepper = { tag: "button", classes: [], id: undefined, attrs: {}, states: new Set(), ancestors: pdpQuantityAncestors() };
+  for (const property of ["width", "height", "min-height"]) {
+    assert.equal(resolve(property, stepper).value, "var(--control-height-large, 48px)", `PDP stepper ${property}`);
+  }
+  assert.equal(resolve("width", stepper).selector, ".product-details .quantity-control button");
+
+  const input = { ...stepper, tag: "input", attrs: { type: "number" } };
+  assert.equal(resolve("min-height", input).value, "var(--control-height-large, 48px)");
+  assert.equal(resolve("width", input).value, "56px", "two digits stay clear of the stepper edges");
+
+  const buy = {
+    tag: "button", classes: ["button", "product-details-buy"], id: undefined, attrs: {}, states: new Set(),
+    ancestors: chain(["product-details-actions"], ["product-details"]),
+  };
+  assert.equal(resolve("min-height", buy).value, "var(--control-height-large, 48px)");
+  assert.equal(resolve("min-height", buy).selector, ".product-details-actions .product-details-buy");
+  assertToken("--control-height-large", "48px");
+});
+
+test("PDP-03A the Cart quantity control keeps its 44px floor and 42px input", () => {
+  const stepper = { tag: "button", classes: [], id: undefined, attrs: {}, states: new Set(), ancestors: cartQuantityAncestors() };
+  assert.equal(resolve("width", stepper).value, "44px");
+  assert.equal(resolve("min-height", stepper).value, "44px");
+  assert.notEqual(resolve("min-height", stepper).selector, ".product-details .quantity-control button");
+
+  const input = { ...stepper, tag: "input", attrs: { type: "number" } };
+  assert.equal(resolve("min-height", input).value, "44px");
+  assert.equal(resolve("width", input).value, "42px");
+});
+
+test("PDP-03A the PDP stepper group keeps the shared focus ring", () => {
+  const group = {
+    tag: "div", classes: ["quantity-control"], id: undefined, attrs: {}, states: new Set(["focus-within"]),
+    ancestors: chain(["product-details"]),
+  };
+  // No PDP-specific focus rule was added: the shared 3px ring must still win.
+  assert.equal(resolve("outline", group).selector, ".quantity-control:focus-within");
+  assert.equal(resolve("outline", group).value, "3px solid #9a542e");
+  assert.equal(resolve("outline-offset", group).value, "4px");
+});
+
