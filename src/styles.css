@@ -26,6 +26,98 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
+/* S03 cross-page foundation, Slice A. These names record the values the
+   storefront already computes so later slices can adopt them one at a time.
+   Slice A introduced them value-neutrally; Slice D now consumes a subset in
+   refinement.css (radius, danger, muted-text and surface/status tokens) at
+   identical computed values. Where an older token already owns a value it is
+   aliased rather than repeated, and where the site genuinely uses two values
+   for one role both are kept and named. Picking a single winner for each of
+   those pairs is a visual decision held for the owner, not something to settle
+   inside a value-neutral slice. */
+:root {
+  /* Brand and surfaces. */
+  --color-deep: #2c3c30;
+  --color-veil: #eeece3;
+  --color-surface-card: var(--ui-surface);
+  --color-surface-card-alt: #fffdf7;
+  --color-surface-sunken: #eeeee4;
+  --color-surface-inset: #fbfaf5;
+  --color-surface-status: #f0f1e9;
+  /* #293c2f is not a focus colour: it is the addresses slice's action green —
+     the save/add-address button backgrounds, the default-address badge, the
+     selected variant and saved-address edges — and only incidentally a local
+     outline. It sits one step from --color-deep, a near-duplicate the owner has
+     not been asked to merge. */
+  --color-action-deep: #293c2f;
+  /* #2d4033 is the storefront's selected/emphasis green, not a border colour:
+     it fills the bag notice and the pressed filter chips, tints checkbox and
+     radio accent-colour, is the hover ink for collection links and product
+     categories, and edges the focused search field and cart-recovery outline.
+     Naming it after one of those four roles would send a later slice looking
+     for the wrong thing. */
+  --color-selected: #2d4033;
+
+  /* Hairlines. --border-hairline and --border-hairline-ui are one role with two
+     values, one degree apart; both stay until a decision merges them. */
+  --border-hairline: var(--surface-border);
+  --border-hairline-ui: var(--ui-border);
+  --border-hairline-warm: #e6dfd2;
+  --border-strong: #c8cdbc;
+
+  /* Muted text, most-used value named plainly, the rest by their own register. */
+  --text-muted: #626c60;
+  --text-muted-ui: var(--ui-muted);
+  --text-muted-cool: #4c574a;
+  --text-muted-warm: #68685e;
+
+  /* Focus. --focus-accent is the page-wide keyboard contract (:focus-visible,
+     3px solid #9a542e, offset 4px) and must not drift without an accessibility
+     pass. The compact width is what component-local rings use today. Offsets
+     elsewhere still range from -1px to 4px, so only the contract's own offset is
+     named. */
+  --focus-accent: #9a542e;
+  --focus-ring-width: 3px;
+  --focus-ring-width-compact: 2px;
+  --focus-ring-offset: 4px;
+
+  /* Error. Three different invalid-field edges are in force: #8c392c from
+     refinement.css for aria-invalid controls, #9b4037 from the later input-only
+     rule in the same file, and the .form-grid rule, which reuses --focus-accent
+     #9a542e. Naming that third one as a danger color would hide the fact that
+     the site currently signals focus and error with the same ink, so it is
+     recorded here as a conflation for Slice D to decide, not as a token.
+     The addresses panels keep their own legacy #c33, and the notification and
+     order-timeline red lives only in feature CSS. */
+  --danger-edge: #8c392c;
+  --danger-edge-input: #9b4037;
+  --danger-surface: #fbf1ec;
+  --danger-text: #8a4628;
+  --danger-action: #783a2e;
+  --danger-legacy: #c33;
+  --danger-notification: #a63f3f;
+
+  /* Radius, by the shape already in use rather than a new scale. Nothing here is
+     a true pill — 50% rounds the cart badge, the bag-dismiss button and the
+     header avatar, all of which are circles. */
+  --radius-control: 0.35rem;
+  --radius-card: 0.5rem;
+  --radius-surface: var(--ui-radius);
+  --radius-chip: 25px;
+  --radius-circle: 50%;
+
+  /* Control spacing. A full spacing scale is deliberately not invented here: the
+     storefront has none, and adopting one changes layout page by page. */
+  --space-control-gap: 0.5rem;
+  --space-control-pad-x: 1rem;
+  --space-control-pad-y: 0.65rem;
+  --space-stack: 1rem;
+
+  /* Minimum control heights actually in force; 44px is the touch floor. */
+  --control-height-min: 44px;
+  --control-height-button: 46px;
+  --control-height-large: 48px;
+}
 * {
   box-sizing: border-box;
 }
@@ -998,6 +1090,7 @@ legend span {
 }
 .collection-links a span:last-child {
   margin-left: auto;
+  transition: transform var(--motion-time) var(--motion-ease);
 }
 .form-grid select {
   width: 100%;
@@ -1178,6 +1271,10 @@ nav a,
 .button { box-shadow: 0 2px 0 #1e302719; transition: background-color var(--motion-time), box-shadow var(--motion-time), transform var(--motion-time); }
 .button:hover:not(:disabled) { background: #405343; box-shadow: 0 4px 12px #29382e14; }
 .button:active:not(:disabled) { box-shadow: none; }
+/* Variant-scoped because the generic hover rule above outranks `.button.secondary`
+   and `.button.destructive` on specificity, painting both with the primary green. */
+.button.secondary:hover:not(:disabled) { background: transparent; border-color: var(--border-strong); }
+.button.destructive:hover:not(:disabled) { background: var(--danger-action); }
 .text-link { text-underline-offset: 5px; }
 .product-card { min-width: 0; }
 .product-image img { transition: transform 300ms var(--motion-ease); }
@@ -1208,7 +1305,7 @@ nav a,
 .profile-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; margin-top: 30px; }
 .feedback { font-size: 13px; line-height: 1.7; color: #485c47; }
 .feedback:empty { display: none; }
-.feedback.feedback-failure:not(:empty) { color: #8a4628; }
+.feedback.feedback-failure:not(:empty) { color: var(--danger-text); }
 .bag-notice-region { position: fixed; left: 50%; transform: translateX(-50%); width: min(360px, calc(100vw - 32px)); top: max(calc(20px + env(safe-area-inset-top, 0px)), var(--bag-notice-top, 20px)); z-index: 60; pointer-events: none; }
 .bag-notice-region.is-bottom { top: auto; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
 .bag-notice { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 10px; margin: 0; padding: 8px 6px 10px 12px; background: #fffdf7; color: #29382e; font-size: 13px; line-height: 1.5; text-align: left; border: 1px solid var(--surface-border); border-radius: 3px; box-shadow: 0 10px 30px #29382e1f, 0 1px 3px #29382e0f; pointer-events: auto; }
@@ -1330,7 +1427,7 @@ nav a,
   .bag-notice-progress { display: none; }
 }
 .status-pill:not(.payment-pill) { text-transform: capitalize; }
-.feedback[role="alert"]:not(:empty), .field-error { color: #8a4628; }
+.feedback[role="alert"]:not(:empty), .field-error { color: var(--danger-text); }
 main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1; font-size: 12px; color: #626c60; }
 .quantity-control:focus-within { outline: 3px solid #9a542e; outline-offset: 4px; }
 
@@ -1374,13 +1471,13 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 .account-menu-popover { position: absolute; top: calc(100% + 10px); right: 0; z-index: 40; display: flex; flex-direction: column; min-width: 200px; padding: 6px; border: 1px solid #e2e0d4; border-radius: 6px; background: #fffdf7; box-shadow: 0 12px 28px #29382e14; }
 .account-menu .account-menu-popover a, .account-menu .account-menu-popover button { display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 4px; background: transparent; color: var(--color-ink); font-size: var(--type-functional); text-align: left; text-decoration: none; overflow-wrap: anywhere; transition: background var(--motion-time), color var(--motion-time); }
 .account-menu .account-menu-popover a::after { display: none; }
-.account-menu-popover a:hover, .account-menu-popover button:hover:not(:disabled), .account-menu-popover a:focus-visible, .account-menu-popover button:focus-visible { background: #eaeade; outline: none; }
+.account-menu-popover a:hover, .account-menu-popover button:hover:not(:disabled), .account-menu-popover a:focus-visible, .account-menu-popover button:focus-visible { background: #eaeade; }
 .account-menu-popover button:disabled { color: #626c60; cursor: default; }
 .account-menu-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; color: #4f5a49; flex-shrink: 0; }
 .account-menu-popover a:hover .account-menu-icon, .account-menu-popover button:hover:not(:disabled) .account-menu-icon, .account-menu-popover a:focus-visible .account-menu-icon, .account-menu-popover button:focus-visible .account-menu-icon { color: var(--color-ink); }
 .account-menu-label { line-height: 1.4; }
 .account-menu .account-menu-popover .account-menu-signout { margin-top: 4px; padding: 4px 12px 0 12px; border-top: 1px solid #e2e0d4 !important; border-radius: 0 0 4px 4px; }
-.account-menu-error { position: absolute; top: calc(100% + 10px); right: 0; z-index: 41; width: 220px; margin: 0; padding: 10px 12px; border: 1px solid #d9b9a4; border-radius: 4px; background: #fff8f2; color: #8a4628; font-size: var(--type-meta); box-shadow: 0 10px 24px #29382e14; }
+.account-menu-error { position: absolute; top: calc(100% + 10px); right: 0; z-index: 41; width: 220px; margin: 0; padding: 10px 12px; border: 1px solid #d9b9a4; border-radius: 4px; background: #fff8f2; color: var(--danger-text); font-size: var(--type-meta); box-shadow: 0 10px 24px #29382e14; }
 @media (max-width: 700px) { .account-menu-popover { right: 0; left: auto; max-width: calc(100vw - 32px); } }
 .footer-staff-access svg { flex-shrink: 0; }
 .footer-staff-access p { font-size: .75rem; color: #626c60; margin: 0; }
@@ -1476,7 +1573,7 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 /* Address management */
 .address-manager { max-width: 40rem; margin: 2rem 0; }
 .address-manager h2 { font: normal 28px/1.25 Georgia, serif; margin-bottom: 0.5rem; }
-.address-count { color: #68685e; font-size: 0.875rem; margin-bottom: 1.5rem; }
+.address-count { color: var(--text-muted-warm); font-size: 0.875rem; margin-bottom: 1.5rem; }
 .address-error { background: #fee; border: 1px solid #fcc; color: #c33; padding: 0.75rem 1rem; margin-bottom: 1rem; border-radius: 4px; }
 .add-address-btn { background: #293c2f; color: #fffdf8; border: none; padding: 0.75rem 1.5rem; font-size: 1rem; cursor: pointer; min-height: 48px; margin-bottom: 1.5rem; }
 .add-address-btn:hover { background: #1e2d22; }
@@ -1499,8 +1596,8 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 .set-default-btn { font-weight: 600; }
 .delete-btn { color: #c33; border-color: #fcc; }
 .delete-btn:hover { background: #fee; }
-.no-addresses { color: #68685e; font-style: italic; padding: 2rem 0; text-align: center; }
-.address-form { border: 1px solid var(--surface-border, #e6dfd2); background: #fffdf8; padding: 1.5rem; margin-bottom: 1.5rem; }
+.no-addresses { color: var(--text-muted-warm); font-style: italic; padding: 2rem 0; text-align: center; }
+.address-form { border: 1px solid var(--surface-border, #e6dfd2); background: var(--ui-surface); padding: 1.5rem; margin-bottom: 1.5rem; }
 .address-form h3 { font: normal 22px/1.3 Georgia, serif; margin: 0 0 1.25rem; }
 .form-field { margin-bottom: 1rem; }
 .form-field label { display: block; font-weight: 600; margin-bottom: 0.5rem; }
@@ -1509,8 +1606,9 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 .form-field input:focus,
 .form-field select:focus { outline: 2px solid #293c2f; outline-offset: -1px; }
 .checkbox-field label { display: flex; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; }
+.address-form .checkbox-field label { min-height: 44px; }
 .checkbox-field input[type="checkbox"] { width: auto; min-height: auto; margin: 0; }
-.small-note { font-size: 0.875rem; color: #68685e; margin-top: 0.25rem; }
+.small-note { font-size: 0.875rem; color: var(--text-muted-warm); margin-top: 0.25rem; }
 .form-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
 .save-btn { background: #293c2f; color: #fffdf8; border: none; padding: 0.75rem 1.5rem; font-size: 1rem; cursor: pointer; min-height: 48px; font-weight: 600; }
 .save-btn:hover { background: #1e2d22; }
@@ -1524,13 +1622,13 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 /* Checkout saved addresses */
 .saved-addresses-section { margin: 1.5rem 0; padding: 1rem; background: #f7f5ef; border: 1px solid var(--surface-border, #e6dfd2); }
 .saved-address-list { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem; }
-.saved-address-option { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.75rem; border: 1px solid var(--surface-border, #e6dfd2); background: #fffdf8; cursor: pointer; min-height: 48px; }
+.saved-address-option { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.75rem; border: 1px solid var(--surface-border, #e6dfd2); background: var(--ui-surface); cursor: pointer; min-height: 48px; }
 .saved-address-option:hover { background: #f7f5ef; }
 .saved-address-option:has(input:checked) { border-color: #293c2f; border-width: 2px; background: #eaeade; }
 .saved-address-option input[type="radio"] { margin-top: 0.25rem; flex-shrink: 0; }
 .saved-address-preview { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; flex: 1; }
 .saved-address-preview strong { font-weight: 600; }
-.saved-address-preview span { font-size: 0.875rem; color: #68685e; overflow-wrap: anywhere; }
+.saved-address-preview span { font-size: 0.875rem; color: var(--text-muted-warm); overflow-wrap: anywhere; }
 .save-address-section { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--surface-border, #e6dfd2); }
 .save-address-checkbox { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; cursor: pointer; min-height: 48px; }
 .save-address-checkbox input[type="checkbox"] { width: auto; min-height: auto; margin: 0; }
