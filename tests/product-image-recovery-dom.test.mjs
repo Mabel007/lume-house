@@ -384,7 +384,8 @@ test('a delayed retry success does not steal focus after focus moves to a thumbn
 
 test('gallery CSS keeps 64px previews, touch floors, a selected marker and a separate focus ring',async()=>{
  const css=await readFile(new URL('../src/features/products/productGallery.css',import.meta.url),'utf8');
- assert.match(css,/\.product-gallery-thumb\s*{[^}]*width:\s*64px[^}]*height:\s*64px/);
+ assert.match(css,/\.product-gallery-thumb\s*{[^}]*position:\s*relative[^}]*width:\s*64px[^}]*height:\s*64px/);
+ assert.match(css,/\.product-gallery-thumb img\s*{[^}]*position:\s*absolute[^}]*inset:\s*0[^}]*height:\s*100%[^}]*object-fit:\s*contain/);
  assert.match(css,/\.product-gallery-controls button\s*{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/);
  assert.match(css,/button\[aria-pressed="true"\]/);
  assert.match(css,/button:focus-visible\s*{[^}]*--focus-accent/);
