@@ -755,9 +755,11 @@ test("Product Details groups add action and Cart link in one stable actions row"
   const details = readFileSync("src/features/products/ProductDetailsPage.tsx", "utf8");
   const group = details.match(/<div className="product-details-actions">[\s\S]*?<\/div>/);
   assert.ok(group, "actions group wraps the add button and View Cart link");
-  assert.match(group[0], /product-details-add/);
+  assert.match(group[0], /product-details-buy/);
+  assert.match(group[0], /button secondary product-details-add/, "Add is visually secondary without changing its native button");
   assert.doesNotMatch(group[0], /role="status"|className="feedback"/, "the migrated inline feedback slot is removed");
   assert.match(group[0], /to="\/cart">View your Cart/);
+  assert.ok(group[0].indexOf("product-details-buy") < group[0].indexOf("product-details-add"), "Buy Now stays first in the action order");
   assert.ok(group[0].indexOf("product-details-add") < group[0].indexOf('to="/cart"'), "focus order: add button before Cart link");
   const css = readFileSync("src/styles.css", "utf8");
   assert.match(css, /\.product-details-actions \{ display: flex; flex-direction: column;/);
@@ -789,6 +791,53 @@ test("Product Details has a visible Quantity label and keeps its native number i
     assert.ok(buy, "Buy Now stays a native button");
     assert.equal(buy.type, "button");
   } finally { dom.window.close(); }
+});
+
+test("PDP presentation marks native option states and survives long copy and large prices", () => {
+  const choices = [
+    { id: 'blue', productId: 'fixture', options: { Color: 'Blue' }, isDefault: false, price: 2000, currency: 'NLE', inventoryPolicy: 'tracked', available: true },
+    { id: 'red', productId: 'fixture', options: { Color: 'Red' }, isDefault: false, price: 2200, currency: 'NLE', inventoryPolicy: 'tracked', available: false },
+  ];
+  const mixedDom = new JSDOM(renderDetails({ ...fixture, variants: choices }));
+  try {
+    const document = mixedDom.window.document;
+    const available = optionRadio(document, 'blue');
+    const unavailable = optionRadio(document, 'red');
+    const availableLabel = available.closest('label');
+    const unavailableLabel = unavailable.closest('label');
+    assert.equal(available.type, 'radio');
+    assert.equal(available.name, `variant-${fixture.id}`);
+    assert.equal(available.getAttribute('tabindex'), null, 'native radio tab order is untouched');
+    assert.equal(availableLabel.className, 'variant-option', 'an idle option takes only the scoped base class');
+    assert.equal(availableLabel.querySelector('.variant-option-copy .variant-option-price')?.textContent?.startsWith('NLE 20'), true);
+    assert.equal(unavailable.disabled, true, 'the unavailable radio remains natively disabled');
+    assert.equal(unavailableLabel.className, 'variant-option variant-option-unavailable');
+    assert.match(unavailableLabel.textContent, /Red — Unavailable/, 'the visible unavailable treatment is preserved');
+    assert.ok(unavailableLabel.querySelector('.variant-option-copy'), 'long option copy has a wrapping host');
+    assert.equal(document.querySelectorAll('[role="radio"]').length, 0, 'no custom radio replacement is introduced');
+  } finally { mixedDom.window.close(); }
+
+  const longName = 'A deliberately long hand-finished colourway description for wrapping';
+  const longProduct = {
+    ...fixture,
+    name: longName,
+    variants: [{ id: 'long', productId: 'fixture', options: { Colourway: longName }, isDefault: false, price: 99999999, currency: 'NLE', inventoryPolicy: 'untracked' }],
+  };
+  const longHtml = renderDetails(longProduct);
+  assert.match(longHtml, /NLE 999,999\.99/, 'large integer minor units stay centrally formatted');
+  const longDom = new JSDOM(longHtml);
+  try {
+    const copy = longDom.window.document.querySelector('.variant-option-copy');
+    assert.ok(copy, 'the variant copy wrapper renders');
+    assert.ok(copy.textContent.includes(longName), 'long names are not truncated from the DOM');
+    assert.ok(copy.querySelector('.variant-option-price')?.textContent.includes('NLE 999,999.99'));
+  } finally { longDom.window.close(); }
+
+  const css = readFileSync('src/styles.css', 'utf8');
+  assert.match(css, /\.product-details-price \.currency-estimate \{/, 'estimate hierarchy is PDP-scoped');
+  assert.match(css, /\.variant-options label\.variant-option\.variant-option-selected/);
+  assert.match(css, /\.variant-options label\.variant-option\.variant-option-unavailable/);
+  assert.match(css, /@media \(max-width: 700px\)[^@]*\.product-details-actions \.button \{ width: 100%/);
 });
 
 test("account initials handle whitespace, single names, missing names and Unicode graphemes", () => {
@@ -909,7 +958,7 @@ test('tracked Product Details refuses unverified or unavailable stock without sh
   assert.match(html,/currently unavailable/);assert.match(html,/disabled=""/);assert.doesNotMatch(html,/Only \d+ left/);
  }
  const html=renderDetails({...product,variants:[{...variant,available:true}]});
- assert.match(html,/Available to add to your Cart/);assert.doesNotMatch(html,/<button[^>]*class="button product-details-add"[^>]*disabled/);
+ assert.match(html,/Available to add to your Cart/);assert.doesNotMatch(html,/<button[^>]*class="button secondary product-details-add"[^>]*disabled/);
 });
 test('unavailable single-option cards explain the state instead of showing a disabled Add to Cart action',()=>{
  const base={id:'fixture',productId:'fixture',options:{},isDefault:true,price:1800,currency:'NLE',inventoryPolicy:'tracked'};

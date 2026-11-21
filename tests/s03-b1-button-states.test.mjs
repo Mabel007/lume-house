@@ -779,3 +779,85 @@ test("PDP-03A the PDP stepper group keeps the shared focus ring", () => {
   assert.equal(resolve("outline-offset", group).value, "4px");
 });
 
+// ---------------------------------------------------------------------------
+// PDP-03B — presentation only. The resolver checks which scoped declaration wins;
+// browser measurements and screenshots remain separate visual evidence.
+// ---------------------------------------------------------------------------
+const pdpCopyAncestors = () => chain(["product-details-copy"], ["product-details"]);
+const pdpOption = (...classes) => ({
+  tag: "label", classes: ["variant-option", ...classes], id: undefined, attrs: {}, states: new Set(),
+  ancestors: chain(["variant-options"], ["product-details-copy"], ["product-details"]),
+});
+const pdpAction = (classes, states = []) => ({
+  tag: "button", classes, id: undefined, attrs: {}, states: new Set(states),
+  ancestors: chain(["product-details-actions"], ["product-details"]),
+});
+
+test("PDP-03B NLE price leads and the secondary estimate is scoped to the PDP", () => {
+  const price = { tag: "p", classes: ["product-details-price"], id: undefined, attrs: {}, states: new Set(), ancestors: pdpCopyAncestors() };
+  assert.match(readFileSync("src/styles.css", "utf8"), /\.product-details-price \{[^}]*font: normal clamp\(2rem,3vw,2\.5rem\)\/1\.1 Georgia,serif/);
+  assert.equal(resolve("font-variant-numeric", price).value, "tabular-nums lining-nums");
+  assert.equal(resolve("overflow-wrap", price).value, "anywhere", "large NLE values wrap instead of clipping");
+
+  const estimate = { tag: "span", classes: ["currency-estimate"], id: undefined, attrs: {}, states: new Set(), ancestors: chain(["product-details-price"], ["product-details-copy"], ["product-details"]) };
+  const size = resolve("font-size", estimate);
+  assert.equal(size.value, "var(--type-meta)");
+  assert.equal(size.selector, ".product-details-price .currency-estimate");
+  assert.equal(resolve("font-family", estimate).value, "var(--font-sans)");
+  assert.equal(resolve("color", estimate).value, "var(--text-muted-warm)");
+  assert.equal(resolve("font-weight", estimate).value, "400");
+});
+
+test("PDP-03B selected and unavailable option cues stay scoped to native labels", () => {
+  const idle = pdpOption();
+  assert.equal(resolve("background", idle).value, "var(--color-surface-card)");
+
+  const selected = pdpOption("variant-option-selected");
+  assert.equal(resolve("border-color", selected).value, "var(--color-selected)");
+  assert.equal(resolve("background", selected).value, "#e9eee1");
+  assert.equal(resolve("box-shadow", selected).value, "inset 3px 0 0 var(--color-selected)");
+  assertToken("--color-selected", "#2d4033");
+  const transition = resolve("transition", selected).value;
+  for (const property of ["background-color", "border-color", "box-shadow"])
+    assert.ok(transition.includes(`${property} var(--motion-time)`), `the selected ${property} uses the shared duration`);
+
+  const unavailable = pdpOption("variant-option-unavailable");
+  assert.equal(resolve("background", unavailable).value, "#f6f4ed");
+  assert.equal(resolve("color", unavailable).value, "var(--text-muted)");
+  assert.equal(resolve("cursor", unavailable).value, "not-allowed");
+  const both = pdpOption("variant-option-selected", "variant-option-unavailable");
+  assert.equal(resolve("background", both).value, "#f6f4ed", "unavailability still wins if stock changes after selection");
+
+  const copy = { tag: "span", classes: ["variant-option-copy"], id: undefined, attrs: {}, states: new Set(), ancestors: chain(["variant-options"], ["product-details-copy"], ["product-details"]) };
+  assert.equal(resolve("overflow-wrap", copy).value, "anywhere", "long native option text wraps");
+  const reduced = rulesFor("refinement").find((rule) => rule.ancestry.some((guard) => guard.includes("prefers-reduced-motion: reduce")));
+  assert.ok(reduced, "the shared reduced-motion guard is present");
+  assert.match(reduced.body, /transition-duration:\s*\.01ms\s*!important/, "the scoped transitions collapse under reduced motion");
+});
+
+test("PDP-03B Buy is primary, Add is secondary, and narrow actions share one width", () => {
+  const buy = pdpAction(["button", "product-details-buy"]);
+  const add = pdpAction(["button", "secondary", "product-details-add"]);
+  assert.equal(resolve("background", buy).value, "var(--color-selected)");
+  assert.equal(resolve("border-color", buy).value, "var(--color-selected)");
+  assert.equal(resolve("font-weight", buy).value, "600");
+  assert.equal(resolve("background", add).value, "transparent");
+  assert.equal(resolve("border-color", add).value, "var(--border-strong)");
+  assert.equal(resolve("color", add).value, "var(--color-ink)");
+  assert.equal(resolve("font-weight", add).value, "600");
+
+  const hoveredAdd = pdpAction(["button", "secondary", "product-details-add"], ["hover"]);
+  assert.equal(resolve("background", hoveredAdd).value, "var(--color-surface-sunken)");
+  assert.equal(resolve("border-color", hoveredAdd).value, "var(--color-selected)");
+
+  const actions = { tag: "div", classes: ["product-details-actions"], id: undefined, attrs: {}, states: new Set(), ancestors: chain(["product-details"]) };
+  assert.equal(resolve("align-items", actions).value, "flex-start", "desktop actions retain their authored width");
+  const mobile = { media: "(max-width: 700px)" };
+  assert.equal(resolve("align-items", actions, mobile).value, "stretch");
+  for (const button of [buy, add]) {
+    assert.equal(resolve("width", button, mobile).value, "100%", "both purchase actions fill the same narrow column");
+    assert.equal(resolve("justify-content", button, mobile).value, "center");
+  }
+  assert.equal(resolve("min-height", buy).value, "var(--control-height-large, 48px)", "PDP-03A's floor is preserved");
+});
+
