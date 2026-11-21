@@ -1,34 +1,41 @@
 import { useEffect, useRef } from "react";
-import { useProducts } from "./ProductContext";
+import { useProducts, type ProductState } from "./ProductContext";
 import { UiStatus } from '../../components/UiStatus';
 
 export function ProductStatus({ onRecover }: { onRecover?: () => void } = {}) {
   const { state, refresh } = useProducts();
-  // The error control disappears while the retry is in flight, so focus would
-  // otherwise fall to <body> when the collection returns. The parent supplies
-  // the heading to focus once the retry has genuinely succeeded.
+  // The status controls disappear while a reload is in flight, so focus would
+  // otherwise fall to <body>. Recovery is owned by the exact reload the user
+  // requested: ProductProvider increments a revision first and only sets
+  // "loading" in a later effect, so a ready render alone is not proof of success.
   const retryPending = useRef(false);
-  const retryReloaded = useRef(false);
+  const loadingState = useRef<ProductState | null>(null);
   useEffect(() => {
     if (!retryPending.current) return;
     if (state.status === "loading") {
-      // ProductProvider keeps the previous "error" state for the render that
-      // starts the reload, so only a reload that actually ran may clear the
-      // pending intent before it resolves.
-      retryReloaded.current = true;
-    } else if (state.status === "ready") {
-      retryPending.current = false;
-      retryReloaded.current = false;
-      onRecover?.();
-    } else if (retryReloaded.current) {
-      // A retry that failed again must not steal focus on a later success.
-      retryPending.current = false;
-      retryReloaded.current = false;
+      if (loadingState.current === null) {
+        loadingState.current = state;
+      } else if (loadingState.current !== state) {
+        // A different reload started before this one settled. Its success is
+        // unrelated and must not consume the earlier recovery intent.
+        retryPending.current = false;
+        loadingState.current = null;
+      }
+      return;
     }
-  }, [state.status, onRecover]);
+    if (!loadingState.current) return;
+    if (state.status === "ready") {
+      retryPending.current = false;
+      loadingState.current = null;
+      onRecover?.();
+    } else if (state.status === "error") {
+      retryPending.current = false;
+      loadingState.current = null;
+    }
+  }, [state, onRecover]);
   function retry() {
     retryPending.current = true;
-    retryReloaded.current = false;
+    loadingState.current = null;
     refresh();
   }
   if (state.status === "loading")
@@ -54,7 +61,10 @@ export function ProductStatus({ onRecover }: { onRecover?: () => void } = {}) {
       <UiStatus kind="empty">
         <h2>A new collection is on its way.</h2>
         <p>There are no available products right now.</p>
-        <button className="button" onClick={refresh}>
+        {/* This button is removed while the reload is in flight, so it needs the
+            same recovery destination the error-state Try again button already
+            has: the collection heading once products are genuinely ready. */}
+        <button className="button" onClick={retry}>
           Refresh collection
         </button>
       </UiStatus>

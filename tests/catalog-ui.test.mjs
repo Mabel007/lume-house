@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 
 let server;
-let ProductContext, CartContext, AuthContext, ShopPage, CartPage, CheckoutPage;
+let ProductContext, CartContext, AuthContext, ShopPage, CartPage, CheckoutPage, ProductStatus;
 let contentPages, routeTitle, aboutFragmentTarget, productPathId;
 let Layout, SiteFooter, AccountExperience, accountInitials, ProductDetails, ProductDetailsPage;
 let NotificationProvider;
@@ -161,6 +161,9 @@ before(async () => {
   });
   ({ ProductContext } = await server.ssrLoadModule(
     "/src/features/products/ProductContext.ts",
+  ));
+  ({ ProductStatus } = await server.ssrLoadModule(
+    "/src/features/products/ProductStatus.tsx",
   ));
   ({ CartContext } = await server.ssrLoadModule(
     "/src/features/cart/CartContext.ts",
@@ -353,6 +356,156 @@ test("empty catalog does not fall back to demo products", () => {
   const html = render(ShopPage, { status: "ready", products: [] });
   assert.match(html, /There are no available products/);
   assert.doesNotMatch(html, /product-card|Everyday ceramic mug/);
+});
+
+test("long hosted names wrap inside the card without disturbing title, price and action order", async () => {
+  const { readFileSync } = await import("node:fs");
+  const name = "UninterruptedProductName".repeat(12);
+  const html = render(ShopPage, { status: "ready", products: [{ ...fixture, name }] }, []);
+  const card = html.match(/<article class="product-card"[\s\S]*?<\/article>/)?.[0] ?? "";
+  assert.ok(card, "a long hosted name still produces a card");
+  assert.match(card, new RegExp(`<h3><a[^>]*>${name}</a></h3>`), "the whole name stays in its link");
+  const title = card.indexOf("<h3>");
+  const price = card.indexOf('class="price"');
+  const action = card.indexOf('class="add-button"');
+  assert.ok(title >= 0 && price > title && action > price, "title, price and action keep their reading order");
+  const css = readFileSync("src/styles.css", "utf8");
+  const rule = css.match(/\.product-card h3\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(rule, /overflow-wrap:\s*anywhere/, "an unbroken name must wrap inside its narrow grid cell");
+});
+
+test("provider-sequenced empty refresh recovers focus only after its own reload succeeds", async () => {
+  // Mirrors ProductProvider's refresh sequence: a revision bump renders first
+  // with the previous ready state and a fresh inline onRecover; the loading
+  // state is set in a later effect. Each load is held open so the test can
+  // observe before, during and after the requested request.
+  async function withProvider(initialState, scenario) {
+    const dom = new JSDOM('<!doctype html><html><body><div id="root"></div><h2 id="destination" tabindex="-1">Pieces to live with.</h2></body></html>', { url: "http://localhost/" });
+    const names = ["window", "document", "Element", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "MutationObserver", "location"];
+    for (const name of names) Object.defineProperty(globalThis, name, { configurable: true, value: dom.window[name] });
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const document = dom.window.document;
+    const destination = document.getElementById("destination");
+    let recoveries = 0;
+    let pendingLoad = { current: null };
+    let externalRefresh = () => {};
+    let rerender = () => {};
+
+    function ProviderHarness() {
+      const [state, setState] = React.useState(initialState);
+      const [revision, setRevision] = React.useState(0);
+      const [callbackRevision, setCallbackRevision] = React.useState(0);
+      void callbackRevision;
+      const started = React.useRef(false);
+      const refreshRef = React.useRef(() => {});
+      refreshRef.current = () => setRevision((value) => value + 1);
+      externalRefresh = () => refreshRef.current();
+      rerender = () => setCallbackRevision((value) => value + 1);
+      React.useEffect(() => {
+        if (!started.current) { started.current = true; return; }
+        const controller = new AbortController();
+        async function load() {
+          setState({ status: "loading" });
+          try {
+            const products = await new Promise((resolve, reject) => {
+              pendingLoad.current = { resolve, reject };
+            });
+            if (!controller.signal.aborted) setState({ status: "ready", products });
+          } catch {
+            if (!controller.signal.aborted) setState({ status: "error" });
+          }
+        }
+        void load();
+        return () => controller.abort();
+      }, [revision]);
+      return React.createElement(
+        ProductContext.Provider,
+        { value: { state, refresh: () => refreshRef.current() } },
+        // A fresh inline callback on every render reproduces Shop's integration.
+        React.createElement(ProductStatus, {
+          onRecover: () => { recoveries += 1; destination.focus(); },
+        }),
+      );
+    }
+
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.getElementById("root"));
+    const click = async (label) => {
+      const button = [...document.querySelectorAll("button")].find((item) => item.textContent === label);
+      assert.ok(button, `the ${label} control exists`);
+      button.focus();
+      assert.equal(document.activeElement, button);
+      await React.act(() => { button.click(); });
+    };
+    const load = () => {
+      assert.ok(pendingLoad.current, "a reload must be in flight");
+      return pendingLoad.current;
+    };
+    try {
+      await React.act(() => { root.render(React.createElement(ProviderHarness)); });
+      return await scenario({
+        document,
+        destination,
+        click,
+        load,
+        rerender: () => rerender(),
+        refreshUnrelated: () => externalRefresh(),
+        recoveries: () => recoveries,
+      });
+    } finally {
+      try { await React.act(async () => { root.unmount(); }); } catch { /* teardown is best-effort */ }
+      delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+      for (const name of names) delete globalThis[name];
+      dom.window.close();
+    }
+  }
+
+  const empty = { status: "ready", products: [] };
+
+  await withProvider(empty, async ({ document, destination, click, load, rerender, recoveries }) => {
+    assert.equal(recoveries(), 0, "no recovery before the user asks for a reload");
+    assert.notEqual(document.activeElement, destination);
+    await click("Refresh collection");
+    assert.match(document.body.textContent, /Loading the collection/);
+    assert.equal(recoveries(), 0, "the intermediate ready render must not recover");
+    assert.equal(document.activeElement, document.body, "no focus is stolen while the collection is loading");
+    await React.act(() => { rerender(); });
+    assert.equal(recoveries(), 0, "callback identity churn during loading must not recover early");
+    await React.act(async () => { load().resolve([fixture]); });
+    assert.equal(recoveries(), 1, "the requested successful reload recovers exactly once");
+    assert.equal(document.activeElement, destination, "focus reaches the collection heading");
+    await React.act(() => { rerender(); });
+    assert.equal(recoveries(), 1, "callback identity churn after success must not duplicate recovery");
+  });
+
+  await withProvider(empty, async ({ document, destination, click, load, recoveries }) => {
+    await click("Refresh collection");
+    assert.match(document.body.textContent, /Loading the collection/);
+    assert.equal(recoveries(), 0);
+    await React.act(async () => { load().reject(new Error("offline")); });
+    assert.match(document.body.textContent, /The collection is unavailable/);
+    assert.equal(recoveries(), 0, "a failed reload never triggers success recovery");
+    assert.notEqual(document.activeElement, destination);
+    await click("Try again");
+    assert.match(document.body.textContent, /Loading the collection/);
+    assert.equal(recoveries(), 0);
+    await React.act(async () => { load().resolve([fixture]); });
+    assert.equal(recoveries(), 1, "error-state Try still recovers exactly once");
+    assert.equal(document.activeElement, destination);
+  });
+
+  await withProvider(empty, async ({ document, destination, click, load, refreshUnrelated, recoveries }) => {
+    await click("Refresh collection");
+    assert.match(document.body.textContent, /Loading the collection/);
+    assert.equal(recoveries(), 0);
+    await React.act(() => { refreshUnrelated(); });
+    assert.match(document.body.textContent, /Loading the collection/, "an unrelated reload supersedes the requested one");
+    assert.equal(recoveries(), 0);
+    await React.act(async () => { load().resolve([fixture]); });
+    assert.doesNotMatch(document.body.textContent, /Loading the collection|collection is unavailable|A new collection/);
+    assert.equal(recoveries(), 0, "an unrelated later success must not consume an old recovery intent");
+    assert.notEqual(document.activeElement, destination, "an unrelated success must not steal focus");
+  });
 });
 test("ready catalog feeds cards, cart prices and guest sign-in checkout", () => {
   const state = { status: "ready", products: [fixture] };

@@ -436,6 +436,9 @@ h1 {
 .product-card h3 {
   font-size: 14px;
   font-weight: 500;
+  /* Hosted names are editable. A long unbroken name must wrap inside its card
+     instead of running over the price, estimate or action beneath it. */
+  overflow-wrap: anywhere;
 }
 .price {
   font-size: 13px;
