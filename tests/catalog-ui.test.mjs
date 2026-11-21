@@ -622,8 +622,8 @@ function renderLayout(path, cartState = { items, status: "ready", error: null, r
           React.createElement(Routes,null,React.createElement(Route,{element:React.createElement(Layout)},
             React.createElement(Route,{path:"*",element:React.createElement("h1",null,"Page")}))))))));
 }
-function renderDetails(product) {
-  return renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(CartContext.Provider,{value:{items:[],dispatch(){},status:"ready"}},React.createElement(NotificationProvider,null,React.createElement(ProductDetails,{product})))));
+function renderDetails(product, cartState = { items: [], dispatch() {}, status: "ready" }) {
+  return renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(CartContext.Provider,{value:cartState},React.createElement(NotificationProvider,null,React.createElement(ProductDetails,{product})))));
 }
 function optionRadio(document, value) {
   const option = document.querySelector(`input[type="radio"][value="${value}"]`);
@@ -959,6 +959,99 @@ test('tracked Product Details refuses unverified or unavailable stock without sh
  }
  const html=renderDetails({...product,variants:[{...variant,available:true}]});
  assert.match(html,/Available to add to your Cart/);assert.doesNotMatch(html,/<button[^>]*class="button secondary product-details-add"[^>]*disabled/);
+});
+test("Product Details purchase guidance explains blocked actions without a second live region", () => {
+  const defaultVariant = { id: 'default:fixture', productId: 'fixture', options: {}, isDefault: true, price: 1800, currency: 'NLE', inventoryPolicy: 'untracked' };
+  const product = { ...fixture, variants: [defaultVariant] };
+  const guidanceId = 'product-details-purchase-guidance';
+  const cartState = overrides => ({ items: [], dispatch() {}, status: 'ready', ...overrides });
+  const guidanceIn = html => {
+    const dom = new JSDOM(html);
+    const document = dom.window.document;
+    const note = document.querySelector('.product-details-guidance');
+    assert.ok(note, 'the visible guidance renders');
+    assert.equal(note.id, guidanceId);
+    assert.equal(note.getAttribute('role'), null, 'guidance is not a second alert/status publisher');
+    assert.equal(note.getAttribute('aria-live'), null, 'the shared notice remains the only live region');
+    assert.equal(document.querySelectorAll(`#${guidanceId}`).length, 1, 'the described-by id is unique');
+    assert.ok(document.querySelector('.product-details-actions a[href="/cart"]'), 'the existing Cart link remains');
+    return { dom, document, note, buy: purchaseButton(document, 'product-details-buy'), add: purchaseButton(document, 'product-details-add') };
+  };
+
+  {
+    const { dom, note, buy, add } = guidanceIn(renderDetails(product));
+    try {
+      assert.equal(note.textContent, 'Available to add to your Cart.');
+      assert.equal(buy.getAttribute('aria-describedby'), null, 'an available piece does not explain a blocked Buy');
+      assert.equal(add.getAttribute('aria-describedby'), null, 'an available piece does not explain a blocked Add');
+      assert.equal(buy.disabled, false);
+      assert.equal(add.disabled, false);
+    } finally { dom.window.close(); }
+  }
+
+  const choices = [
+    { id: 'blue', productId: 'fixture', options: { Color: 'Blue' }, isDefault: false, price: 2000, currency: 'NLE', inventoryPolicy: 'tracked', available: true },
+    { id: 'red', productId: 'fixture', options: { Color: 'Red' }, isDefault: false, price: 2200, currency: 'NLE', inventoryPolicy: 'tracked', available: false },
+  ];
+  {
+    const { dom, note, buy, add } = guidanceIn(renderDetails({ ...product, variants: choices }));
+    try {
+      assert.equal(note.textContent, 'Choose an available combination.');
+      assert.equal(buy.getAttribute('aria-describedby'), guidanceId);
+      assert.equal(add.getAttribute('aria-describedby'), guidanceId);
+      assert.equal(buy.disabled, true);
+      assert.equal(add.disabled, true);
+    } finally { dom.window.close(); }
+  }
+  {
+    const { dom, note, buy, add } = guidanceIn(renderDetails({ ...product, variants: choices.map(choice => ({ ...choice, available: false })) }));
+    try {
+      assert.equal(note.textContent, 'This piece is currently unavailable.');
+      assert.equal(buy.getAttribute('aria-describedby'), guidanceId);
+      assert.equal(add.getAttribute('aria-describedby'), guidanceId);
+      assert.equal(buy.disabled, true);
+      assert.equal(add.disabled, true);
+    } finally { dom.window.close(); }
+  }
+
+  {
+    const { dom, note, buy, add } = guidanceIn(renderDetails(product, cartState({ items: [{ variantId: defaultVariant.id, quantity: 99 }] })));
+    try {
+      assert.equal(note.textContent, 'Reduce the quantity or review your Cart before adding this piece.');
+      assert.equal(add.getAttribute('aria-describedby'), guidanceId);
+      assert.equal(add.disabled, true);
+      assert.match(add.textContent, /Quantity limit reached/);
+      assert.equal(buy.getAttribute('aria-describedby'), null, 'a quantity cap never explains or blocks Buy Now');
+      assert.equal(buy.disabled, false);
+    } finally { dom.window.close(); }
+  }
+
+  const savedCartCases = [
+    [cartState({ status: 'deferred' }), 'Open your saved Cart before adding this piece.'],
+    [cartState({ status: 'loading' }), 'Your Cart is still loading. Wait for it to finish before adding this piece.'],
+    [cartState({ status: 'saving' }), 'Saving your Cart. Wait for it to finish before adding this piece.'],
+    [cartState({ error: 'Your saved Cart could not be restored or merged.' }), 'Your saved Cart needs attention. Use the Retry saved Cart control above before adding this piece.'],
+    [cartState({ recovery: { status: 'required', message: 'Review your saved Cart.' } }), 'Your saved Cart needs attention. Use the saved Cart controls above before adding this piece.'],
+    [cartState({ recovery: { status: 'refreshing', message: 'Review your saved Cart.' } }), 'Refreshing your saved Cart. Wait for it to finish before adding this piece.'],
+    [cartState({ recovery: { status: 'failed', message: 'Review your saved Cart.' } }), 'Your saved Cart needs attention. Use the saved Cart controls above before adding this piece.'],
+    [cartState({ recovery: { status: 'completed', message: 'Review your saved Cart.' } }), 'Available to add to your Cart.'],
+  ];
+  for (const [state, expected] of savedCartCases) {
+    const { dom, note, buy, add } = guidanceIn(renderDetails(product, state));
+    try {
+      assert.equal(note.textContent, expected);
+      const needsAttention = expected !== 'Available to add to your Cart.';
+      assert.equal(add.getAttribute('aria-describedby'), needsAttention ? guidanceId : null);
+      const blockedByStatus = ['deferred', 'loading', 'saving', 'error'].includes(state.status);
+      assert.equal(add.disabled, blockedByStatus, 'deferred extends the existing status-based Add blocks without gating ready or recovery states');
+      assert.equal(buy.getAttribute('aria-describedby'), null, 'saved Cart state never explains or blocks Buy Now');
+      assert.equal(buy.disabled, false, 'Buy Now stays independent of saved Cart state');
+    } finally { dom.window.close(); }
+  }
+
+  const css = readFileSync('src/styles.css', 'utf8');
+  assert.match(css, /\.product-details \.product-details-guidance \{/, 'guidance styling stays PDP-scoped');
+  assert.doesNotMatch(css, /^\.product-details-guidance\s*\{/m, 'no unscoped guidance rule is introduced');
 });
 test('unavailable single-option cards explain the state instead of showing a disabled Add to Cart action',()=>{
  const base={id:'fixture',productId:'fixture',options:{},isDefault:true,price:1800,currency:'NLE',inventoryPolicy:'tracked'};

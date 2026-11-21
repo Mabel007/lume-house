@@ -249,6 +249,15 @@ test("details add is blocked when the existing quantity plus the requested amoun
   const add = buttonByLabel("Add Fixture mug to Cart");
   assert.equal(add.disabled, true, "99 in Cart + 1 requested exceeds the limit");
   assert.match(add.textContent, /Quantity limit reached/);
+  const guidance = host.querySelector(".product-details-guidance");
+  assert.ok(guidance);
+  assert.equal(guidance.textContent, "Reduce the quantity or review your Cart before adding this piece.");
+  assert.equal(add.getAttribute("aria-describedby"), guidance.id, "the cap explanation is associated with Add");
+  assert.equal(guidance.getAttribute("role"), null, "the explanation is not a duplicate live region");
+  assert.equal(guidance.getAttribute("aria-live"), null, "the shared toast remains the only live announcement");
+  const buy = button("Buy Now");
+  assert.equal(buy.disabled, false, "the quantity cap stays independent of Buy Now");
+  assert.equal(buy.getAttribute("aria-describedby"), null, "the cap explanation belongs to Add only");
   await click(add);
   assert.equal(readStored().items.map(item => item.quantity).join(), "99", "the blocked add never mutates the cart");
   assert.equal(host.textContent.includes("Added"), false);
