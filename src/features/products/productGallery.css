@@ -1,8 +1,58 @@
+/* Gallery-local refinements only. The 1:1 frame, contain fit and PDP grid live in
+   styles.css; scoped selectors keep import order from changing those contracts. */
 .product-gallery { min-width: 0; }
+.product-gallery .product-details-image {
+  position: relative;
+  border: 1px solid var(--border-hairline-warm);
+  border-radius: var(--radius-card);
+}
 .product-details-image [role="img"] { display: grid; place-items: center; width: 100%; height: 100%; padding: 1rem; text-align: center; }
+.product-gallery-ordinal {
+  position: absolute; left: 0; bottom: 0; margin: 0;
+  padding: .35rem .6rem;
+  border-top: 1px solid var(--border-hairline-warm);
+  border-right: 1px solid var(--border-hairline-warm);
+  border-top-right-radius: var(--radius-control);
+  background: var(--color-surface-inset);
+  color: var(--text-muted);
+  font-size: 12px; line-height: 1.4;
+  pointer-events: none;
+}
+.product-gallery-loading {
+  position: absolute; right: 0; top: 0;
+  padding: .35rem .6rem;
+  border-left: 1px solid var(--border-hairline-warm);
+  border-bottom: 1px solid var(--border-hairline-warm);
+  border-bottom-left-radius: var(--radius-control);
+  background: var(--color-surface-inset);
+  color: var(--text-muted);
+  font-size: 12px; line-height: 1.4;
+  pointer-events: none;
+}
 .product-gallery-controls { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
-.product-gallery-controls button { min-height: 44px; padding: .5rem .75rem; border: 1px solid currentColor; border-radius: .5rem; }
-.product-gallery-controls button[aria-pressed="true"] { font-weight: 700; background: #eee7dc; }
+.product-gallery-controls button {
+  display: inline-flex; align-items: center; gap: .5rem;
+  min-width: 44px; min-height: 44px;
+  padding: .35rem .5rem;
+  border: 1px solid var(--border-hairline-warm);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-card-alt);
+  text-align: left;
+}
+.product-gallery-thumb {
+  flex: 0 0 64px;
+  display: grid; place-items: center;
+  width: 64px; height: 64px;
+  overflow: hidden;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-inset);
+}
+.product-gallery-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.product-gallery-thumb-unavailable { color: var(--text-muted); font-size: 14px; }
+.product-gallery-choice { display: inline-flex; align-items: center; gap: .25rem; min-width: 0; overflow-wrap: anywhere; }
+.product-gallery-selected-marker { flex: 0 0 1em; width: 1em; text-align: center; color: var(--color-selected); }
+.product-gallery-controls button[aria-pressed="true"] { border-color: var(--color-selected); background: var(--color-surface-sunken); font-weight: 700; }
 .product-gallery-controls button[aria-disabled="true"] { cursor: progress; opacity: .7; }
-.product-gallery-controls button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
-.product-details-image:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.product-gallery-controls button:focus-visible { outline: var(--focus-ring-width-compact) solid var(--focus-accent); outline-offset: 3px; }
+.product-details-image:focus-visible { outline: var(--focus-ring-width) solid var(--focus-accent); outline-offset: var(--focus-ring-offset); }
