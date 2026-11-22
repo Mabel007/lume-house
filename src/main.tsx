@@ -20,6 +20,7 @@ import { HelpPage } from "./features/content/HelpPage";
 import { DeliveryPickupPage, ReturnsRefundsPage, PrivacyPage, TermsPage } from "./features/content/PolicyPages";
 import "./typography.css";
 import "./refinement.css";
+import "./motion.css";
 
 const router = createBrowserRouter(createRoutesFromElements(
             <Route element={<AuthProvider><ProductProvider><CartProvider><CurrencyProvider><NotificationProvider><Layout /></NotificationProvider></CurrencyProvider></CartProvider></ProductProvider></AuthProvider>}>

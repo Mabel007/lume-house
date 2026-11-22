@@ -2,7 +2,7 @@
 
 **Beautiful things live here.**
 
-Lumé House is a modern home and lifestyle e-commerce experience for Sierra Leone, built as a Naj Builds portfolio project and developed beyond its original HNG coursework.
+Lumé House is a modern home and lifestyle e-commerce experience for Sierra Leone, built as a Naj Builds portfolio project and developed beyond its original HNG coursework. It is a portfolio demonstration rather than a storefront serving live commercial customers (D1) — that limits infrastructure and automation scope, never security, authorization, data-integrity or payment-state rigor.
 
 **Live storefront:** https://lume.najbuilds.com  
 **Alternative production URL:** https://lume-house-delta.vercel.app  
@@ -26,7 +26,7 @@ Lumé House is a modern home and lifestyle e-commerce experience for Sierra Leon
 - Order-management and fulfilment interfaces, reporting, filtering and export workflows, with server-enforced permissions.
 - Restricted staff views alongside owner and legacy administration access. Inviting new members and finer delegated-role boundaries are **not released** and remain unfinished work.
 
-**Release status:** S02 — Sierra Leone country enforcement, saved addresses, order timeline and notifications — is live in production as of 2026-11-18 (candidate `8aa2df6`, merged as `9084f7d`). The earlier Batch 2 Buy Now, navigation and automatic-currency work is also released. Still not enabled: the transactional-email retry scheduler, which needs an owner-selected credential and scheduler before it will run. Current status and evidence: [S02 production release record](docs/s02-codex-remediation-complete.md).
+**Release status:** S02 — Sierra Leone country enforcement, saved addresses, order timeline and notifications — is live in production as of 2026-11-18 (candidate `8aa2df6`, merged as `9084f7d`). The earlier Batch 2 Buy Now, navigation and browser-locale display-currency initialization work is also released — that initialization reads the browser's own locale region subtag once and is not the deferred location-based currency detection (D6). Production checkout was owner-verified on 2026-11-18 with a single real order whose confirmation reached Gmail Primary; that is one transaction, not a deliverability or payment-settlement guarantee. The transactional-email retry scheduler is **cancelled and out of scope** by owner decision — no credential, cron job or trigger is to be configured, and failed emails are not automatically retried. **S03 — Premium UI, Editorial Design and Motion — is in progress.** Standing owner decisions D1–D7 and their authoritative links live in [`AGENTS.md`](AGENTS.md#owner-engineering-decisions); current status and evidence: [S02 production release record](docs/s02-codex-remediation-complete.md).
 
 ## Technology
 
@@ -58,7 +58,7 @@ Prices, inventory eligibility, order ownership and fulfilment charges are valida
 
 **Payments:** Orange Money and Afrimoney are currently checkout selections and order metadata, not live payment collection or verification integrations. Newly placed orders await payment confirmation. Never enter mobile-money PINs or OTPs in this application.
 
-**Email:** Resend is implemented server-side with durable order-confirmation jobs. Actual sending depends on per-environment configuration; staging may intentionally disable outgoing email. Email delivery is not a prerequisite for persisting a successfully placed order.
+**Email:** Resend is implemented server-side with durable order-confirmation jobs. Actual sending depends on per-environment configuration; staging may intentionally disable outgoing email. Email delivery is not a prerequisite for persisting a successfully placed order. There is no scheduler and no automatic retry (D2): an unsent job stays durable and requires an explicitly authorized action, so never describe failed email as automatically retried.
 
 ## Environments
 
@@ -97,6 +97,7 @@ Some database/security tests use a separately isolated local harness; see [Supab
 
 ## Key documentation
 
+- [`AGENTS.md`](AGENTS.md) — cross-agent entry point: invariants, validation gates, and the canonical **Owner engineering decisions** (D1–D7)
 - [Supabase backend and local validation](supabase/README.md)
 - [Buy Now integration and recovery](docs/buy-now-integration.md)
 - [Direct-order contract](docs/direct-order-contract.md)
@@ -105,12 +106,12 @@ Some database/security tests use a separately isolated local harness; see [Supab
 
 ## Current limitations and roadmap
 
-- Real mobile-money collection, verification and reconciliation are **not** integrated.
+- Real mobile-money collection, verification and reconciliation are **not** integrated, and adding it is deferred work (D6) rather than a current goal. Automatic location-based currency detection, browser push notifications, native mobile push and any expansion of production infrastructure are likewise out of scope; none of them may be introduced incidentally while changing UI, motion, notifications or checkout.
 - Customer payments remain awaiting confirmation after order placement.
-- Staging mail may be intentionally disabled; a verified production sender and deliverability require operational validation.
+- Staging mail may be intentionally disabled; a verified production sender and deliverability require operational validation. One owner-received production confirmation in Gmail Primary (2026-11-18) does not establish either. The four historical `resend_http_403` job failures are closed as historical, with no conclusively established root cause; they are reopened only by a new reproducible failure (D3). There is no automatic retry: the scheduler is cancelled (D2).
 - Broader accessibility, performance and cross-browser acceptance are ongoing.
-- A more granular **Owner / Admin / Staff** permission model and further storefront motion/design polish are planned.
-- Production release of the current Batch 2 candidate requires completion of its deployment, security and recovery gates.
+- A more granular **Owner / Admin / Staff** permission model and further storefront motion/design polish are planned; the permission work exists only on unmerged branches.
+- **Migration safety:** production migration `20261023002900` has applied schema objects with an incomplete ledger record. It must never be replayed and the ledger must not be auto-repaired; a read-only equivalence check precedes any future migration, and reconciliation needs explicit approval (D4).
 
 ## About
 

@@ -13,6 +13,7 @@ import { accountDisplayName } from "../features/account/accountIdentity";
 import { AccountMenu } from "./AccountMenu";
 import { NotificationBell } from "../features/notifications/NotificationBell";
 import { useCustomerSignOut } from "../features/auth/useCustomerSignOut";
+import { UiStatus } from "./UiStatus";
 
 export function Layout() {
   const { items, status, error, retry, recovery, refreshSavedCart } = useCart();
@@ -135,7 +136,11 @@ export function Layout() {
       <main id="main" ref={main} tabIndex={-1}>
         {!administration && status === "loading" && <p className="wrap" role="status">Loading your Cart…</p>}
         {!administration && status === "saving" && <p className="wrap" role="status">Saving your Cart…</p>}
-        {!administration && error && <div className="wrap" role="alert">{error} <button onClick={retry}>Retry saved Cart</button></div>}
+        {!administration && error && (
+          <UiStatus kind="error" className="wrap" action={<button type="button" className="button secondary" onClick={retry}>Retry saved Cart</button>}>
+            {error}
+          </UiStatus>
+        )}
         {!administration && recovery && (
           <div className="wrap cart-recovery" aria-busy={recovery.status === "refreshing"}>
             {recovery.status === "required" && <p className="cart-recovery-note">{recovery.message}</p>}

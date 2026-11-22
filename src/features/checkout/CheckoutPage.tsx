@@ -88,6 +88,8 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [saveNewAddress, setSaveNewAddress] = useState(false);
   const [newAddressLabel, setNewAddressLabel] = useState('Home');
+  const [newAddressLabelTouched, setNewAddressLabelTouched] = useState(false);
+  const [newAddressLabelNativeError, setNewAddressLabelNativeError] = useState('');
   function current(){return mounted.current&&identity.current===lifetime;}
   function accepted(id:string,attempt:CheckoutAttempt,ticket?:number|null){
     if(!current())return;
@@ -237,6 +239,12 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
   const cityError =
     showsError("city") || unsupportedCity ? problemFor("city") : undefined;
   const zoneError = showsError("delivery-zone") ? problemFor("delivery-zone") : undefined;
+  // The checkout form opts out of native constraint validation, so this field needs
+  // the same touched/attempted feedback the other customer fields get without
+  // joining `problems` (label persistence is deliberately optional at submission).
+  const newAddressLabelError = saveNewAddress && !newAddressLabel.trim()
+    ? (attempted || newAddressLabelTouched ? checkoutMessages.addressLabel : newAddressLabelNativeError)
+    : '';
   const paymentError =
     reusePhone || showsError("payment-phone") ? problemFor("payment-phone") : undefined;
   const contactError = showsError("contact-phone")
@@ -588,7 +596,10 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
                           </option>
                         ))}
                     </select>
-                    <p className="small-note" id="zone-help" role="status">
+                    {/* The summary below is the single polite live region for a zone
+                        change. This text stays available as the select's description
+                        instead of announcing the same fee a second time. */}
+                    <p className="small-note" id="zone-help">
                       {zone
                         ? `${zone.coverage}. Delivery: ${formatMoney(zone.fee)}.`
                         : "Select a zone to calculate delivery and your total."}
@@ -638,11 +649,19 @@ export function CheckoutPage({direct}:{direct?:DirectIntent} = {}) {
                             type="text"
                             value={newAddressLabel}
                             onChange={(e) => setNewAddressLabel(e.target.value)}
+                            onBlur={() => setNewAddressLabelTouched(true)}
+                            onInvalid={(event) => setNewAddressLabelNativeError(event.currentTarget.validationMessage)}
+                            onInput={(event) => { if (event.currentTarget.validity.valid) setNewAddressLabelNativeError(''); }}
                             maxLength={20}
                             required
                             placeholder="Home"
+                            aria-invalid={newAddressLabelError ? true : undefined}
+                            aria-describedby={newAddressLabelError ? 'new-address-label-error' : undefined}
                           />
                         </label>
+                        {newAddressLabelError && (
+                          <p id="new-address-label-error" className="field-error">{newAddressLabelError}</p>
+                        )}
                       </div>
                     )}
                   </div>

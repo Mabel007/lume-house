@@ -1,5 +1,7 @@
 # S02 Consolidated Execution — Handoff Document
 
+> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release. The CRON deployment steps listed here were never executed and are cancelled: the owner took the email retry scheduler out of scope on 2026-11-18 (D2) and closed the historical Resend 403 review without a confirmed root cause (D3). Do not action this handoff's pending items.
+
 **Date:** 2026-11-03  
 **Prepared by:** S02 Consolidated Execution Coordinator  
 **Status:** Slices 0-2 complete, Slices 3-5 specified and ready for implementation

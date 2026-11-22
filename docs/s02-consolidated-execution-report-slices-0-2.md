@@ -1,5 +1,7 @@
 # S02 Consolidated Execution Report — Slices 0-2
 
+> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release. The CRON deployment items marked ⏳ below were never carried out and are cancelled: the owner took the email retry scheduler out of scope on 2026-11-18 (D2), and the historical Resend 403 investigation closed without a confirmed root cause (D3).
+
 **Date:** 2026-11-03  
 **Status:** SLICES 0-1 COMPLETE, SLICE 2 LOCALLY IMPLEMENTED  
 **Authorization:** Local implementation only, no commits/pushes/deployments

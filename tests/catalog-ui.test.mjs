@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 
 let server;
-let ProductContext, CartContext, AuthContext, ShopPage, CartPage, CheckoutPage;
+let ProductContext, CartContext, AuthContext, ShopPage, CartPage, CheckoutPage, ProductStatus;
 let contentPages, routeTitle, aboutFragmentTarget, productPathId;
 let Layout, SiteFooter, AccountExperience, accountInitials, ProductDetails, ProductDetailsPage;
 let NotificationProvider;
@@ -161,6 +161,9 @@ before(async () => {
   });
   ({ ProductContext } = await server.ssrLoadModule(
     "/src/features/products/ProductContext.ts",
+  ));
+  ({ ProductStatus } = await server.ssrLoadModule(
+    "/src/features/products/ProductStatus.tsx",
   ));
   ({ CartContext } = await server.ssrLoadModule(
     "/src/features/cart/CartContext.ts",
@@ -354,6 +357,156 @@ test("empty catalog does not fall back to demo products", () => {
   assert.match(html, /There are no available products/);
   assert.doesNotMatch(html, /product-card|Everyday ceramic mug/);
 });
+
+test("long hosted names wrap inside the card without disturbing title, price and action order", async () => {
+  const { readFileSync } = await import("node:fs");
+  const name = "UninterruptedProductName".repeat(12);
+  const html = render(ShopPage, { status: "ready", products: [{ ...fixture, name }] }, []);
+  const card = html.match(/<article class="product-card"[\s\S]*?<\/article>/)?.[0] ?? "";
+  assert.ok(card, "a long hosted name still produces a card");
+  assert.match(card, new RegExp(`<h3><a[^>]*>${name}</a></h3>`), "the whole name stays in its link");
+  const title = card.indexOf("<h3>");
+  const price = card.indexOf('class="price"');
+  const action = card.indexOf('class="add-button"');
+  assert.ok(title >= 0 && price > title && action > price, "title, price and action keep their reading order");
+  const css = readFileSync("src/styles.css", "utf8");
+  const rule = css.match(/\.product-card h3\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(rule, /overflow-wrap:\s*anywhere/, "an unbroken name must wrap inside its narrow grid cell");
+});
+
+test("provider-sequenced empty refresh recovers focus only after its own reload succeeds", async () => {
+  // Mirrors ProductProvider's refresh sequence: a revision bump renders first
+  // with the previous ready state and a fresh inline onRecover; the loading
+  // state is set in a later effect. Each load is held open so the test can
+  // observe before, during and after the requested request.
+  async function withProvider(initialState, scenario) {
+    const dom = new JSDOM('<!doctype html><html><body><div id="root"></div><h2 id="destination" tabindex="-1">Pieces to live with.</h2></body></html>', { url: "http://localhost/" });
+    const names = ["window", "document", "Element", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "MutationObserver", "location"];
+    for (const name of names) Object.defineProperty(globalThis, name, { configurable: true, value: dom.window[name] });
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const document = dom.window.document;
+    const destination = document.getElementById("destination");
+    let recoveries = 0;
+    let pendingLoad = { current: null };
+    let externalRefresh = () => {};
+    let rerender = () => {};
+
+    function ProviderHarness() {
+      const [state, setState] = React.useState(initialState);
+      const [revision, setRevision] = React.useState(0);
+      const [callbackRevision, setCallbackRevision] = React.useState(0);
+      void callbackRevision;
+      const started = React.useRef(false);
+      const refreshRef = React.useRef(() => {});
+      refreshRef.current = () => setRevision((value) => value + 1);
+      externalRefresh = () => refreshRef.current();
+      rerender = () => setCallbackRevision((value) => value + 1);
+      React.useEffect(() => {
+        if (!started.current) { started.current = true; return; }
+        const controller = new AbortController();
+        async function load() {
+          setState({ status: "loading" });
+          try {
+            const products = await new Promise((resolve, reject) => {
+              pendingLoad.current = { resolve, reject };
+            });
+            if (!controller.signal.aborted) setState({ status: "ready", products });
+          } catch {
+            if (!controller.signal.aborted) setState({ status: "error" });
+          }
+        }
+        void load();
+        return () => controller.abort();
+      }, [revision]);
+      return React.createElement(
+        ProductContext.Provider,
+        { value: { state, refresh: () => refreshRef.current() } },
+        // A fresh inline callback on every render reproduces Shop's integration.
+        React.createElement(ProductStatus, {
+          onRecover: () => { recoveries += 1; destination.focus(); },
+        }),
+      );
+    }
+
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.getElementById("root"));
+    const click = async (label) => {
+      const button = [...document.querySelectorAll("button")].find((item) => item.textContent === label);
+      assert.ok(button, `the ${label} control exists`);
+      button.focus();
+      assert.equal(document.activeElement, button);
+      await React.act(() => { button.click(); });
+    };
+    const load = () => {
+      assert.ok(pendingLoad.current, "a reload must be in flight");
+      return pendingLoad.current;
+    };
+    try {
+      await React.act(() => { root.render(React.createElement(ProviderHarness)); });
+      return await scenario({
+        document,
+        destination,
+        click,
+        load,
+        rerender: () => rerender(),
+        refreshUnrelated: () => externalRefresh(),
+        recoveries: () => recoveries,
+      });
+    } finally {
+      try { await React.act(async () => { root.unmount(); }); } catch { /* teardown is best-effort */ }
+      delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+      for (const name of names) delete globalThis[name];
+      dom.window.close();
+    }
+  }
+
+  const empty = { status: "ready", products: [] };
+
+  await withProvider(empty, async ({ document, destination, click, load, rerender, recoveries }) => {
+    assert.equal(recoveries(), 0, "no recovery before the user asks for a reload");
+    assert.notEqual(document.activeElement, destination);
+    await click("Refresh collection");
+    assert.match(document.body.textContent, /Loading the collection/);
+    assert.equal(recoveries(), 0, "the intermediate ready render must not recover");
+    assert.equal(document.activeElement, document.body, "no focus is stolen while the collection is loading");
+    await React.act(() => { rerender(); });
+    assert.equal(recoveries(), 0, "callback identity churn during loading must not recover early");
+    await React.act(async () => { load().resolve([fixture]); });
+    assert.equal(recoveries(), 1, "the requested successful reload recovers exactly once");
+    assert.equal(document.activeElement, destination, "focus reaches the collection heading");
+    await React.act(() => { rerender(); });
+    assert.equal(recoveries(), 1, "callback identity churn after success must not duplicate recovery");
+  });
+
+  await withProvider(empty, async ({ document, destination, click, load, recoveries }) => {
+    await click("Refresh collection");
+    assert.match(document.body.textContent, /Loading the collection/);
+    assert.equal(recoveries(), 0);
+    await React.act(async () => { load().reject(new Error("offline")); });
+    assert.match(document.body.textContent, /The collection is unavailable/);
+    assert.equal(recoveries(), 0, "a failed reload never triggers success recovery");
+    assert.notEqual(document.activeElement, destination);
+    await click("Try again");
+    assert.match(document.body.textContent, /Loading the collection/);
+    assert.equal(recoveries(), 0);
+    await React.act(async () => { load().resolve([fixture]); });
+    assert.equal(recoveries(), 1, "error-state Try still recovers exactly once");
+    assert.equal(document.activeElement, destination);
+  });
+
+  await withProvider(empty, async ({ document, destination, click, load, refreshUnrelated, recoveries }) => {
+    await click("Refresh collection");
+    assert.match(document.body.textContent, /Loading the collection/);
+    assert.equal(recoveries(), 0);
+    await React.act(() => { refreshUnrelated(); });
+    assert.match(document.body.textContent, /Loading the collection/, "an unrelated reload supersedes the requested one");
+    assert.equal(recoveries(), 0);
+    await React.act(async () => { load().resolve([fixture]); });
+    assert.doesNotMatch(document.body.textContent, /Loading the collection|collection is unavailable|A new collection/);
+    assert.equal(recoveries(), 0, "an unrelated later success must not consume an old recovery intent");
+    assert.notEqual(document.activeElement, destination, "an unrelated success must not steal focus");
+  });
+});
 test("ready catalog feeds cards, cart prices and guest sign-in checkout", () => {
   const state = { status: "ready", products: [fixture] };
   assert.match(render(ShopPage, state), /Fixture mug/);
@@ -469,8 +622,8 @@ function renderLayout(path, cartState = { items, status: "ready", error: null, r
           React.createElement(Routes,null,React.createElement(Route,{element:React.createElement(Layout)},
             React.createElement(Route,{path:"*",element:React.createElement("h1",null,"Page")}))))))));
 }
-function renderDetails(product) {
-  return renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(CartContext.Provider,{value:{items:[],dispatch(){},status:"ready"}},React.createElement(NotificationProvider,null,React.createElement(ProductDetails,{product})))));
+function renderDetails(product, cartState = { items: [], dispatch() {}, status: "ready" }) {
+  return renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(CartContext.Provider,{value:cartState},React.createElement(NotificationProvider,null,React.createElement(ProductDetails,{product})))));
 }
 function optionRadio(document, value) {
   const option = document.querySelector(`input[type="radio"][value="${value}"]`);
@@ -569,9 +722,16 @@ test('storefront search has a labelled native search control and polite results 
  const html=render(ShopPage,{status:'ready',products:[fixture]},[]);
  assert.match(html,/<label for="product-search">Search the collection/);
  assert.match(html,/id="product-search"[^>]*type="search"/);
- assert.match(html,/class="collection-results" role="status">1 piece found/);
+ assert.match(html,/class="collection-results"[^>]*role="status"[^>]*>/);
+ assert.match(html,/1 piece found\./);
  assert.match(html,/aria-label="Filter products"/);
  assert.doesNotMatch(html,/No pieces found|Reset search/);
+ // Slice 1A: the focus affordance is decorative and never replaces the native control.
+ assert.match(html,/class="search-field"[\s\S]*?id="product-search"/,"the search input keeps its focus wrapper");
+ assert.match(html,/class="search-glyph" aria-hidden="true"/,"the magnifier is hidden from assistive technology");
+ assert.doesNotMatch(html,/<svg[^>]*class="search-glyph"[^>]*>[\s\S]*?<title>/,"the magnifier exposes no accessible name");
+ assert.match(html,/class="search-glyph-ring"/);
+ assert.match(html,/class="search-glyph-handle"/);
 });
 
 test("Add to Cart feedback waits for confirmed persistence before claiming success", async () => {
@@ -595,14 +755,89 @@ test("Product Details groups add action and Cart link in one stable actions row"
   const details = readFileSync("src/features/products/ProductDetailsPage.tsx", "utf8");
   const group = details.match(/<div className="product-details-actions">[\s\S]*?<\/div>/);
   assert.ok(group, "actions group wraps the add button and View Cart link");
-  assert.match(group[0], /product-details-add/);
+  assert.match(group[0], /product-details-buy/);
+  assert.match(group[0], /button secondary product-details-add/, "Add is visually secondary without changing its native button");
   assert.doesNotMatch(group[0], /role="status"|className="feedback"/, "the migrated inline feedback slot is removed");
   assert.match(group[0], /to="\/cart">View your Cart/);
+  assert.ok(group[0].indexOf("product-details-buy") < group[0].indexOf("product-details-add"), "Buy Now stays first in the action order");
   assert.ok(group[0].indexOf("product-details-add") < group[0].indexOf('to="/cart"'), "focus order: add button before Cart link");
   const css = readFileSync("src/styles.css", "utf8");
   assert.match(css, /\.product-details-actions \{ display: flex; flex-direction: column;/);
   assert.doesNotMatch(css, /\.product-details-actions \.feedback/, "feedback no longer reserves vertical space in the actions row");
   assert.match(css, /@media \(max-width: 479px\)[^@]*\.product-details-actions \.product-details-add \{ width: 100%;/);
+});
+
+test("Product Details has a visible Quantity label and keeps its native number input", () => {
+  const dom = new JSDOM(renderDetails(fixture));
+  try {
+    const document = dom.window.document;
+    const input = document.querySelector("#product-quantity");
+    assert.ok(input, "the quantity input renders");
+    assert.equal(input.tagName, "INPUT");
+    assert.equal(input.type, "number");
+    assert.equal(input.min, "1");
+    assert.equal(input.max, "99");
+    assert.equal(input.step, "1");
+    const label = document.querySelector('label[for="product-quantity"]');
+    assert.ok(label, "the label is associated by for/id");
+    assert.ok(!label.classList.contains("sr-only"), "the Quantity prompt is visible");
+    assert.equal(label.textContent, `Quantity for ${fixture.name}`);
+    assert.equal(label.querySelector(".sr-only")?.textContent, ` for ${fixture.name}`, "product context stays with the accessible name");
+    assert.equal(label.parentElement, input.closest(".product-details-quantity"));
+    assert.equal(label.nextElementSibling, input.closest(".quantity-control"));
+    assert.equal(input.closest(".quantity-control").querySelectorAll("label").length, 0, "the stepper group stays a native input with two buttons");
+    assert.equal(input.closest(".quantity-control").querySelectorAll("button").length, 2);
+    const buy = document.querySelector("button.product-details-buy");
+    assert.ok(buy, "Buy Now stays a native button");
+    assert.equal(buy.type, "button");
+  } finally { dom.window.close(); }
+});
+
+test("PDP presentation marks native option states and survives long copy and large prices", () => {
+  const choices = [
+    { id: 'blue', productId: 'fixture', options: { Color: 'Blue' }, isDefault: false, price: 2000, currency: 'NLE', inventoryPolicy: 'tracked', available: true },
+    { id: 'red', productId: 'fixture', options: { Color: 'Red' }, isDefault: false, price: 2200, currency: 'NLE', inventoryPolicy: 'tracked', available: false },
+  ];
+  const mixedDom = new JSDOM(renderDetails({ ...fixture, variants: choices }));
+  try {
+    const document = mixedDom.window.document;
+    const available = optionRadio(document, 'blue');
+    const unavailable = optionRadio(document, 'red');
+    const availableLabel = available.closest('label');
+    const unavailableLabel = unavailable.closest('label');
+    assert.equal(available.type, 'radio');
+    assert.equal(available.name, `variant-${fixture.id}`);
+    assert.equal(available.getAttribute('tabindex'), null, 'native radio tab order is untouched');
+    assert.equal(availableLabel.className, 'variant-option', 'an idle option takes only the scoped base class');
+    assert.equal(availableLabel.querySelector('.variant-option-copy .variant-option-price')?.textContent?.startsWith('NLE 20'), true);
+    assert.equal(unavailable.disabled, true, 'the unavailable radio remains natively disabled');
+    assert.equal(unavailableLabel.className, 'variant-option variant-option-unavailable');
+    assert.match(unavailableLabel.textContent, /Red — Unavailable/, 'the visible unavailable treatment is preserved');
+    assert.ok(unavailableLabel.querySelector('.variant-option-copy'), 'long option copy has a wrapping host');
+    assert.equal(document.querySelectorAll('[role="radio"]').length, 0, 'no custom radio replacement is introduced');
+  } finally { mixedDom.window.close(); }
+
+  const longName = 'A deliberately long hand-finished colourway description for wrapping';
+  const longProduct = {
+    ...fixture,
+    name: longName,
+    variants: [{ id: 'long', productId: 'fixture', options: { Colourway: longName }, isDefault: false, price: 99999999, currency: 'NLE', inventoryPolicy: 'untracked' }],
+  };
+  const longHtml = renderDetails(longProduct);
+  assert.match(longHtml, /NLE 999,999\.99/, 'large integer minor units stay centrally formatted');
+  const longDom = new JSDOM(longHtml);
+  try {
+    const copy = longDom.window.document.querySelector('.variant-option-copy');
+    assert.ok(copy, 'the variant copy wrapper renders');
+    assert.ok(copy.textContent.includes(longName), 'long names are not truncated from the DOM');
+    assert.ok(copy.querySelector('.variant-option-price')?.textContent.includes('NLE 999,999.99'));
+  } finally { longDom.window.close(); }
+
+  const css = readFileSync('src/styles.css', 'utf8');
+  assert.match(css, /\.product-details-price \.currency-estimate \{/, 'estimate hierarchy is PDP-scoped');
+  assert.match(css, /\.variant-options label\.variant-option\.variant-option-selected/);
+  assert.match(css, /\.variant-options label\.variant-option\.variant-option-unavailable/);
+  assert.match(css, /@media \(max-width: 700px\)[^@]*\.product-details-actions \.button \{ width: 100%/);
 });
 
 test("account initials handle whitespace, single names, missing names and Unicode graphemes", () => {
@@ -723,7 +958,102 @@ test('tracked Product Details refuses unverified or unavailable stock without sh
   assert.match(html,/currently unavailable/);assert.match(html,/disabled=""/);assert.doesNotMatch(html,/Only \d+ left/);
  }
  const html=renderDetails({...product,variants:[{...variant,available:true}]});
- assert.match(html,/Available to add to your Cart/);assert.doesNotMatch(html,/<button[^>]*class="button product-details-add"[^>]*disabled/);
+ assert.match(html,/Available to add to your Cart/);assert.doesNotMatch(html,/<button[^>]*class="button secondary product-details-add"[^>]*disabled/);
+});
+test("Product Details purchase guidance explains blocked actions without a second live region", () => {
+  const defaultVariant = { id: 'default:fixture', productId: 'fixture', options: {}, isDefault: true, price: 1800, currency: 'NLE', inventoryPolicy: 'untracked' };
+  const product = { ...fixture, variants: [defaultVariant] };
+  const guidanceId = 'product-details-purchase-guidance';
+  const cartState = overrides => ({ items: [], dispatch() {}, status: 'ready', ...overrides });
+  const guidanceIn = html => {
+    const dom = new JSDOM(html);
+    const document = dom.window.document;
+    const note = document.querySelector('.product-details-guidance');
+    assert.ok(note, 'the visible guidance renders');
+    assert.equal(note.id, guidanceId);
+    assert.equal(note.getAttribute('role'), null, 'guidance is not a second alert/status publisher');
+    assert.equal(note.getAttribute('aria-live'), null, 'the shared notice remains the only live region');
+    assert.equal(document.querySelectorAll(`#${guidanceId}`).length, 1, 'the described-by id is unique');
+    assert.ok(document.querySelector('.product-details-actions a[href="/cart"]'), 'the existing Cart link remains');
+    return { dom, document, note, buy: purchaseButton(document, 'product-details-buy'), add: purchaseButton(document, 'product-details-add') };
+  };
+
+  {
+    const { dom, note, buy, add } = guidanceIn(renderDetails(product));
+    try {
+      assert.equal(note.textContent, 'Available to add to your Cart.');
+      assert.equal(buy.getAttribute('aria-describedby'), null, 'an available piece does not explain a blocked Buy');
+      assert.equal(add.getAttribute('aria-describedby'), null, 'an available piece does not explain a blocked Add');
+      assert.equal(buy.disabled, false);
+      assert.equal(add.disabled, false);
+    } finally { dom.window.close(); }
+  }
+
+  const choices = [
+    { id: 'blue', productId: 'fixture', options: { Color: 'Blue' }, isDefault: false, price: 2000, currency: 'NLE', inventoryPolicy: 'tracked', available: true },
+    { id: 'red', productId: 'fixture', options: { Color: 'Red' }, isDefault: false, price: 2200, currency: 'NLE', inventoryPolicy: 'tracked', available: false },
+  ];
+  {
+    const { dom, note, buy, add } = guidanceIn(renderDetails({ ...product, variants: choices }));
+    try {
+      assert.equal(note.textContent, 'Choose an available combination.');
+      assert.equal(buy.getAttribute('aria-describedby'), guidanceId);
+      assert.equal(add.getAttribute('aria-describedby'), guidanceId);
+      assert.equal(buy.disabled, true);
+      assert.equal(add.disabled, true);
+    } finally { dom.window.close(); }
+  }
+  {
+    const { dom, note, buy, add } = guidanceIn(renderDetails({ ...product, variants: choices.map(choice => ({ ...choice, available: false })) }));
+    try {
+      assert.equal(note.textContent, 'This piece is currently unavailable.');
+      assert.equal(buy.getAttribute('aria-describedby'), guidanceId);
+      assert.equal(add.getAttribute('aria-describedby'), guidanceId);
+      assert.equal(buy.disabled, true);
+      assert.equal(add.disabled, true);
+    } finally { dom.window.close(); }
+  }
+
+  {
+    const { dom, note, buy, add } = guidanceIn(renderDetails(product, cartState({ items: [{ variantId: defaultVariant.id, quantity: 99 }] })));
+    try {
+      assert.equal(note.textContent, 'Reduce the quantity or review your Cart before adding this piece.');
+      assert.equal(add.getAttribute('aria-describedby'), guidanceId);
+      assert.equal(add.disabled, true);
+      assert.match(add.textContent, /Quantity limit reached/);
+      assert.equal(buy.getAttribute('aria-describedby'), null, 'a quantity cap never explains or blocks Buy Now');
+      assert.equal(buy.disabled, false);
+    } finally { dom.window.close(); }
+  }
+
+  const savedCartCases = [
+    [cartState({ status: 'deferred' }), 'Open your saved Cart before adding this piece.'],
+    [cartState({ status: 'loading' }), 'Your Cart is still loading. Wait for it to finish before adding this piece.'],
+    [cartState({ status: 'saving' }), 'Saving your Cart. Wait for it to finish before adding this piece.'],
+    [cartState({ error: 'Your saved Cart could not be restored or merged.' }), 'Your saved Cart needs attention. Use the Retry saved Cart control above before adding this piece.'],
+    [cartState({ recovery: { status: 'required', message: 'Review your saved Cart.' } }), 'Your saved Cart needs attention. Use the saved Cart controls above before adding this piece.'],
+    [cartState({ recovery: { status: 'refreshing', message: 'Review your saved Cart.' } }), 'Refreshing your saved Cart. Wait for it to finish before adding this piece.'],
+    [cartState({ recovery: { status: 'failed', message: 'Review your saved Cart.' } }), 'Your saved Cart needs attention. Use the saved Cart controls above before adding this piece.'],
+    [cartState({ recovery: { status: 'completed', message: 'Review your saved Cart.' } }), 'Available to add to your Cart.'],
+  ];
+  for (const [state, expected] of savedCartCases) {
+    const { dom, note, buy, add } = guidanceIn(renderDetails(product, state));
+    try {
+      assert.equal(note.textContent, expected);
+      const needsAttention = expected !== 'Available to add to your Cart.';
+      assert.equal(add.getAttribute('aria-describedby'), needsAttention ? guidanceId : null);
+      const blockedByStatus = ['deferred', 'loading', 'saving', 'error'].includes(state.status);
+      assert.equal(add.disabled, blockedByStatus, 'deferred extends the existing status-based Add blocks without gating ready or recovery states');
+      assert.equal(buy.getAttribute('aria-describedby'), null, 'saved Cart state never explains or blocks Buy Now');
+      assert.equal(buy.disabled, false, 'Buy Now stays independent of saved Cart state');
+    } finally { dom.window.close(); }
+  }
+
+  const css = readFileSync('src/styles.css', 'utf8');
+  assert.match(css, /\.product-details \.product-details-guidance \{/, 'guidance styling stays PDP-scoped');
+  assert.doesNotMatch(css, /^\.product-details-guidance\s*\{/m, 'no unscoped guidance rule is introduced');
+  assert.match(css, /\.product-details-copy > \.small-note:not\(\.product-details-guidance\) \{[^}]*margin-top:\s*8px/, 'payment-note spacing stays PDP-scoped');
+  assert.doesNotMatch(css, /^\.small-note\s*\{[^}]*margin-top:\s*8px/m, 'the global small-note rule was not retuned');
 });
 test('unavailable single-option cards explain the state instead of showing a disabled Add to Cart action',()=>{
  const base={id:'fixture',productId:'fixture',options:{},isDefault:true,price:1800,currency:'NLE',inventoryPolicy:'tracked'};

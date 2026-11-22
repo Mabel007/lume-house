@@ -2,6 +2,8 @@
 
 > Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release.
 
+> **Do not execute the email CRON retry plan in this manifest.** On 2026-11-18 the owner cancelled the retry scheduler and closed the historical Resend 403 investigation (decisions D2 and D3 in [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions)). Slice 2's "403 investigation → verified domain → CRON retry" sequence, its `supabase/config.toml` CRON edits, `service_role` scheduling and deployment checklists are withdrawn as instructions; nothing in them is outstanding work. Note also that the "D1–D6" labels used by this planning document family are the 2026-11-03 planning decisions and are unrelated to the canonical D1–D7 engineering decisions.
+
 **Date:** 2026-11-03
 **Branch:** `feat/lume-web-s02-country-enforcement`
 **Local HEAD:** `eb035f9` (PR #21 head)

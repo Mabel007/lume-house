@@ -1,4 +1,5 @@
 let CurrencyProvider;
+import { readFileSync } from "node:fs";
 import { test, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import React, { act } from "react";
@@ -249,6 +250,15 @@ test("details add is blocked when the existing quantity plus the requested amoun
   const add = buttonByLabel("Add Fixture mug to Cart");
   assert.equal(add.disabled, true, "99 in Cart + 1 requested exceeds the limit");
   assert.match(add.textContent, /Quantity limit reached/);
+  const guidance = host.querySelector(".product-details-guidance");
+  assert.ok(guidance);
+  assert.equal(guidance.textContent, "Reduce the quantity or review your Cart before adding this piece.");
+  assert.equal(add.getAttribute("aria-describedby"), guidance.id, "the cap explanation is associated with Add");
+  assert.equal(guidance.getAttribute("role"), null, "the explanation is not a duplicate live region");
+  assert.equal(guidance.getAttribute("aria-live"), null, "the shared toast remains the only live announcement");
+  const buy = button("Buy Now");
+  assert.equal(buy.disabled, false, "the quantity cap stays independent of Buy Now");
+  assert.equal(buy.getAttribute("aria-describedby"), null, "the cap explanation belongs to Add only");
   await click(add);
   assert.equal(readStored().items.map(item => item.quantity).join(), "99", "the blocked add never mutates the cart");
   assert.equal(host.textContent.includes("Added"), false);
@@ -373,6 +383,23 @@ test("guest Cart page updates quantities and removals in local storage with deri
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast, "removal confirmation survives the empty-state transition");
   assert.match(toast.textContent, /Removed Fixture mug from your Cart/);
+});
+
+test("Cart product-name link keeps its name and destination while exposing a 44px target", async () => {
+  bagClient(() => emptyCart());
+  sessionStorage.setItem("lume-guest-cart", JSON.stringify({
+    version: 2,
+    items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 1, mergeId: "11111111-1111-4111-8111-111111111111" }],
+  }));
+  await mount(withProviders(guestAuth, React.createElement(CartPage)));
+  const link = host.querySelector(".cart-row h2 a");
+  assert.ok(link, "the product name remains a link");
+  assert.equal(link.textContent, "Fixture mug", "the accessible name is unchanged");
+  assert.equal(link.getAttribute("href"), "/products/fixture-mug", "product navigation is unchanged");
+  link.focus();
+  assert.equal(document.activeElement, link, "the link remains keyboard focusable");
+  const css = readFileSync("src/typography.css", "utf8");
+  assert.match(css, /\.cart-row h2 a\s*{[^}]*display:\s*inline-flex[^}]*align-items:\s*center[^}]*min-height:\s*44px/);
 });
 
 function RecoveringCatalog({ children }) {

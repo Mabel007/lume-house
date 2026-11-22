@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { requiresOptions, variantAvailable, cataloguePrice } from "./variants";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useLayoutEffect } from "react";
 import type { Product } from "./products";
 import { useProducts } from "./ProductContext";
 import { ProductStatus } from "./ProductStatus";
@@ -12,6 +12,27 @@ import { bagAddedText, bagAddFailedText } from "../cart/bagFeedback";
 import { useNotifications } from "../../components/notifications";
 import { ProductImage } from "./ProductImage";
 import {searchProducts} from './search';
+import { useEditorialReveal, useProductCardEntrance } from "../../components/useEditorialReveal";
+import { followInPageAnchor } from "../../components/inPageAnchor";
+
+const heroLines = shop.heroTitle.split("\n");
+
+// Decorative idle prompts for the search field. They are aria-hidden and never
+// replace the input, label or placeholder; they are CSS-cycled, so no timer or
+// rerender is involved. Copy is original to Lumé House and stays clear of the
+// words the buttons and headings around the field already own.
+//
+// Each phrase has to read whole in the narrowest field it appears in, so length is
+// budgeted against the phrase layer at 320px rather than against taste: 282px of
+// padding box, less the 46px the layer is offset by and the 22px it stops short of
+// the edge, is 214px of Georgia italic at 1.05rem — about 26 glyphs.
+const searchPrompts = [
+  "The piece the room needs",
+  "Warm textures, soft light",
+  "Something worth keeping",
+  "Find your new favourite",
+  "Vases, throws, candlelight",
+];
 
 export function ShopPage() {
   const [category, setCategory] = useState("All pieces");
@@ -34,6 +55,27 @@ export function ShopPage() {
     ? category
     : "All pieces";
   const visible=searchProducts(products,query,activeCategory);
+  // Re-arms the entrance for whichever cards are on screen when a filter, a
+  // search or a fresh catalogue changes the rendered set.
+  const cardEntranceRevision = visible.map((product) => product.id).join("|");
+  useEditorialReveal(state.status === "ready");
+  useProductCardEntrance(cardEntranceRevision);
+  const filtersRef = useRef<HTMLDivElement>(null);
+  const [filterIndicator, setFilterIndicator] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    const container = filtersRef.current;
+    if (!container) return;
+    const update = () => {
+      const activeBtn = container.querySelector('button[aria-pressed="true"]') as HTMLButtonElement | null;
+      if (!activeBtn) { setFilterIndicator(null); return; }
+      const cRect = container.getBoundingClientRect();
+      const bRect = activeBtn.getBoundingClientRect();
+      setFilterIndicator({ left: bRect.left - cRect.left, top: bRect.top - cRect.top, width: bRect.width, height: bRect.height });
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [activeCategory, categories.length, visible.length]);
   async function addToBag(product: Product, variantId: string) {
     const name=product.name;
     noticeSeq.current+=1;
@@ -50,9 +92,15 @@ export function ShopPage() {
       <section className="hero wrap">
         <div className="hero-copy">
           <p className="eyebrow">LUMÉ HOUSE / HOME & LIFESTYLE</p>
-          <h1>{shop.heroTitle}</h1>
+          <h1>
+            {heroLines.map((line) => (
+              <span className="hero-line" key={line}>
+                <span className="hero-line-inner">{line}</span>
+              </span>
+            ))}
+          </h1>
           <p className="hero-description">{shop.heroDescription}</p>
-          <a href="#collection" className="button">
+          <a href="#collection" className="button" onClick={followInPageAnchor}>
             Explore the collection <span aria-hidden="true">↗</span>
           </a>
           <p className="hero-note">Objects for the small, good moments.</p>
@@ -61,27 +109,34 @@ export function ShopPage() {
           <img
             src="/images/a-place-for-the-everyday.webp"
             alt="Vases, greenery and candles arranged on a wooden tray in a warm neutral living room"
+            width={1440}
+            height={1440}
+            decoding="async"
             fetchPriority="high"
           />
+          <span className="hero-art-curtain" aria-hidden="true" />
           <span className="art-label">A place for the everyday.</span>
           <span className="art-index">L / H — 01</span>
         </div>
       </section>
       {state.status === "ready" && products.length > 0 && (
         <>
-          <section className="lume-edit wrap" aria-labelledby="edit-title">
+          <section className="lume-edit wrap" data-lume-reveal="idle" aria-labelledby="edit-title">
             <div className="edit-copy">
               <p className="eyebrow">THE LUMÉ EDIT</p>
               <h2 id="edit-title">
-                A softer kind
-                <br />
-                of everyday.
+                <span className="edit-line">
+                  <span className="edit-line-inner">A softer kind</span>
+                </span>
+                <span className="edit-line">
+                  <span className="edit-line-inner">of everyday.</span>
+                </span>
               </h2>
               <p>
                 Warm wood. Quiet curves. The texture of a well-loved room. Start
                 with a few pieces that make your space feel like you.
               </p>
-              <a className="text-link" href="#collection">
+              <a className="text-link" href="#collection" onClick={followInPageAnchor}>
                 Discover the collection →
               </a>
             </div>
@@ -105,6 +160,7 @@ export function ShopPage() {
           </section>
           <section
             className="collection-links wrap"
+            data-lume-reveal="idle"
             aria-labelledby="category-title"
           >
             <p className="eyebrow">MAKE ROOM FOR WHAT YOU LOVE</p>
@@ -116,7 +172,10 @@ export function ShopPage() {
                   <a
                     key={value}
                     href="#collection"
-                    onClick={() => setCategory(value)}
+                    onClick={(event) => {
+                      setCategory(value);
+                      followInPageAnchor(event);
+                    }}
                   >
                     <span>{String(index + 1).padStart(2, "0")}</span>
                     {value}
@@ -130,6 +189,7 @@ export function ShopPage() {
       <section
         className="collection wrap"
         id="collection"
+        tabIndex={-1}
         aria-labelledby="collection-title"
       >
         <div className="section-heading">
@@ -144,13 +204,45 @@ export function ShopPage() {
         <ProductStatus onRecover={()=>collectionTitle.current?.focus()} />
         {state.status === "ready" && products.length > 0 && (
           <>
-            <div className="product-search">
+            <div
+              className="product-search"
+              data-search-idle={query.length === 0 ? "true" : undefined}
+            >
               <label htmlFor="product-search">Search the collection</label>
-              <input ref={searchInput} id="product-search" name="product-search" type="search" maxLength={200} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Name, collection or description" autoComplete="off" />
-              {query.length>0&&<button className="remove-button" onClick={()=>{setQuery('');searchInput.current?.focus();}}>Clear search</button>}
+              <div className="search-field" onClick={() => searchInput.current?.focus()}>
+                <svg
+                  className="search-glyph"
+                  aria-hidden="true"
+                  width={20}
+                  height={20}
+                  viewBox="0 0 20 20"
+                >
+                  <circle className="search-glyph-ring" cx="8" cy="8" r="5.25" />
+                  <path className="search-glyph-handle" d="M11.8 11.8 16 16" />
+                </svg>
+                <span className="search-prompts" aria-hidden="true">
+                  {searchPrompts.map((prompt) => (
+                    <span key={prompt}>{prompt}</span>
+                  ))}
+                </span>
+                <input ref={searchInput} id="product-search" name="product-search" type="search" maxLength={200} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Name, collection or description" autoComplete="off" />
+                {query.length>0&&<button type="button" className="search-clear" onClick={()=>{setQuery('');searchInput.current?.focus();}}>Clear</button>}
+              </div>
             </div>
             <div className="collection-toolbar">
-              <div className="filters" aria-label="Filter products">
+              <div className="filters" aria-label="Filter products" ref={filtersRef}>
+                {filterIndicator && (
+                  <span
+                    className="filter-slide-indicator"
+                    aria-hidden="true"
+                    style={{
+                      left: `${filterIndicator.left}px`,
+                      top: `${filterIndicator.top}px`,
+                      width: `${filterIndicator.width}px`,
+                      height: `${filterIndicator.height}px`,
+                    }}
+                  />
+                )}
                 {categories.map((value) => (
                   <button
                     key={value}
@@ -165,8 +257,10 @@ export function ShopPage() {
                 <span className="currency-note">Prices in {shop.currency}</span>
               </div>
             </div>
-            <p className="collection-results" role="status">{visible.length} {visible.length===1?'piece':'pieces'} found{activeCategory!=='All pieces'?` in ${activeCategory}`:''}.</p>
+            <p className="collection-results" role="status" aria-atomic="true"><span key={`${visible.length}-${activeCategory}`} className="collection-results-morph">{visible.length} {visible.length===1?'piece':'pieces'} found{activeCategory!=='All pieces'?` in ${activeCategory}`:''}.</span></p>
             {visible.length===0&&<div className="catalogue-no-results"><h3>No pieces found.</h3><p>Try a different search or collection.</p><button className="button" onClick={()=>{setQuery('');setCategory('All pieces');searchInput.current?.focus();}}>Reset search &amp; filters</button></div>}
+            {/* No section-level reveal here: every card arms and settles on its
+                own, so the grid is never faded twice. */}
             <div className="product-grid">
               {visible.map((product, index) => {
                 const variant=defaultVariant(product);
@@ -177,7 +271,7 @@ export function ShopPage() {
                   items.find((item) => item.variantId===variant?.id || !item.variantId && item.productId === product.id)
                     ?.quantity ?? 0;
                 return (
-                  <article className="product-card" key={product.id}>
+                  <article className="product-card" data-lume-enter="idle" key={product.id}>
                     <div
                       className="product-image"
                       style={{ backgroundColor: product.color }}
@@ -229,12 +323,15 @@ export function ShopPage() {
           </>
         )}
       </section>
-      <section className="closing-note wrap">
+      <section className="closing-note wrap" data-lume-reveal="idle">
         <span aria-hidden="true">✳</span>
         <p>
-          Less ordinary.
-          <br />
-          <em>More everyday.</em>
+          <span className="closing-line">
+            <span className="closing-line-inner">Less ordinary.</span>
+          </span>
+          <span className="closing-line">
+            <span className="closing-line-inner"><em>More everyday.</em></span>
+          </span>
         </p>
         <div>
           Home & lifestyle in Freetown.

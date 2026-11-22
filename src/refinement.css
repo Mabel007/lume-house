@@ -2,11 +2,29 @@
 :root { --ui-border: #dcded3; --ui-muted: #56614f; --ui-surface: #fffdf8; --ui-radius: .65rem; }
 button, input, select, textarea { font: inherit; }
 button, select, input:not([type=checkbox]):not([type=radio]) { min-height: 44px; }
-input, select, textarea { border-radius: .35rem; }
-input[aria-invalid=true], textarea[aria-invalid=true], select[aria-invalid=true] { border-color: #8c392c; box-shadow: 0 0 0 1px #8c392c; }
-.button { gap: .5rem; border-radius: .35rem; text-align: center; min-height: 46px; }
+/* A shared minimum must not become a maximum: these families specify 48px text inputs. */
+.form-grid input:not([type=checkbox]):not([type=radio]), .form-field input[type=text] { min-height: 48px; }
+input, select, textarea { border-radius: var(--radius-control); }
+input[aria-invalid=true], textarea[aria-invalid=true], select[aria-invalid=true] { border-color: var(--danger-edge); box-shadow: 0 0 0 1px var(--danger-edge); }
+/* styles.css re-declares the border shorthand on these inputs, so they need the edge back at their own specificity. */
+.address-form .form-field input[aria-invalid="true"], .save-address-section .form-field input[aria-invalid="true"] { border-color: var(--danger-edge); }
+/* Disabled customer fields carry the same inert cue as disabled buttons. Scoped to the
+   checkout, profile and saved-address families so admin, search and read-only fields keep
+   their existing appearance; checkboxes and radios keep their own boxes. */
+.checkout-grid .form-grid input:not([type=checkbox]):not([type=radio]):disabled,
+.checkout-grid .form-grid select:disabled,
+.checkout-grid .form-grid textarea:disabled,
+.profile-surface .form-grid input:not([type=checkbox]):not([type=radio]):disabled,
+.address-form .form-field input:not([type=checkbox]):not([type=radio]):disabled,
+.address-form .form-field select:disabled {
+  background: var(--color-surface-sunken);
+  border-color: var(--border-hairline-ui);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+.button { gap: .5rem; border-radius: var(--radius-control); text-align: center; min-height: 46px; }
 .button.secondary { color: var(--color-ink); background: transparent; border: 1px solid var(--ui-border); }
-.button.destructive { background: #783a2e; color: #fff; }
+.button.destructive { background: var(--danger-action); color: #fff; }
 .ui-page-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; margin-block: 1.5rem 2rem; }
 .ui-page-header > div:first-child { flex: 1 1 20rem; min-width: 0; }
 .ui-page-header nav { font-size: .875rem; color: var(--ui-muted); margin-bottom: .75rem; }
@@ -14,8 +32,8 @@ input[aria-invalid=true], textarea[aria-invalid=true], select[aria-invalid=true]
 .ui-page-header h1 { font: normal clamp(2rem, 5vw, 3.25rem)/1.15 Georgia, serif; letter-spacing: -.035em; margin: 0 0 .75rem; }
 .ui-page-header p { max-width: 42rem; line-height: 1.7; color: var(--ui-muted); }
 .ui-page-actions, .ui-dialog-actions { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
-.ui-status { padding: clamp(1rem, 3vw, 1.75rem); margin-block: 1rem; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: #f0f1e9; overflow-wrap: anywhere; }
-.ui-status-error { border-left: 4px solid #8c392c; background: #fbf1ec; }
+.ui-status { padding: clamp(1rem, 3vw, 1.75rem); margin-block: 1rem; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: var(--color-surface-status); overflow-wrap: anywhere; }
+.ui-status-error { border-left: 4px solid var(--danger-edge); background: var(--danger-surface); }
 .ui-status-copy > :first-child { margin-top: 0; }
 .ui-status-copy > :last-child { margin-bottom: 0; }
 .ui-status-action { margin-top: 1rem; }
@@ -31,11 +49,16 @@ input[aria-invalid=true], textarea[aria-invalid=true], select[aria-invalid=true]
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 
 /* Storefront: comfortable spacing and controls without replacing the editorial layout. */
-.product-search { padding: 1rem 1.25rem; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: var(--ui-surface); }
+/* The collection section, not the field, carries the editorial width: the wrapper
+   stays flush and unboxed so the one visible boundary is the field's own (styles.css). */
+.product-search { padding: 0; border: 0; border-radius: 0; background: transparent; }
 .product-search input { min-width: 0; }
 .collection-toolbar { gap: 1rem; align-items: center; }
 .collection-toolbar > div { flex-wrap: wrap; min-width: 0; }
-.filters button { min-height: 44px; padding: .65rem 1rem; }
+.filters button { padding: .65rem 1rem; }
+@media (min-width: 701px) {
+  .filters button { min-height: 44px; }
+}
 .product-card { min-width: 0; }
 .product-card h3, .product-details h1 { overflow-wrap: anywhere; }
 .product-card .price { flex-shrink: 0; }
@@ -47,14 +70,14 @@ input[aria-invalid=true], textarea[aria-invalid=true], select[aria-invalid=true]
 .cart-line, .cart-item { min-width: 0; }
 .checkout-grid > *, .account-layout > * { min-width: 0; }
 .checkout-grid form > fieldset, .profile-surface { border-radius: var(--ui-radius); }
-.checkout-notice { border-radius: .5rem; line-height: 1.7; }
+.checkout-notice { border-radius: var(--radius-card); line-height: 1.7; }
 .choice-group label { min-height: 48px; align-items: center; border-radius: .4rem; }
 .page-section input, .page-section select, .page-section textarea { max-width: 100%; }
-.order-history > li { border-radius: .5rem; overflow: hidden; }
+.order-history > li { border-radius: var(--radius-card); overflow: hidden; }
 .order-information, .email-information, .account-note { border-radius: var(--ui-radius); }
 .field-error, .feedback { overflow-wrap: anywhere; }
 @media (max-width: 700px) {
-  .product-search { padding: 1rem; }
+  .product-search { padding: 0; }
   .collection-toolbar { align-items: flex-start; }
   .collection-toolbar > div { width: 100%; }
   .product-card .price { font-size: .875rem; }
@@ -67,7 +90,7 @@ input[aria-invalid=true], textarea[aria-invalid=true], select[aria-invalid=true]
 .admin-profile-card, .admin-screen, .ui-status-copy { min-width: 0; overflow-wrap: anywhere; }
 .admin-profile-card .button { max-width: 100%; white-space: normal; }
 .admin-metric-card dd { margin-inline-start: 0; }
-input[aria-invalid="true"] { border-color: #9b4037; }
+input[aria-invalid="true"] { border-color: var(--danger-edge-input); }
 @media (max-width: 390px) {
  .main-nav { flex-wrap: wrap; gap: .4rem; }
  .ui-confirm-dialog .ui-dialog-actions { flex-wrap: wrap; }

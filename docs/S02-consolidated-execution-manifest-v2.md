@@ -2,6 +2,8 @@
 
 **SUPERSEDED by v2.1** — See `docs/S02-consolidated-execution-manifest-v2.1.md`
 
+Also superseded on 2026-11-18 for its email-retry content: the CRON retry scheduler was cancelled and the historical Resend 403 investigation closed (decisions D2 and D3 in [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions)). The "D1–D6" labels in this planning document family are 2026-11-03 planning decisions and are unrelated to the canonical D1–D7 engineering decisions.
+
 **Supersession date:** 2026-11-03
 **Reason:** v2.0 placed authentication at positions 2A–2E (immediately after currency), contradicting the owner's explicit decision to defer authentication to position 12 (after S02 acceptance, engineering foundation, S03, S04, S05). v2.1 corrects the sequence and adds `SET search_path = public, pg_temp` to all SECURITY DEFINER functions.
 

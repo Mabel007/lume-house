@@ -19,7 +19,7 @@ Post-execution results are recorded in §2 (scenario map) and §6 (individual sc
 | QA origin (Web) | `https://lume-house-git-feat-lume-web-s02-country-enforcement-najbuilds.vercel.app` |
 | Matrix size | 17 numbered slots — 8 Web, 2 Mobile, 7 unreconciled |
 | W4 execution result | 6 PASS (owner-reported), 2 BLOCKED (code review only), 2 Mobile NOT EXECUTED, 7 NEEDS RECONCILIATION |
-| Production release | PR #21 merged to main 2026-11-03. Production schema deployed. Migration ledger `02900` reconciliation pending. |
+| Production release | PR #21 merged to main 2026-11-03. Production schema deployed. Migration ledger `02900` drift is recorded as known, deferred maintenance and must never be closed by replaying the migration (D4, [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions)). |
 
 ---
 

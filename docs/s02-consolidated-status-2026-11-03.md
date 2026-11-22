@@ -1,6 +1,6 @@
 # S02 Consolidated Execution Status — 2026-11-03
 
-> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release.
+> Historical record. Superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md), whose 2026-11-18 section records the production release. Every pending CRON deployment or schedule-configuration item below is withdrawn, not outstanding: the owner cancelled the email retry scheduler (D2) and closed the historical Resend 403 review (D3) on 2026-11-18. Canonical decisions: [`../AGENTS.md`](../AGENTS.md#owner-engineering-decisions).
 
 **Last updated:** 2026-11-03 (end of session)  
 **Authorization:** Local implementation of S02 Slices 0-5 (no commits, pushes, deployments)

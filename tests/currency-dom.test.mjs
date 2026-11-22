@@ -16,9 +16,13 @@ const { createRoot } = await import('react-dom/client');
 const host = dom.window.document.getElementById('root');
 const nativeFetch = globalThis.fetch;
 const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
-let server, root, CurrencyProvider, ProductContext, CartContext, AuthContext, NotificationProvider, ShopPage, ProductDetailsPage, CartPage, CheckoutPage, OrderSummary, currency;
+let server, root, CurrencyProvider, ProductContext, CartContext, AuthContext, NotificationProvider, ShopPage, ProductDetails, ProductDetailsPage, CartPage, CheckoutPage, OrderSummary, currency;
 const product = {id:'fixture-mug',name:'Fixture mug',description:'Local test',category:'Ceramics',price:1800,image:'/images/mug.svg',color:'#e9e3d8',variants:[{id:'v-mug',productId:'fixture-mug',options:{},isDefault:true,price:1800,currency:'NLE',inventoryPolicy:'untracked'}]};
 const second = {...product,id:'fixture-vase',name:'Fixture vase',price:2500,variants:[{...product.variants[0],id:'v-vase',productId:'fixture-vase',price:2500}]};
+const variantProduct = {...product,id:'fixture-variants',name:'Fixture variant piece',variants:[
+  {id:'blue',productId:'fixture-variants',options:{Color:'Blue'},isDefault:false,price:2000,currency:'NLE',inventoryPolicy:'untracked'},
+  {id:'red',productId:'fixture-variants',options:{Color:'Red'},isDefault:false,price:2500,currency:'NLE',inventoryPolicy:'untracked'},
+]};
 const session = {access_token:'synthetic',user:{id:'11111111-1111-4111-8111-111111111111',email:'fixture@example.invalid'}};
 const rows = (patch = {}) => ['GNF','GHS','NGN','USD'].map((quote,i) => ({base:'SLE',date:new Date().toISOString().slice(0,10),quote,rate:[552.74,.73113,83.54,.06266][i],...patch}));
 let calls = 0;
@@ -31,7 +35,7 @@ before(async () => {
   ({AuthContext} = await server.ssrLoadModule('/src/features/auth/AuthContext.ts'));
   ({NotificationProvider} = await server.ssrLoadModule('/src/components/NotificationProvider.tsx'));
   ({ShopPage} = await server.ssrLoadModule('/src/features/products/ShopPage.tsx'));
-  ({ProductDetailsPage} = await server.ssrLoadModule('/src/features/products/ProductDetailsPage.tsx'));
+  ({ProductDetails, ProductDetailsPage} = await server.ssrLoadModule('/src/features/products/ProductDetailsPage.tsx'));
   ({CartPage} = await server.ssrLoadModule('/src/features/cart/CartPage.tsx'));
   ({CheckoutPage} = await server.ssrLoadModule('/src/features/checkout/CheckoutPage.tsx'));
   ({OrderSummary} = await server.ssrLoadModule('/src/features/checkout/OrderSummary.tsx'));
@@ -65,6 +69,8 @@ async function mount(path = '/', locale = 'en-US', extra, strict = false) {
   await flush();
 }
 const estimates = () => [...host.querySelectorAll('.currency-estimate')].map(e=>e.textContent);
+const detailPrice = () => host.querySelector('.product-details-price');
+const variantRadio = value => host.querySelector(`input[type="radio"][value="${value}"]`);
 
 test('entrypoint retains ordered providers around Layout and every routed consumer', () => {
   const source = ts.createSourceFile('main.tsx',readFileSync('src/main.tsx','utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
@@ -107,6 +113,41 @@ for (const kind of ['wrong-base','stale','future','missing']) test(`${kind} rate
   assert.equal(calls,1);
   assert.deepEqual(estimates(),[], 'no estimates for invalid rates');
   assert.match(host.textContent,/NLE 18/);
+});
+
+test('PDP selection updates the authoritative NLE price and its estimate together',async()=>{
+  serve();
+  await mount('/products/fixture-variants','en-US',React.createElement(ProductDetails,{product:variantProduct}));
+  assert.equal(calls,1);
+  assert.match(detailPrice().textContent,/From NLE 20/);
+  const firstEstimate=detailPrice().querySelector('.currency-estimate')?.textContent;
+  assert.match(firstEstimate??'',/USD/);
+  const red=variantRadio('red');
+  assert.ok(red,'the second variant renders a native radio');
+  assert.equal(red.checked,false);
+  await act(async()=>red.click());
+  assert.equal(red.checked,true,'native radio selection is retained');
+  assert.match(detailPrice().textContent,/NLE 25/);
+  assert.doesNotMatch(detailPrice().textContent,/From NLE 20/);
+  const secondEstimate=detailPrice().querySelector('.currency-estimate')?.textContent;
+  assert.match(secondEstimate??'',/USD/);
+  assert.notEqual(secondEstimate,firstEstimate,'the estimate follows the selected variant');
+  assert.equal(detailPrice().querySelectorAll('.currency-estimate').length,1,'the main price carries one secondary estimate');
+  assert.ok(red.closest('label').classList.contains('variant-option-selected'));
+  assert.equal(variantRadio('blue').checked,false);
+  assert.equal(calls,1,'selection does not refetch rates');
+});
+
+for (const kind of ['stale','missing']) test(`PDP ${kind} rates keep NLE visible while the selected variant changes`,async()=>{
+  serve(kind==='stale'?rows({date:'2000-01-01'}):rows().slice(1));
+  await mount('/products/fixture-variants','en-US',React.createElement(ProductDetails,{product:variantProduct}));
+  for(let i=0;i<6;i++)await flush();
+  assert.match(detailPrice().textContent,/From NLE 20/);
+  assert.equal(detailPrice().querySelector('.currency-estimate'),null,'invalid rates hide only the estimate');
+  await act(async()=>variantRadio('red').click());
+  assert.match(detailPrice().textContent,/NLE 25/);
+  assert.equal(detailPrice().querySelector('.currency-estimate'),null,'a later selection still has no estimate');
+  assert.equal(calls,1);
 });
 
 test('error rates settle into NLE-only fallback without request loops',async()=>{

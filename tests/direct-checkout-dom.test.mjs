@@ -3,17 +3,17 @@ import assert from 'node:assert/strict';
 import React,{act} from 'react';
 import {JSDOM} from 'jsdom';
 import {createServer} from './helpers/vite.mjs';
-import {MemoryRouter,Routes,Route,useNavigate} from 'react-router-dom';
+import {MemoryRouter,Router,Routes,Route,useLocation,useNavigate} from 'react-router-dom';
 const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/',pretendToBeVisual:true});
 for(const name of ['window','document','Element','HTMLElement','HTMLInputElement','HTMLSelectElement','sessionStorage','navigator'])Object.defineProperty(globalThis,name,{configurable:true,value:dom.window[name]});
 Object.defineProperty(dom.window.navigator,'locks',{configurable:true,value:{request:async(_name,_options,callback)=>callback({})}});
 globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 const {createRoot}=await import('react-dom/client');const host=dom.window.document.getElementById('root');
-let server,root,DirectCheckoutPage,CheckoutPage,CartProvider,useCart,ProductDetails,AuthCallback,AuthContext,CartContext,ProductContext,CurrencyProvider,NotificationProvider,intents,authReturn;
+let server,root,DirectCheckoutPage,CheckoutPage,CartProvider,useCart,ProductDetails,AuthCallback,AuthContext,CartContext,ProductContext,CurrencyProvider,NotificationProvider,intents,authReturn,attempts,location;
 const owner='11111111-1111-4111-8111-111111111111',order='22222222-2222-4222-8222-222222222222';
 const fixture={id:'fixture',name:'Fixture piece',description:'Local fixture',category:'Home',price:1800,image:'/images/mug.svg',color:'#eee',variants:[{id:'v',productId:'fixture',options:{},isDefault:true,price:1800,currency:'NLE',inventoryPolicy:'untracked'}]};
 const session={access_token:'local-jwt',user:{id:owner,email:'fixture@example.invalid'}};
-let authSession=session,generation=0,invocations=[],finishCalls=0,dispatchCalls=0,refreshes=0,recovery=null,behavior=null,signIns=0;
+let authSession=session,generation=0,invocations=[],finishCalls=0,dispatchCalls=0,refreshes=0,recovery=null,behavior=null,signIns=0,authLoading=false;
 let savedBag=[{product_id:'fixture',variant_id:'v',quantity:5}],rpcCalls=[],cartSnapshot=null,lookupFailure=false,navigate;
 before(async()=>{
  server=await createServer({configFile:false,envDir:false,server:{middlewareMode:true,hmr:false},plugins:[{name:'direct-dom-fixtures',enforce:'pre',load(id){
@@ -33,29 +33,39 @@ before(async()=>{
  ({NotificationProvider}=await server.ssrLoadModule('/src/components/NotificationProvider.tsx'));
  intents=await server.ssrLoadModule('/src/features/checkout/directIntent.ts');
  authReturn=await server.ssrLoadModule('/src/features/auth/customerAuthIntent.ts');
+ attempts=await server.ssrLoadModule('/src/features/orders/checkoutAttempt.ts');
 });
-afterEach(async()=>{if(root)await act(async()=>root.unmount());root=null;host.replaceChildren();sessionStorage.clear();dom.window.localStorage.clear();delete globalThis.__directClient;delete globalThis.__freshProducts;authSession=session;generation=0;invocations=[];finishCalls=0;dispatchCalls=0;refreshes=0;recovery=null;behavior=null;signIns=0;savedBag=[{product_id:'fixture',variant_id:'v',quantity:5}];rpcCalls=[];cartSnapshot=null;lookupFailure=false;navigate=null;});
+afterEach(async()=>{if(root)await act(async()=>root.unmount());root=null;host.replaceChildren();sessionStorage.clear();dom.window.localStorage.clear();delete globalThis.__directClient;delete globalThis.__freshProducts;authSession=session;generation=0;invocations=[];finishCalls=0;dispatchCalls=0;refreshes=0;recovery=null;behavior=null;signIns=0;authLoading=false;savedBag=[{product_id:'fixture',variant_id:'v',quantity:5}];rpcCalls=[];cartSnapshot=null;lookupFailure=false;navigate=null;location=null;});
 after(async()=>{await server?.close();dom.window.close();});
-function Probe(){cartSnapshot=useCart();navigate=useNavigate();return null;}
-function tree(path,products=[fixture],bagStatus='error',realBag=false){
- return React.createElement(MemoryRouter,{initialEntries:[path]},React.createElement(AuthContext.Provider,{value:{loading:false,session:authSession,sessionGeneration:generation,error:null,signIn:async()=>{signIns++;},signOut:async()=>({ok:true})}},
- React.createElement(ProductContext.Provider,{value:{state:{status:'ready',products},refresh:()=>{refreshes++;}}},
- React.createElement(realBag?CartProvider:CartContext.Provider,realBag?null:{value:{items:[{productId:'fixture',variantId:'v',quantity:99}],status:bagStatus,dispatch:async()=>{dispatchCalls++;},beginCheckout:()=>{throw Error('Direct must not begin Bag checkout');},finishCheckout:()=>{finishCalls++;}}},
- React.createElement(CurrencyProvider,null,React.createElement(NotificationProvider,null,React.createElement(Probe),React.createElement(Routes,null,
+function Probe(){cartSnapshot=useCart();navigate=useNavigate();location=useLocation();return null;}
+function routes(){
+ return React.createElement(Routes,null,
  React.createElement(Route,{path:'/products/fixture',element:React.createElement(ProductDetails,{product:fixture})}),
  React.createElement(Route,{path:'/checkout/buy-now',element:React.createElement(DirectCheckoutPage)}),
  React.createElement(Route,{path:'/checkout',element:React.createElement(CheckoutPage)}),
  React.createElement(Route,{path:'/cart',element:React.createElement('p',null,'Normal Cart')}),
  React.createElement(Route,{path:'/auth/callback',element:React.createElement(AuthCallback)}),
  React.createElement(Route,{path:'/orders/:id/success',element:React.createElement('p',null,'Order placed locally')}),
- React.createElement(Route,{path:'*',element:React.createElement('p',null,'Other page')}))))))));
+ React.createElement(Route,{path:'*',element:React.createElement('p',null,'Other page')}));
 }
-async function mount({path='/checkout/buy-now',products=[fixture],createIntent=true,realBag=false}={}){
+function providers(children,products=[fixture],bagStatus='error',realBag=false){
+ return React.createElement(AuthContext.Provider,{value:{loading:authLoading,session:authSession,sessionGeneration:generation,error:null,signIn:async()=>{signIns++;},signOut:async()=>({ok:true})}},
+ React.createElement(ProductContext.Provider,{value:{state:{status:'ready',products},refresh:()=>{refreshes++;}}},
+ React.createElement(realBag?CartProvider:CartContext.Provider,realBag?null:{value:{items:[{productId:'fixture',variantId:'v',quantity:99}],status:bagStatus,dispatch:async()=>{dispatchCalls++;},beginCheckout:()=>{throw Error('Direct must not begin Bag checkout');},finishCheckout:()=>{finishCalls++;}}},
+ React.createElement(CurrencyProvider,null,React.createElement(NotificationProvider,null,React.createElement(Probe),children)))));
+}
+function tree(path,products=[fixture],bagStatus='error',realBag=false){
+ return React.createElement(MemoryRouter,{initialEntries:[path]},providers(routes(),products,bagStatus,realBag));
+}
+function frozenTree(navigator){
+ return React.createElement(Router,{location:{pathname:'/products/fixture',search:'',hash:'',state:null,key:'startup'},navigator},providers(routes(),[fixture],'error',false));
+}
+async function mount({path='/checkout/buy-now',products=[fixture],createIntent=true,realBag=false,router=null}={}){
  if(root)await act(async()=>root.unmount());
  globalThis.__freshProducts=products;
  globalThis.__directClient={auth:{getSession:async()=>({data:{session:authSession}})},rpc(name,args){rpcCalls.push({name,args});return {setHeader:async()=>({data:{id:'local-cart',items:savedBag},error:null})};},from(table){return {select(){return this;},eq(){return this;},setHeader(){return this;},maybeSingle:async()=>({data:table==='orders'?recovery:null,error:table==='orders'&&lookupFailure?{message:'temporary lookup failure'}:null})};},functions:{invoke:async(name,options)=>{invocations.push({name,options});return behavior?behavior(name,options):{data:{protocol:1,checkout_source:'direct',request_id:options.body.request_id,order:{id:order}},error:null};}}};
  if(createIntent&&!intents.parseDirectState(intents.directSnapshot()).intent)intents.startDirectIntent('fixture','v',2,authSession?.user.id??null);
- root=createRoot(host);await act(async()=>root.render(tree(path,products,'error',realBag)));
+ root=createRoot(host);await act(async()=>root.render(router??tree(path,products,'error',realBag)));
 }
 async function set(name,value){const node=host.querySelector(`[name="${name}"]`);assert.ok(node,name);await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype,'value').set.call(node,value);node.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});}
 async function select(name,value){const node=host.querySelector(`[name="${name}"]`);assert.ok(node,name);await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype,'value').set.call(node,value);node.dispatchEvent(new dom.window.Event('change',{bubbles:true}));});}
@@ -288,4 +298,133 @@ test('a new Bag order reconciles the server-converted empty Bag without changing
  assert.match(host.textContent,/Order placed locally/);assert.equal(invocations.length,1);
  assert.deepEqual(cartSnapshot.items,[]);assert.equal(cartSnapshot.status,'ready');
  assert.equal(rpcCalls.filter(call=>call.name==='load_variant_cart').length,2);
+});
+
+// PDP-03D: Buy Now entry regression coverage. Fixtures stay local and fail closed.
+function alertNode(){return [...host.querySelectorAll('*')].find(node=>node.getAttribute('role')==='alert')??null;}
+function noEntrySideEffects(){
+  assert.equal(invocations.length,0,'Buy Now entry places no order');
+  assert.equal(dispatchCalls,0,'Buy Now entry dispatches no cart mutation');
+  assert.equal(finishCalls,0,'Buy Now entry finishes no Bag checkout');
+  assert.equal(signIns,0,'Buy Now entry starts no OAuth placement');
+  assert.equal(rpcCalls.filter(call=>call.name==='change_variant_cart').length,0,'the saved Cart is not mutated');
+}
+function assertBuyEntryFailure(){
+  const alert=alertNode();
+  assert.ok(alert,'the existing Buy Now alert is shown');
+  assert.equal(alert.textContent,'Buy Now could not preserve this selection safely. Check My Orders or retry with browser storage enabled.');
+  const buy=button('Buy Now');assert.ok(buy);assert.equal(buy.disabled,false);assert.equal(buy.textContent,'Buy Now');
+  assert.equal(host.querySelector('#product-quantity').disabled,false,'quantity is re-enabled');
+  const steppers=[...host.querySelectorAll('.quantity-control button')];assert.equal(steppers.length,2);
+  assert.equal(steppers[1].disabled,false,'the increase control is re-enabled');
+  assert.equal(location.pathname,'/products/fixture','failure stays on the PDP');
+  assert.equal(cartSnapshot.items[0].quantity,99,'the saved Cart draft is unchanged');
+  noEntrySideEffects();
+}
+async function setQuantity(value){
+  const quantity=host.querySelector('#product-quantity');assert.ok(quantity);
+  await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype,'value').set.call(quantity,String(value));quantity.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});
+}
+function frozenNavigator(){
+  const targets=[];
+  const path=to=>typeof to==='string'?to:(to.pathname||'/')+(to.search||'')+(to.hash||'');
+  return {targets,createHref:path,createURL:to=>new URL(path(to),dom.window.location.href),go:()=>{},push:to=>{targets.push(path(to));},replace:to=>{targets.push(path(to));}};
+}
+test('Buy Now shows its startup label and writes one durable intent before navigation',async()=>{
+  const prototype=dom.window.Storage.prototype,originalSet=prototype.setItem;let writes=0;
+  prototype.setItem=function(key,value){if(this===dom.window.sessionStorage&&key==='lume-direct-checkout-v1')writes++;return originalSet.call(this,key,value);};
+  try{
+   const navigator=frozenNavigator();
+   await mount({path:'/products/fixture',createIntent:false,router:frozenTree(navigator)});
+   assert.equal(location.pathname,'/products/fixture');
+   await setQuantity(4);
+   await click(button('Buy Now'));
+   assert.deepEqual(navigator.targets,['/checkout/buy-now']);
+   assert.match(host.textContent,/Opening checkout…/,'the pre-unmount startup label is observable');
+   assert.equal(button('Opening checkout…').disabled,true);
+   assert.equal(host.querySelector('#product-quantity').disabled,true);
+   const state=intents.parseDirectState(sessionStorage.getItem('lume-direct-checkout-v1'));
+   assert.equal(state.invalid,false);assert.equal(state.hold,true);
+   assert.deepEqual(state.intent,{id:state.intent.id,productId:'fixture',variantId:'v',quantity:4,ownerId:owner});
+   assert.equal(writes,1,'one durable direct intent is written before navigation');
+   assert.equal(alertNode(),null);
+   noEntrySideEffects();
+  }finally{prototype.setItem=originalSet;}
+});
+test('Buy Now fails closed when session storage denies its direct intent write',async()=>{
+  const prototype=dom.window.Storage.prototype,originalSet=prototype.setItem;
+  prototype.setItem=function(key,value){if(this===dom.window.sessionStorage&&key==='lume-direct-checkout-v1')throw Error('sessionStorage denied');return originalSet.call(this,key,value);};
+  try{
+   await mount({path:'/products/fixture',createIntent:false});
+   await click(button('Buy Now'));
+   assert.equal(sessionStorage.getItem('lume-direct-checkout-v1'),null,'no unverified intent is left behind');
+   assertBuyEntryFailure();
+  }finally{prototype.setItem=originalSet;}
+});
+test('Buy Now fails closed when the session storage readback does not match its write',async()=>{
+  const prototype=dom.window.Storage.prototype,originalSet=prototype.setItem;
+  prototype.setItem=function(key,value){if(this===dom.window.sessionStorage&&key==='lume-direct-checkout-v1')return originalSet.call(this,key,'not-json');return originalSet.call(this,key,value);};
+  try{
+   await mount({path:'/products/fixture',createIntent:false});
+   await click(button('Buy Now'));
+   assert.equal(intents.parseDirectState(sessionStorage.getItem('lume-direct-checkout-v1')).invalid,true,'the unverified write is not a usable intent');
+   assertBuyEntryFailure();
+  }finally{prototype.setItem=originalSet;}
+});
+test('Buy Now is gated while authentication is loading',async()=>{
+  authLoading=true;await mount({path:'/products/fixture',createIntent:false});
+  const buy=button('Buy Now');assert.ok(buy);assert.equal(buy.disabled,true);
+  assert.equal(host.querySelector('#product-quantity').disabled,false,'quantity remains editable during auth loading');
+  await click(buy);
+  assert.equal(location.pathname,'/products/fixture');
+  assert.equal(sessionStorage.getItem('lume-direct-checkout-v1'),null);
+  assert.equal(alertNode(),null);
+  noEntrySideEffects();
+});
+test('direct checkout stays in its restoring state while authentication is loading',async()=>{
+  authLoading=true;await mount({path:'/checkout/buy-now'});
+  assert.match(host.textContent,/Restoring your session…/);
+  assert.equal(host.querySelector('form'),null);
+  assert.equal(location.pathname,'/checkout/buy-now');
+  noEntrySideEffects();
+});
+test('Buy Now routes a prior authenticated Bag attempt to normal checkout without starting direct intent',async()=>{
+  const request='44444444-4444-4444-8444-444444444444',key=`lume-checkout-attempt-${owner}`;
+  const raw=JSON.stringify({version:1,ownerId:owner,source:'bag',requestId:request});
+  dom.window.localStorage.setItem(key,raw);
+  await mount({path:'/products/fixture',createIntent:false});
+  await click(button('Buy Now'));
+  assert.equal(location.pathname,'/checkout','the prior Bag attempt wins over a new direct selection');
+  assert.equal(sessionStorage.getItem('lume-direct-checkout-v1'),null,'no direct intent is created while a Bag attempt is unresolved');
+  assert.equal(dom.window.localStorage.getItem(key),raw,'the unresolved attempt is not overwritten');
+  assert.equal(alertNode(),null);
+  noEntrySideEffects();
+});
+test("another owner's checkout attempt cannot redirect Buy Now or replace this selection",async()=>{
+  const other='55555555-5555-4555-8555-555555555555',request='66666666-6666-4666-8666-666666666666';
+  const key=`lume-checkout-attempt-${other}`;
+  const raw=JSON.stringify({version:1,ownerId:other,source:'bag',requestId:request});
+  dom.window.localStorage.setItem(key,raw);
+  await mount({path:'/products/fixture',createIntent:false});
+  await click(button('Buy Now'));
+  assert.equal(location.pathname,'/checkout/buy-now');
+  assert.equal(intents.parseDirectState(sessionStorage.getItem('lume-direct-checkout-v1')).intent.ownerId,owner);
+  assert.equal(dom.window.localStorage.getItem(key),raw,"the other owner's attempt is untouched");
+  noEntrySideEffects();
+});
+test('Buy Now restores an older direct attempt instead of the current product quantity',async()=>{
+  const request=crypto.randomUUID(),key=`lume-checkout-attempt-${owner}`;
+  attempts.rememberAttempt({version:1,source:'direct',ownerId:owner,requestId:request,intentId:request,productId:'fixture',variantId:'v',quantity:7});
+  const raw=dom.window.localStorage.getItem(key),navigator=frozenNavigator();
+  await mount({path:'/products/fixture',createIntent:false,router:frozenTree(navigator)});
+  await setQuantity(3);
+  await click(button('Buy Now'));
+  assert.deepEqual(navigator.targets,['/checkout/buy-now'],'the restored checkout is opened exactly once');
+  assert.equal(location.pathname,'/products/fixture','the frozen fixture keeps the PDP observable');
+  const state=intents.parseDirectState(sessionStorage.getItem('lume-direct-checkout-v1'));
+  assert.equal(state.invalid,false);assert.equal(state.hold,true);
+  assert.deepEqual(state.intent,{id:request,productId:'fixture',variantId:'v',quantity:7,ownerId:owner},'the older selection is preserved');
+  assert.equal(dom.window.localStorage.getItem(key),raw,'the unresolved direct attempt is not overwritten');
+  assert.equal(alertNode(),null);
+  noEntrySideEffects();
 });

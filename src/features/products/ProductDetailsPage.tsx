@@ -16,18 +16,36 @@ import { useNotifications } from '../../components/notifications';
 import { formatMoney } from '../../config/shop';
 import { PageHeader } from '../../components/PageHeader';
 
+const productDetailsHeadingId = 'product-details-heading';
+
+function focusProductDetailsHeading() {
+  document.getElementById(productDetailsHeadingId)?.focus();
+}
+
 export function ProductDetailsPage() {
   const { productId }=useParams();
   const { state }=useProducts();
-  if(state.status!=='ready') return <section className="wrap page-section"><PageHeader title="Product details." trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} /><ProductStatus /></section>;
-  const product=state.products.find(product=>product.id===productId);
-  if(!product)return <section className="wrap page-section empty-state"><PageHeader title="This piece is unavailable." trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} /><p>It may no longer be part of the active collection.</p><Link className="button" to="/">Explore the collection</Link></section>;
-  return <ProductDetails key={product.id} product={product} />;
+  const ready=state.status==='ready';
+  const product=ready?state.products.find(item=>item.id===productId):undefined;
+  const missing=ready&&!product;
+  // ProductStatus must stay mounted across the loading → ready transition for
+  // its lifecycle-aware recovery effect to run; only its position is stable
+  // when it renders inside this branch-independent section.
+  return <section className={missing?'wrap page-section empty-state':'wrap page-section'}>
+    {!ready && <PageHeader title="Product details." trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} headingId={productDetailsHeadingId} />}
+    {missing && <div>
+      <PageHeader title="This piece is unavailable." trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} headingId={productDetailsHeadingId} />
+      <p>It may no longer be part of the active collection.</p>
+      <Link className="button" to="/">Explore the collection</Link>
+    </div>}
+    {ready && product && <ProductDetails key={product.id} product={product} headingId={productDetailsHeadingId} />}
+    <ProductStatus onRecover={focusProductDetailsHeading} />
+  </section>;
 }
 
-export function ProductDetails({product}:{product:Product}) {
+export function ProductDetails({product,headingId}:{product:Product;headingId?:string}) {
   const auth=useAuth();const navigate=useNavigate();
-  const {items,dispatch,status}=useCart();
+  const {items,dispatch,status,error,recovery}=useCart();
   const {notify}=useNotifications();
   const [selection,setSelection]=useState('');
   const [amount,setAmount]=useState(1);
@@ -47,6 +65,32 @@ export function ProductDetails({product}:{product:Product}) {
   const quantity=items.find(item=>item.variantId===variant?.id || !item.variantId && item.productId===product.id)?.quantity??0;
   const busy=['loading','saving','error','checking-out'].includes(status??'');
   const price=variant?.price??cataloguePrice(product).price;
+  // PDP-only guidance. It derives from already-published cart state and never
+  // retries, releases a hold, replays a mutation or adds another live region.
+  const availabilityNote=compatible
+    ? 'Available to add to your Cart.'
+    : optionsRequired && !variant && optionsAvailable
+      ? 'Choose an available combination.'
+      : 'This piece is currently unavailable.';
+  const deferred=status==='deferred';
+  const savedCartNote=deferred
+    ? 'Open your saved Cart before adding this piece.'
+    : status==='loading'
+      ? 'Your Cart is still loading. Wait for it to finish before adding this piece.'
+      : status==='saving'
+        ? 'Saving your Cart. Wait for it to finish before adding this piece.'
+        : status==='error'||error
+          ? 'Your saved Cart needs attention. Use the Retry saved Cart control above before adding this piece.'
+          : recovery?.status==='refreshing'
+            ? 'Refreshing your saved Cart. Wait for it to finish before adding this piece.'
+            : recovery?.status==='required'||recovery?.status==='failed'
+              ? 'Your saved Cart needs attention. Use the saved Cart controls above before adding this piece.'
+              : null;
+  const quantityCapped=quantity+amount>MAX_QUANTITY;
+  const guidance=!compatible?availabilityNote:savedCartNote ?? (quantityCapped?'Reduce the quantity or review your Cart before adding this piece.':availabilityNote);
+  const guidanceId='product-details-purchase-guidance';
+  const buyHasGuidance=!compatible;
+  const addHasGuidance=!compatible||Boolean(savedCartNote)||quantityCapped;
   function buyNow(){
     if(!variant||!compatible||buyStarting||pending)return;
     setBuyStarting(true);setBuyError('');
@@ -70,14 +114,20 @@ export function ProductDetails({product}:{product:Product}) {
     if(outcome.kind==='confirmed')notify({tone:'success',message:bagAddedText(addedAmount,name,detail)});
     else if(outcome.kind==='rejected')notify({tone:'error',message:bagAddFailedText(name,outcome.failure)});
   }
-  return <section className="wrap page-section product-details">
-    <PageHeader title={product.name} trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} />
+  return <div className="product-details">
+    <PageHeader title={product.name} trail={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/' }]} headingId={headingId} />
     <div className="product-details-grid"><ProductGallery key={product.id} product={product}/>
       <div className="product-details-copy"><p className="eyebrow">{product.category}</p>
         <p className="product-details-price">{!variant&&optionsRequired?'From ':''}{formatMoney(price)}<CurrencyEstimate minorUnits={price} /></p><p className="product-details-description">{product.description}</p>
-        {optionsRequired && <fieldset className="variant-options"><legend>Choose your options</legend>{choices.map(choice=><label key={choice.id}><input type="radio" name={`variant-${product.id}`} value={choice.id} disabled={!variantAvailable(choice)} checked={selection===choice.id} onChange={()=>setSelection(choice.id)}/><span>{variantLabel(choice)}{!variantAvailable(choice)&&' — Unavailable'}<span className="variant-option-price">{formatMoney(choice.price)}<CurrencyEstimate minorUnits={choice.price} /></span></span></label>)}</fieldset>}
-        <p className="small-note">{compatible?'Available to add to your Cart.':optionsRequired && !variant && optionsAvailable ? 'Choose an available combination.':'This piece is currently unavailable.'}</p>
+        {optionsRequired && <fieldset className="variant-options"><legend>Choose your options</legend>{choices.map(choice=>{
+          const unavailable=!variantAvailable(choice);
+          const selected=selection===choice.id;
+          const classes=`variant-option${selected?' variant-option-selected':''}${unavailable?' variant-option-unavailable':''}`;
+          return <label className={classes} key={choice.id}><input type="radio" name={`variant-${product.id}`} value={choice.id} disabled={unavailable} checked={selected} onChange={()=>setSelection(choice.id)}/><span className="variant-option-copy">{variantLabel(choice)}{unavailable&&' — Unavailable'}<span className="variant-option-price">{formatMoney(choice.price)}<CurrencyEstimate minorUnits={choice.price} /></span></span></label>;
+        })}</fieldset>}
+        <p className="small-note product-details-guidance" id={guidanceId}>{guidance}</p>
         <div className="product-details-quantity">
+          <label className="product-quantity-label" htmlFor="product-quantity">Quantity<span className="sr-only"> for {product.name}</span></label>
           <div className="quantity-control">
             <button
               type="button"
@@ -87,7 +137,6 @@ export function ProductDetails({product}:{product:Product}) {
             >
               −
             </button>
-            <label className="sr-only" htmlFor="product-quantity">{product.name} quantity</label>
             <input
               id="product-quantity"
               type="number"
@@ -114,13 +163,13 @@ export function ProductDetails({product}:{product:Product}) {
           </div>
         </div>
         <div className="product-details-actions">
-          <button type="button" className="button product-details-buy" disabled={!compatible||pending||buyStarting||auth.loading} onClick={buyNow}>{buyStarting?'Opening checkout…':'Buy Now'}</button>
-          <button className="button product-details-add" disabled={!compatible||busy||pending||quantity+amount>MAX_QUANTITY} aria-label={`Add ${product.name} to Cart`} onClick={addToBag}>{pending?'Adding…':quantity+amount>MAX_QUANTITY?'Quantity limit reached':'Add to Cart'}</button>
+          <button type="button" className="button product-details-buy" aria-describedby={buyHasGuidance?guidanceId:undefined} disabled={!compatible||pending||buyStarting||auth.loading} onClick={buyNow}>{buyStarting?'Opening checkout…':'Buy Now'}</button>
+          <button className="button secondary product-details-add" aria-describedby={addHasGuidance?guidanceId:undefined} disabled={!compatible||busy||deferred||pending||quantity+amount>MAX_QUANTITY} aria-label={`Add ${product.name} to Cart`} onClick={addToBag}>{pending?'Adding…':quantityCapped?'Quantity limit reached':'Add to Cart'}</button>
           <Link className="text-link" to="/cart">View your Cart →</Link>
         </div>
         {buyError&&<p role="alert" className="field-error">{buyError}</p>}
         <p className="small-note">Payment awaits confirmation after order placement.</p>
       </div>
     </div>
-  </section>;
+  </div>;
 }

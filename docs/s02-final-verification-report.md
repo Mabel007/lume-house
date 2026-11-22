@@ -1,4 +1,4 @@
-> Historical record, superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md). Preserve original numbering/evidence as history; do not treat completion labels below as current acceptance.
+> Historical record, superseded for current status by [S02 local remediation](s02-codex-remediation-complete.md). Preserve original numbering/evidence as history; do not treat completion labels below as current acceptance. Scheduler questions below are withdrawn, not open: the retry scheduler was cancelled (D2) and the historical Resend 403 review closed (D3) on 2026-11-18.
 
 # S02 Final Verification and Closure Report
 
@@ -303,7 +303,7 @@ ls src/features/currency/CurrencyEstimate.tsx
 - ✅ Service-role access only
 - ✅ Idempotent execution
 
-**Blocker:** Scheduler must be configured before deployment. Function will not run automatically without it.
+**Blocker:** Scheduler must be configured before deployment. Function will not run automatically without it. — **No longer a blocker:** the owner cancelled the retry scheduler on 2026-11-18 (D2); the function remaining uninvoked is the intended fail-closed state, not a defect to fix.
 
 ---
 

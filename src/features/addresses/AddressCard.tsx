@@ -3,17 +3,19 @@ import { deliveryConfig } from '../../config/fulfilment';
 
 type AddressCardProps = {
   address: SavedAddress;
+  busy?: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onSetDefault: () => void;
 };
 
-export function AddressCard({ address, onEdit, onDelete, onSetDefault }: AddressCardProps) {
+export function AddressCard({ address, busy = false, onEdit, onDelete, onSetDefault }: AddressCardProps) {
   const zone = deliveryConfig.zones.find(z => z.id === address.zone_id);
   
   return (
-    <div 
+    <div
       className={`address-card ${address.is_default ? 'default' : ''}`}
+      data-address-id={address.id}
       role="listitem"
       aria-label={`${address.label} address`}
     >
@@ -46,6 +48,7 @@ export function AddressCard({ address, onEdit, onDelete, onSetDefault }: Address
             type="button"
             className="set-default-btn"
             onClick={onSetDefault}
+            disabled={busy}
             aria-label={`Set ${address.label} as default address`}
           >
             Set as Default
@@ -55,6 +58,7 @@ export function AddressCard({ address, onEdit, onDelete, onSetDefault }: Address
           type="button"
           className="edit-btn"
           onClick={onEdit}
+          disabled={busy}
           aria-label={`Edit ${address.label} address`}
         >
           Edit
@@ -63,6 +67,7 @@ export function AddressCard({ address, onEdit, onDelete, onSetDefault }: Address
           type="button"
           className="delete-btn"
           onClick={onDelete}
+          disabled={busy}
           aria-label={`Delete ${address.label} address`}
         >
           Delete
