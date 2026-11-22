@@ -319,15 +319,19 @@ test('a successful deletion moves focus onto the address that took the deleted r
   assert.deepEqual(cards().map(card=>card.dataset.addressId),['addr-1','addr-2','addr-3']);
   const opener=cards()[1].querySelector('.delete-btn');
   opener.focus();
+  let release;
+  deleteGate=new Promise(resolve=>{release=()=>resolve({error:null});});
   await act(async()=>{opener.click();});
   await act(async()=>{host().querySelector('dialog').querySelectorAll('button')[1].click();});
-  assert.equal(document.activeElement,heading(),'pending');
-  await act(async()=>{});
+  assert.ok(document.activeElement===heading(),'pending deletion focuses the heading');
+  assert.ok(opener.disabled,'the opener is inert while deletion is pending');
+  assert.ok([...host().querySelectorAll('.address-card button')].every(button=>button.disabled),'all card actions are inert while deletion is pending');
+  await act(async()=>{release();});
   const remaining=cards();
   assert.deepEqual(remaining.map(card=>card.dataset.addressId),['addr-1','addr-3']);
-  assert.equal(document.activeElement,remaining[1].querySelector('.delete-btn'),'focus follows the row that shifted up');
+  assert.ok(document.activeElement===remaining[1].querySelector('.delete-btn'),'focus follows the row that shifted up');
   assert.equal(document.activeElement.disabled,false,'the surviving control can be activated immediately');
-  assert.notEqual(document.activeElement,document.body);
+  assert.ok(document.activeElement!==document.body,'settled focus stays off the document body');
 });
 
 test('deleting the final address leaves focus on the heading rather than a removed control',async()=>{
@@ -350,14 +354,17 @@ test('a failed deletion returns focus to the opener so the shopper can retry',as
   await mount(manager());
   const opener=cards()[0].querySelector('.delete-btn');
   opener.focus();
-  deleteGate=Promise.resolve({error:{message:'new row violates row-level security policy'}});
+  let release;
+  deleteGate=new Promise(resolve=>{release=()=>resolve({error:{message:'new row violates row-level security policy'}});});
   await act(async()=>{opener.click();});
   await act(async()=>{host().querySelector('dialog').querySelectorAll('button')[1].click();});
-  assert.equal(document.activeElement,heading(),'the pending destination is used until the write settles');
-  await act(async()=>{});
+  assert.ok(document.activeElement===heading(),'the pending destination is used until the write settles');
+  assert.ok(opener.disabled,'the opener is inert while deletion is pending');
+  assert.ok([...host().querySelectorAll('.address-card button')].every(button=>button.disabled),'all card actions are inert while deletion is pending');
+  await act(async()=>{release();});
   assert.match(host().querySelector('[role=alert].address-error').textContent,/Could not delete address/,'the failure keeps its announcement');
   assert.equal(opener.disabled,false,'the control is actionable again');
-  assert.equal(document.activeElement,opener,'focus lands where the repeated attempt can be made');
+  assert.ok(document.activeElement===opener,'focus lands where the repeated attempt can be made');
   assert.deepEqual(cards().map(card=>card.dataset.addressId),['addr-1'],'nothing was deleted, so the row is still listed');
 });
 
@@ -368,12 +375,17 @@ test('a vanished opener falls back to the heading instead of focusing a detached
   await mount(manager());
   const opener=cards()[0].querySelector('.delete-btn');
   opener.focus();
+  let release;
+  deleteGate=new Promise(resolve=>{release=()=>resolve({error:{message:'the connection closed before the write completed'}});});
   await act(async()=>{opener.click();});
   await act(async()=>{host().querySelector('dialog').querySelectorAll('button')[1].click();});
+  assert.ok(document.activeElement===heading(),'pending deletion focuses the heading');
+  assert.ok(opener.disabled,'the opener is inert while deletion is pending');
+  assert.ok([...host().querySelectorAll('.address-card button')].every(button=>button.disabled),'all card actions are inert while deletion is pending');
   opener.parentElement.removeChild(opener);
-  deleteGate=Promise.resolve({error:{message:'the connection closed before the write completed'}});
-  await act(async()=>{});
+  await act(async()=>{release();});
+  assert.match(host().querySelector('[role=alert].address-error').textContent,/Could not delete address/,'the deletion failure is reported');
   assert.equal(opener.isConnected,false,'the recorded destination is really gone');
-  assert.equal(document.activeElement,heading(),'a detached control must not be the destination');
-  assert.notEqual(document.activeElement,document.body);
+  assert.ok(document.activeElement===heading(),'a detached control must not be the destination');
+  assert.ok(document.activeElement!==document.body,'fallback focus stays off the document body');
 });
