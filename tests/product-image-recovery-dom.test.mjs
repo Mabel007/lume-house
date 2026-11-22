@@ -23,6 +23,8 @@ after(async()=>{await server?.close();dom.window.close();});
 
 const base={id:'fixture',name:'Test piece',category:'Home',price:100,image:'/images/mug.svg',color:'#ffffff',description:'Test description'};
 const gallery=['/images/mug.svg','/images/arch-vase.webp'];
+const two=['/images/mug.svg','/images/arch-vase.webp'];
+const three=['/images/mug.svg','/images/arch-vase.webp','/images/lamp.svg'];
 const eight=['/images/mug.svg','/images/arch-vase.webp','/images/lamp.svg','/images/one.svg','/images/two.svg','/images/three.svg','/images/four.svg','/images/five.svg'];
 function product(images){return images?{...base,gallery:images}:base;}
 async function mount(images){root=createRoot(host);await act(async()=>root.render(React.createElement(ProductGallery,{product:product(images)})));}
@@ -245,6 +247,46 @@ test('eight-image gallery preserves order, pressed state, primary label and ordi
  assert.equal(figure().getAttribute('aria-describedby'),caption.id);
 });
 
+test('two-image gallery keeps count-specific names, ordinals, pressed state and focus',async()=>{
+ await mount(two);
+ const controls=[...host.querySelectorAll('[role="group"] button')];
+ assert.equal(controls.length,2);
+ assert.deepEqual(controls.map(button=>button.getAttribute('aria-label')),two.map((_,index)=>`View image ${index+1} of 2 for Test piece`));
+ assert.deepEqual(controls.map(button=>button.querySelector('.product-gallery-choice > span:last-child').textContent),['Image 1 · Primary','Image 2']);
+ assert.deepEqual(controls.map(button=>button.getAttribute('aria-pressed')),['true','false']);
+ assert.deepEqual(controls.map(button=>button.querySelector('.product-gallery-selected-marker').textContent),['✓','']);
+ assert.equal(figure().querySelector('figcaption').textContent,'Image 1 of 2');
+ const second=viewButton(2,2);
+ second.focus();
+ assert.equal(document.activeElement,second);
+ await click(second);
+ assert.equal(image().getAttribute('src'),two[1]);
+ assert.equal(viewButton(2,2).getAttribute('aria-pressed'),'true');
+ assert.equal(viewButton(1,2).getAttribute('aria-pressed'),'false');
+ assert.deepEqual(controls.map(button=>button.querySelector('.product-gallery-selected-marker').textContent),['','✓']);
+ assert.equal(figure().querySelector('figcaption').textContent,'Image 2 of 2');
+ assert.equal(document.activeElement,second,'native button activation does not move focus');
+});
+
+test('three-image gallery keeps count-specific names, ordinals, pressed state and focus',async()=>{
+ await mount(three);
+ const controls=[...host.querySelectorAll('[role="group"] button')];
+ assert.equal(controls.length,3);
+ assert.deepEqual(controls.map(button=>button.getAttribute('aria-label')),three.map((_,index)=>`View image ${index+1} of 3 for Test piece`));
+ assert.deepEqual(controls.map(button=>button.querySelector('.product-gallery-choice > span:last-child').textContent),['Image 1 · Primary','Image 2','Image 3']);
+ assert.deepEqual(controls.map(button=>button.getAttribute('aria-pressed')),['true','false','false']);
+ assert.equal(figure().querySelector('figcaption').textContent,'Image 1 of 3');
+ const third=viewButton(3,3);
+ third.focus();
+ assert.equal(document.activeElement,third);
+ await click(third);
+ assert.equal(image().getAttribute('src'),three[2]);
+ assert.equal(viewButton(3,3).getAttribute('aria-pressed'),'true');
+ assert.equal(viewButton(1,3).getAttribute('aria-pressed'),'false');
+ assert.equal(figure().querySelector('figcaption').textContent,'Image 3 of 3');
+ assert.equal(document.activeElement,third,'native button activation does not move focus');
+});
+
 test('thumbnail selection changes only the main image and keeps focus on the activated button',async()=>{
  await mount(eight);
  const third=viewButton(3,8);
@@ -387,6 +429,11 @@ test('gallery CSS keeps 64px previews, touch floors, a selected marker and a sep
  assert.match(css,/\.product-gallery-thumb\s*{[^}]*position:\s*relative[^}]*width:\s*64px[^}]*height:\s*64px/);
  assert.match(css,/\.product-gallery-thumb img\s*{[^}]*position:\s*absolute[^}]*inset:\s*0[^}]*height:\s*100%[^}]*object-fit:\s*contain/);
  assert.match(css,/\.product-gallery-controls button\s*{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/);
+ assert.match(css,/\.product-gallery-controls button\s*{[^}]*align-items:\s*center[^}]*text-align:\s*left/);
+ assert.doesNotMatch(css,/\.product-gallery-controls button\s*{[^}]*flex-direction:\s*column/);
+ assert.match(css,/\.product-gallery-controls\[role="group"\] button\s*{[^}]*position:\s*relative[^}]*flex:\s*0 1 104px[^}]*flex-direction:\s*column[^}]*align-items:\s*center[^}]*justify-content:\s*flex-start[^}]*text-align:\s*center/);
+ assert.match(css,/\.product-gallery-controls\[role="group"\] \.product-gallery-choice\s*{[^}]*width:\s*100%[^}]*justify-content:\s*center[^}]*overflow-wrap:\s*normal[^}]*word-break:\s*normal/);
+ assert.match(css,/\.product-gallery-controls\[role="group"\] \.product-gallery-selected-marker\s*{[^}]*position:\s*absolute[^}]*top:\s*\.35rem[^}]*right:\s*\.35rem[^}]*flex-basis:\s*auto[^}]*width:\s*auto[^}]*line-height:\s*1/);
  assert.match(css,/button\[aria-pressed="true"\]/);
  assert.match(css,/button:focus-visible\s*{[^}]*--focus-accent/);
  assert.doesNotMatch(css,/animation|transition|@keyframes|scroll-behavior/);
