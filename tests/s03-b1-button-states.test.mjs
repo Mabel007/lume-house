@@ -851,11 +851,13 @@ test("PDP-03B Buy is primary, Add is secondary, and narrow actions share one wid
   assert.equal(resolve("border-color", hoveredAdd).value, "var(--color-selected)");
 
   const actions = { tag: "div", classes: ["product-details-actions"], id: undefined, attrs: {}, states: new Set(), ancestors: chain(["product-details"]) };
-  assert.equal(resolve("align-items", actions).value, "flex-start", "desktop actions retain their authored width");
+  assert.equal(resolve("align-items", actions).value, "stretch", "desktop actions fill the purchase column");
   const mobile = { media: "(max-width: 700px)" };
   assert.equal(resolve("align-items", actions, mobile).value, "stretch");
   for (const button of [buy, add]) {
-    assert.equal(resolve("width", button, mobile).value, "100%", "both purchase actions fill the same narrow column");
+    assert.equal(resolve("width", button).value, "100%", "both purchase actions fill the same column at every width");
+    assert.equal(resolve("justify-content", button).value, "center", "labels stay centered in the full-width actions");
+    assert.equal(resolve("width", button, mobile).value, "100%", "the existing narrow column behavior is unchanged");
     assert.equal(resolve("justify-content", button, mobile).value, "center");
   }
   assert.equal(resolve("min-height", buy).value, "var(--control-height-large, 48px)", "PDP-03A's floor is preserved");

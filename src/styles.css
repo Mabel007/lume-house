@@ -1591,7 +1591,8 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 .product-quantity-label { display: block; margin-bottom: 8px; font-size: var(--type-functional); line-height: 1.4; font-weight: 600; color: #4c574a; }
 .product-details .quantity-control button { width: var(--control-height-large, 48px); height: var(--control-height-large, 48px); min-height: var(--control-height-large, 48px); }
 .product-details .quantity-control input[type="number"] { width: 56px; height: var(--control-height-large, 48px); min-height: var(--control-height-large, 48px); }
-.product-details-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin: 16px 0; }
+.product-details-actions { display: flex; flex-direction: column; align-items: stretch; gap: 12px; margin: 16px 0; }
+.product-details-actions .button { width: 100%; justify-content: center; }
 .product-details-actions .product-details-buy { min-height: var(--control-height-large, 48px); }
 .product-details-actions .button.product-details-buy { background: var(--color-selected); border-color: var(--color-selected); font-weight: 600; }
 .product-details-actions .product-details-add { margin: 0; }
