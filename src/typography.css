@@ -31,6 +31,7 @@ main h3, .about-values-grid h3, .admin-screen h3, .admin-screen h4, .order-snaps
 .quantity-control button { width: 44px; height: auto; min-height: 44px; }
 .quantity-control input { min-height: 44px; font-size: var(--type-functional); }
 .product-card h3, .cart-row h2, .summary-items h3, .order-reference strong, .order-items strong, .admin-order-link, .admin-product-name { font-size: var(--type-name); line-height: 1.35; overflow-wrap: anywhere; }
+.cart-row h2 a { display: inline-flex; align-items: center; min-height: 44px; }
 .product-card h3 { min-width: 0; }
 .product-card .price, .line-price { font-size: var(--type-name); white-space: normal; overflow-wrap: anywhere; }
 .hero-description, .product-description, .product-details-description, .edit-copy > p:not(.eyebrow), .empty-state p, .checkout-notice, .account-intro, .content-heading > p:last-child, .about-intro, .detail-group p, .cart-row-detail > p:not(.product-category), .totals > div, .admin-page, .admin-page-description, .admin-order-list dd { font-size: var(--type-body); line-height: 1.6; }

@@ -1,4 +1,5 @@
 let CurrencyProvider;
+import { readFileSync } from "node:fs";
 import { test, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import React, { act } from "react";
@@ -382,6 +383,23 @@ test("guest Cart page updates quantities and removals in local storage with deri
   const toast = host.querySelector(".bag-notice");
   assert.ok(toast, "removal confirmation survives the empty-state transition");
   assert.match(toast.textContent, /Removed Fixture mug from your Cart/);
+});
+
+test("Cart product-name link keeps its name and destination while exposing a 44px target", async () => {
+  bagClient(() => emptyCart());
+  sessionStorage.setItem("lume-guest-cart", JSON.stringify({
+    version: 2,
+    items: [{ productId: "fixture-mug", variantId: "v-default", quantity: 1, mergeId: "11111111-1111-4111-8111-111111111111" }],
+  }));
+  await mount(withProviders(guestAuth, React.createElement(CartPage)));
+  const link = host.querySelector(".cart-row h2 a");
+  assert.ok(link, "the product name remains a link");
+  assert.equal(link.textContent, "Fixture mug", "the accessible name is unchanged");
+  assert.equal(link.getAttribute("href"), "/products/fixture-mug", "product navigation is unchanged");
+  link.focus();
+  assert.equal(document.activeElement, link, "the link remains keyboard focusable");
+  const css = readFileSync("src/typography.css", "utf8");
+  assert.match(css, /\.cart-row h2 a\s*{[^}]*display:\s*inline-flex[^}]*align-items:\s*center[^}]*min-height:\s*44px/);
 });
 
 function RecoveringCatalog({ children }) {
