@@ -1052,6 +1052,8 @@ test("Product Details purchase guidance explains blocked actions without a secon
   const css = readFileSync('src/styles.css', 'utf8');
   assert.match(css, /\.product-details \.product-details-guidance \{/, 'guidance styling stays PDP-scoped');
   assert.doesNotMatch(css, /^\.product-details-guidance\s*\{/m, 'no unscoped guidance rule is introduced');
+  assert.match(css, /\.product-details-copy > \.small-note:not\(\.product-details-guidance\) \{[^}]*margin-top:\s*8px/, 'payment-note spacing stays PDP-scoped');
+  assert.doesNotMatch(css, /^\.small-note\s*\{[^}]*margin-top:\s*8px/m, 'the global small-note rule was not retuned');
 });
 test('unavailable single-option cards explain the state instead of showing a disabled Add to Cart action',()=>{
  const base={id:'fixture',productId:'fixture',options:{},isDefault:true,price:1800,currency:'NLE',inventoryPolicy:'tracked'};

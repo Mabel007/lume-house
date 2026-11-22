@@ -863,3 +863,70 @@ test("PDP-03B Buy is primary, Add is secondary, and narrow actions share one wid
   assert.equal(resolve("min-height", buy).value, "var(--control-height-large, 48px)", "PDP-03A's floor is preserved");
 });
 
+// ---------------------------------------------------------------------------
+// PDP-05C — purchase-panel spacing and the narrowly scoped Add floor. These are
+// author-cascade contracts; rendered geometry and pixels remain browser evidence.
+// ---------------------------------------------------------------------------
+const pdpElement = (tag, classes, ancestors = pdpCopyAncestors()) => ({
+  tag,
+  classes,
+  id: undefined,
+  attrs: {},
+  states: new Set(),
+  ancestors,
+});
+
+test("PDP-05C the variant block, guidance and quantity resolve to the refined spacing", () => {
+  const fieldset = pdpElement("fieldset", ["variant-options"]);
+  const fieldsetMargin = resolve("margin", fieldset);
+  assert.equal(fieldsetMargin.value, "clamp(20px,2vw,28px) 0 clamp(16px,1.5vw,20px)");
+  assert.equal(fieldsetMargin.selector, ".variant-options");
+
+  const option = pdpOption();
+  const optionMargin = resolve("margin", option);
+  assert.equal(optionMargin.value, "8px 0");
+  assert.equal(optionMargin.selector, ".variant-options .variant-option");
+  assert.equal(resolve("padding", option).value, "12px 14px");
+  assert.equal(resolve("min-height", option).value, "48px", "reduced padding keeps the 48px option floor");
+
+  const guidance = pdpElement("p", ["small-note", "product-details-guidance"]);
+  const guidanceMargin = resolve("margin", guidance);
+  assert.equal(guidanceMargin.value, "0 0 8px");
+  assert.equal(guidanceMargin.selector, ".product-details .product-details-guidance");
+
+  const quantity = pdpElement("div", ["product-details-quantity"]);
+  assert.equal(resolve("margin-top", quantity).value, "12px");
+  assert.equal(resolve("margin-top", quantity).selector, ".product-details-quantity");
+});
+
+test("PDP-05C actions keep the 12px gap, and the payment note is PDP-scoped", () => {
+  const actions = pdpElement("div", ["product-details-actions"], chain(["product-details"]));
+  const margin = resolve("margin", actions);
+  assert.equal(margin.value, "12px 0 8px");
+  assert.equal(margin.selector, ".product-details-actions");
+  assert.equal(resolve("gap", actions).value, "12px", "focus-ring clearance is unchanged");
+  assert.equal(resolve("align-items", actions).value, "stretch", "PDP-05A's full-width actions remain");
+
+  const payment = pdpElement("p", ["small-note"]);
+  const note = resolve("margin-top", payment);
+  assert.equal(note.value, "8px");
+  assert.equal(note.selector, ".product-details-copy > .small-note:not(.product-details-guidance)");
+  assert.equal(resolve("line-height", payment).value, "1.6");
+
+  const outside = pdpElement("p", ["small-note"], chain(["address-manager"]));
+  assert.equal(resolve("margin-top", outside).value, "0.25rem", "no global .small-note was retuned");
+});
+
+test("PDP-05C Add's 48px floor is the effective cascade winner without touching global buttons", () => {
+  const buy = pdpAction(["button", "product-details-buy"]);
+  const add = pdpAction(["button", "secondary", "product-details-add"]);
+  const floor = resolve("min-height", add);
+  assert.equal(floor.value, "var(--control-height-large, 48px)");
+  assert.equal(floor.selector, ".product-details-actions .button.product-details-add");
+  assert.equal(floor.sheet, "styles");
+  assert.ok(cmp(floor.spec, specificity(".button")) > 0, "the PDP-scoped floor outranks the generic 46px rule");
+  assert.equal(resolve("min-height", buy).value, floor.value, "Buy and Add share the same token floor");
+  assertToken("--control-height-large", "48px");
+  assert.equal(resolve("min-height", control("button", ["button"], [])).value, "46px", "the global floor is unchanged");
+});
+
