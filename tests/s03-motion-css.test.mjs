@@ -1,13 +1,13 @@
 // The S03-01 corrections are only safe because of *where* their CSS lives: a hiding
 // state outside a reduced-motion guard makes content invisible, parallax travel past
 // the crop slack uncovers the frame it is clipped by, and a scroll-behavior that is
-// not forced back to auto leaves panel stepping gliding for a reader who asked for
+// not forced back to auto leaves in-page anchors gliding for a reader who asked for
 // it not to. jsdom cannot decide any of that, so the stylesheets are parsed here.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const SHEETS = ["motion", "styles", "story", "refinement", "typography"];
+const SHEETS = ["motion", "styles", "refinement", "typography"];
 const text = Object.fromEntries(
   SHEETS.map((name) => [
     name,
@@ -179,33 +179,19 @@ test("the catalogue grid carries no mount animation left behind", () => {
   );
 });
 
-test("in-page and panel scrolling glide only for readers who allow motion", () => {
+test("in-page scrolling glides only for readers who allow motion", () => {
   for (const sheet of SHEETS)
     for (const rule of where(sheet, (r) => /scroll-behavior:\s*smooth/.test(r.body)))
       assert.ok(
         optedIn(rule),
         `${sheet}.css ${rule.prelude} smooth-scrolls without an opt-in, so it would animate route changes too`,
       );
-  assert.equal(
-    where("story", (r) => selectors(r.prelude).includes(".story-track") && /smooth/.test(r.body)).length,
-    1,
-    "the story track is the one smooth scroll container",
-  );
   for (const sheet of ["styles", "refinement"])
     assert.ok(
       where(sheet, (rule) => reduced(rule) && /scroll-behavior:\s*auto\s*!important/.test(rule.body))
         .length > 0,
       `${sheet}.css reduces without forcing scrolling back to instant`,
     );
-
-  // The keyboard handler leaves the behaviour to the stylesheet, so the kill switch
-  // above is what decides glide or jump.
-  const handler = readFileSync("src/features/story/StoryPrototypePage.tsx", "utf8");
-  assert.match(handler, /scrollIntoView\(\{\s*block:\s*"nearest",\s*inline:\s*"center"\s*\}\)/);
-  assert.ok(
-    !/scrollIntoView\(\{[^}]*behavior/.test(handler),
-    "a hardcoded behavior would override the reduced-motion stylesheet",
-  );
 
   // Anchor smoothness is per click, never global, so the skip link and every other
   // route keep native behaviour and Layout's route-change reset stays instant.

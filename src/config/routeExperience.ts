@@ -13,7 +13,6 @@ const routeTitles: Readonly<Record<string, string>> = {
   "/help/returns-refunds": "Returns & Refunds",
   "/privacy": "Privacy Policy",
   "/terms": "Terms & Conditions",
-  "/prototype/story": "Editorial prototype",
 };
 
 export function productPathId(pathname: string): string | null {
