@@ -193,6 +193,14 @@ main:focus {
   font-size: 29px;
   vertical-align: middle;
 }
+/* The wordmark is a navigation link in both the header and footer. A 44px
+   inline-flex box keeps that target reachable without changing its typography. */
+.site-header > .brand,
+.footer-brand > .brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
 nav {
   font-size: 13px;
 }
@@ -1484,7 +1492,7 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 .footer-links { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
 .footer-links h2 { font-family: inherit; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .footer-links ul { padding: 0; margin: 0; list-style: none; }
-.footer-links a { display: inline-block; padding-block: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.footer-links a { display: inline-flex; align-items: center; min-height: 44px; padding-block: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .footer-links a:hover, .footer-links a:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
 .footer-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; border-top: 1px solid #deddd1; margin-top: 20px; padding-top: 20px; }
 .footer-staff-access { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; max-width: 100%; }
@@ -1576,7 +1584,7 @@ main > p[role="status"] { padding-block: 12px; border-bottom: 1px solid #deddd1;
 .account-name { font: 24px Georgia, serif; overflow-wrap: anywhere; }
 .account-page .account-fieldset { min-width: 0; border: 0; padding: 0; margin: 28px 0; }
 .account-fieldset legend { font: 28px/1.25 Georgia, serif; margin-bottom: 18px; }
-.product-card h3 a { text-decoration: underline; text-underline-offset: 4px; }
+.product-card h3 a { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; text-underline-offset: 4px; }
 .product-details-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: clamp(28px,5vw,72px); align-items: start; margin-top: 28px; }
 .product-details-image { margin: 0; aspect-ratio: 1; overflow: hidden; }
 .product-details-image img { width: 100%; height: 100%; object-fit: contain; }
