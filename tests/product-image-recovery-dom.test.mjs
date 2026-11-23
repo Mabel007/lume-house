@@ -34,6 +34,38 @@ const figure=()=>host.querySelector('figure');
 const image=()=>figure()?.querySelector('img')??null;
 const fallback=()=>figure()?.querySelector('[role="img"]')??null;
 const loadingCue=()=>host.querySelector('.product-gallery-loading');
+const statuses=()=>[...host.querySelectorAll('[role="status"]')];
+const status=()=>statuses()[0];
+const statusText=()=>status()?.textContent??'';
+function watch(target){
+ const changes=[];
+ const observer=new dom.window.MutationObserver(records=>changes.push(...records));
+ observer.observe(target,{childList:true,characterData:true,subtree:true});
+ return {
+  drain(){changes.push(...observer.takeRecords());return changes.splice(0);},
+  stop(){changes.push(...observer.takeRecords());observer.disconnect();return changes.splice(0);}
+ };
+}
+function statusChanges(records){
+ const node=status();
+ return records.filter(record=>record.target===node||node?.contains(record.target));
+}
+function assertStatusMutation(watcher,message){
+ assert.ok(statusChanges(watcher.drain()).length>0,`expected a status mutation: ${message}`);
+}
+function assertNoStatusMutation(watcher,message){
+ assert.equal(statusChanges(watcher.drain()).length,0,`unexpected status mutation: ${message}`);
+}
+function reactCallbacks(element){
+ assert.ok(element,'expected a mounted image before capturing callbacks');
+ const key=Object.keys(element).find(name=>name.startsWith('__reactProps$'));
+ assert.ok(key,'expected React props on the mounted image');
+ const props=element[key];
+ assert.equal(typeof props.onLoad,'function');
+ assert.equal(typeof props.onError,'function');
+ return {onLoad:props.onLoad,onError:props.onError};
+}
+async function invoke(callback){await act(async()=>{callback();});}
 const thumbnails=()=>[...host.querySelectorAll('.product-gallery-thumb')];
 const thumbnailImage=index=>thumbnails()[index]?.querySelector('img')??null;
 const retry=()=>[...host.querySelectorAll('button')].find(button=>button.getAttribute('aria-label')?.startsWith('Reload'));
@@ -41,6 +73,131 @@ const viewButton=(index,total=2)=>[...host.querySelectorAll('button')].find(butt
 function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
 async function dispatch(target,type){await act(async()=>target.dispatchEvent(new dom.window.Event(type)));}
 async function click(target){await act(async()=>target.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true})));}
+
+test('gallery exposes exactly one persistent hidden polite status region that starts silent',async()=>{
+ const watcher=watch(host);
+ await mount(gallery);
+ assert.equal(statusChanges(watcher.drain()).length,0,'mounting the gallery must not announce');
+ watcher.stop();
+ const node=status();
+ assert.equal(statuses().length,1);
+ assert.equal(status().getAttribute('aria-live'),'polite');
+ assert.equal(status().getAttribute('aria-atomic'),'true');
+ assert.match(status().className,/visually-hidden/);
+ assert.equal(statusText(),'');
+ assert.equal(status(),node);
+ const caption=figure().querySelector('figcaption');
+ assert.ok(caption);
+ assert.equal(caption.getAttribute('aria-live'),null);
+ assert.equal(caption.getAttribute('role'),null);
+});
+
+test('selecting another image announces its ordinal once and leaves the caption non-live',async()=>{
+ await mount(gallery);
+ const node=status();
+ const watcher=watch(node);
+ const second=viewButton(2);
+ second.focus();
+ await click(second);
+ assertStatusMutation(watcher,'different image selection');
+ assert.equal(statusText(),'Image 2 of 2 for Test piece');
+ assert.equal(status(),node);
+ assert.equal(statuses().length,1);
+ assert.equal(second.getAttribute('aria-pressed'),'true');
+ assert.equal(viewButton(1).getAttribute('aria-pressed'),'false');
+ assert.equal(document.activeElement?.getAttribute('aria-label'),'View image 2 of 2 for Test piece');
+ await click(viewButton(2));
+ assertNoStatusMutation(watcher,'reselecting the active image');
+ await dispatch(image(),'load');
+ assertNoStatusMutation(watcher,'ordinary image load');
+ assert.equal(statusText(),'Image 2 of 2 for Test piece');
+ assert.equal(status(),node);
+ assert.equal(statuses().length,1);
+ watcher.stop();
+});
+
+test('failure, retry and successful reload produce distinct announcements without stealing focus',async()=>{
+ await mount(gallery);
+ const node=status();
+ const watcher=watch(node);
+ await dispatch(image(),'error');
+ assertStatusMutation(watcher,'initial failure');
+ assert.equal(statusText(),'Image unavailable for Test piece. Reload image is available.');
+ assert.equal(status(),node);
+ assert.equal(statuses().length,1);
+ const control=retry();
+ control.focus();
+ await click(control);
+ assertStatusMutation(watcher,'retry start');
+ assert.equal(statusText(),'Reloading image for Test piece.');
+ assert.equal(control.getAttribute('aria-busy'),'true');
+ assert.equal(figure().getAttribute('aria-busy'),'true');
+ const pendingImage=image();
+ await dispatch(pendingImage,'load');
+ assertStatusMutation(watcher,'successful reload');
+ assert.equal(statusText(),'Image reloaded for Test piece.');
+ assert.equal(document.activeElement?.tagName,'FIGURE');
+ assert.equal(document.activeElement?.getAttribute('aria-label'),'Test piece image');
+ assert.equal(figure().getAttribute('aria-busy'),'false');
+ assert.equal(status(),node);
+ assert.equal(statuses().length,1);
+ watcher.stop();
+});
+
+test('each failed retry produces a fresh loading-to-failure status update',async()=>{
+ await mount(gallery);
+ const node=status();
+ const watcher=watch(node);
+ await dispatch(image(),'error');
+ assertStatusMutation(watcher,'initial failure');
+ for(let attempt=1;attempt<=2;attempt+=1){
+  const control=retry();
+  control.focus();
+  await click(control);
+  assertStatusMutation(watcher,`retry ${attempt} start`);
+  assert.equal(statusText(),'Reloading image for Test piece.');
+  assert.equal(control.getAttribute('aria-busy'),'true');
+  assert.equal(figure().getAttribute('aria-busy'),'true');
+  await dispatch(image(),'error');
+  assertStatusMutation(watcher,`retry ${attempt} failure`);
+  assert.equal(statusText(),'Image unavailable for Test piece. Reload image is available.');
+  assert.equal(retry().getAttribute('aria-busy'),'false');
+  assert.equal(figure().getAttribute('aria-busy'),'false');
+ }
+ assert.equal(status(),node);
+ assert.equal(statuses().length,1);
+ watcher.stop();
+});
+
+test('retained load and error callbacks cannot mutate the announcement after A → B → A',async()=>{
+ await mount(gallery);
+ const initial=reactCallbacks(image());
+ await dispatch(image(),'error');
+ await click(retry());
+ const retried=reactCallbacks(image());
+ await click(viewButton(2));
+ const second=reactCallbacks(image());
+ await click(viewButton(1));
+ const current=reactCallbacks(image());
+ assert.equal(statusText(),'Image 1 of 2 for Test piece');
+ const node=status();
+ const watcher=watch(node);
+ for(const [label,callbacks] of [['initial',initial],['retried',retried],['second',second]]){
+  await invoke(callbacks.onError);
+  assertNoStatusMutation(watcher,`stale ${label} error callback`);
+  await invoke(callbacks.onLoad);
+  assertNoStatusMutation(watcher,`stale ${label} load callback`);
+ }
+ assert.equal(statusText(),'Image 1 of 2 for Test piece');
+ assert.equal(viewButton(1).getAttribute('aria-pressed'),'true');
+ assert.equal(viewButton(2).getAttribute('aria-pressed'),'false');
+ await invoke(current.onError);
+ assertStatusMutation(watcher,'current generation error callback');
+ assert.equal(statusText(),'Image unavailable for Test piece. Reload image is available.');
+ assert.equal(status(),node);
+ assert.equal(statuses().length,1);
+ watcher.stop();
+});
 
 test('successful load keeps the reload control hidden',async()=>{
  await mount(gallery);
